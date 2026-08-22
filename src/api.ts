@@ -3,7 +3,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 const releasesUrl = "https://github.com/sheetung/furinapet/releases";
-const latestVersionManifest = "https://raw.githubusercontent.com/sheetung/furinapet/main/package.json";
 
 export const desktop = {
   getSettings: () => invoke<AppSettings>("get_settings"),
@@ -17,39 +16,33 @@ export const desktop = {
   showControlCenter: () => invoke<void>("show_control_center"),
   quit: () => invoke<void>("quit_app"),
   openReleases: () => openUrl(releasesUrl),
+  openDownload: (url: string) => openUrl(url),
+  checkForUpdates: (currentVersion: string) => invoke<UpdateResult>("check_for_updates", { currentVersion }),
+  downloadAndInstallUpdate: (version: string, sha256: string) =>
+    invoke<void>("download_and_install_update", { version, sha256 }),
 };
 
 export interface UpdateResult {
   state: "current" | "available" | "error";
   currentVersion: string;
   latestVersion?: string;
+  title?: string;
+  notes: string[];
+  downloadUrl?: string;
+  sha256?: string;
+  size?: number;
   message: string;
 }
 
 export async function checkForUpdates(currentVersion: string): Promise<UpdateResult> {
   try {
-    const response = await fetch(latestVersionManifest, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const manifest = await response.json() as { version?: string };
-    const latestVersion = String(manifest.version ?? "").replace(/^v/, "");
-    if (!latestVersion) throw new Error("发布版本号无效");
-    const available = compareVersions(latestVersion, currentVersion) > 0;
-    return {
-      state: available ? "available" : "current",
-      currentVersion,
-      latestVersion,
-      message: available ? `发现新版本 ${latestVersion}` : "当前已是最新版本",
-    };
+    return await desktop.checkForUpdates(currentVersion);
   } catch (error) {
-    return { state: "error", currentVersion, message: `检查失败：${error instanceof Error ? error.message : String(error)}` };
+    return {
+      state: "error",
+      currentVersion,
+      notes: [],
+      message: `检查失败：${error instanceof Error ? error.message : String(error)}`,
+    };
   }
-}
-
-function compareVersions(left: string, right: string): number {
-  const a = left.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
-  const b = right.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    if ((a[index] ?? 0) !== (b[index] ?? 0)) return (a[index] ?? 0) - (b[index] ?? 0);
-  }
-  return 0;
 }

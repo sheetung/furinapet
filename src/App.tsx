@@ -7,6 +7,7 @@ import { featureRegistry } from "./extensions/registry";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 type Page = "home" | "pet" | "settings";
+type DownloadProgress = { downloaded: number; total: number; percent: number };
 
 const defaultSettings: AppSettings = {
   selectedCharacterId: "furina",
@@ -37,7 +38,11 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [update, setUpdate] = useState<UpdateResult | null>(null);
-  const version = dashboard?.version ?? "1.0.3";
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const version = dashboard?.version ?? "1.0.4";
   const activeCharacter = getCharacter(settings.selectedCharacterId);
 
   useEffect(() => {
@@ -46,9 +51,16 @@ export function App() {
       .then(([nextSettings, nextDashboard]) => {
         setSettings(nextSettings);
         setDashboard(nextDashboard);
+        window.setTimeout(() => void runUpdateCheck(nextDashboard.version, true), 900);
       })
       .catch((error) => showToast(`加载失败：${String(error)}`));
     const cleanup = listen<AppSettings>("settings-changed", (event) => setSettings(event.payload));
+    return () => { void cleanup.then((unlisten) => unlisten()); };
+  }, []);
+
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const cleanup = listen<DownloadProgress>("update-download-progress", (event) => setDownloadProgress(event.payload));
     return () => { void cleanup.then((unlisten) => unlisten()); };
   }, []);
 
@@ -81,6 +93,44 @@ export function App() {
     if (!settings.petVisible) await desktop.showPet();
     await desktop.react(reaction, message);
     setSettings((current) => ({ ...current, petVisible: true }));
+  }
+
+  async function runUpdateCheck(currentVersion = version, automatic = false) {
+    setUpdateChecking(true);
+    const result = await checkForUpdates(currentVersion);
+    setUpdate(result);
+    setUpdateChecking(false);
+    if (result.state === "available" && result.latestVersion) {
+      const skipped = localStorage.getItem("furinapet.skippedUpdate");
+      if (!automatic || skipped !== result.latestVersion) {
+        setUpdateOpen(true);
+        if (automatic) void desktop.showControlCenter();
+      }
+    } else if (!automatic) {
+      showToast(result.message);
+    }
+  }
+
+  async function installUpdate() {
+    if (!update?.latestVersion || !update.sha256) return;
+    setUpdateInstalling(true);
+    setDownloadProgress({ downloaded: 0, total: update.size ?? 0, percent: 0 });
+    try {
+      await desktop.downloadAndInstallUpdate(update.latestVersion, update.sha256);
+    } catch (error) {
+      setUpdateInstalling(false);
+      showToast(`更新失败：${String(error)}`);
+    }
+  }
+
+  function skipUpdate() {
+    if (update?.latestVersion) localStorage.setItem("furinapet.skippedUpdate", update.latestVersion);
+    setUpdateOpen(false);
+  }
+
+  function openManualDownload() {
+    if (update?.downloadUrl) void desktop.openDownload(update.downloadUrl);
+    else void desktop.openReleases();
   }
 
   return (
@@ -197,16 +247,60 @@ export function App() {
             <div className="update-card card">
               <div><span className="tag">更新</span><h3>版本 {version}</h3><p>{update?.message ?? "从 GitHub Releases 检查新版本。"}</p></div>
               <div className="button-row">
-                <button className="secondary" disabled={busy} onClick={() => { setBusy(true); void checkForUpdates(version).then(setUpdate).finally(() => setBusy(false)); }}>检查更新</button>
-                {update?.state === "available" && <button className="primary" onClick={() => void desktop.openReleases()}>打开下载页</button>}
+                <button className="secondary" disabled={busy || updateChecking} onClick={() => void runUpdateCheck()}>{updateChecking ? "检查中…" : "检查更新"}</button>
+                {update?.state === "available" && <button className="primary" onClick={() => setUpdateOpen(true)}>查看新版本</button>}
               </div>
             </div>
           </section>
         )}
       </main>
       {toast && <div className="toast">{toast}</div>}
+      {updateOpen && update?.state === "available" && (
+        <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="update-title">
+          <div className="update-dialog">
+            <header>
+              <div><img src="/assets/furina-app-icon.png" alt="" /><strong id="update-title">发现新版本 {update.latestVersion}</strong></div>
+              <button aria-label="关闭" disabled={updateInstalling} onClick={() => setUpdateOpen(false)}>×</button>
+            </header>
+            <div className="update-body">
+              <span className="update-badge">NEW UPDATE</span>
+              <h2>{update.title ?? `furinapet v${update.latestVersion}`}</h2>
+              <p>新版本已经准备好，可以自动下载安装，也可以前往 GitHub 手动下载。</p>
+              <div className="release-notes">
+                <strong>本次更新</strong>
+                <ul>{(update.notes.length ? update.notes : ["稳定性与体验改进"]).map((note) => <li key={note}>{note}</li>)}</ul>
+              </div>
+              <div className="update-source">
+                <span>↓</span>
+                <div><strong>GitHub Releases</strong><small>官方发布渠道 · SHA-256 完整性校验{update.size ? ` · ${formatBytes(update.size)}` : ""}</small></div>
+              </div>
+              {updateInstalling && (
+                <div className="download-status">
+                  <div><span>正在下载安装程序…</span><strong>{downloadProgress?.percent ?? 0}%</strong></div>
+                  <div className="progress-track"><i style={{ width: `${downloadProgress?.percent ?? 0}%` }} /></div>
+                  <small>{formatBytes(downloadProgress?.downloaded ?? 0)} / {formatBytes(downloadProgress?.total || update.size || 0)}</small>
+                </div>
+              )}
+            </div>
+            <footer>
+              <button className="manual-download" disabled={updateInstalling} onClick={openManualDownload}>◎ 手动下载</button>
+              <div>
+                <button className="secondary" disabled={updateInstalling} onClick={skipUpdate}>本版本不再提示</button>
+                <button className="secondary" disabled={updateInstalling} onClick={() => setUpdateOpen(false)}>取消</button>
+                <button className="primary" disabled={updateInstalling} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新…" : "↓ 立即更新"}</button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 MB";
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function NavButton({ active, icon, label, onClick }: { active: boolean; icon: string; label: string; onClick: () => void }) {

@@ -13,7 +13,7 @@
 - 平滑贴地漫游、拖动重力落地、点击互动与随机气泡
 - 显示开关、尺寸、漫游、置顶等设置
 - Windows 托盘、开机启动、位置重置
-- GitHub Releases 更新检查
+- GitHub Releases 更新检查、版本弹窗、下载进度与安装包校验
 - 构建期自动发现角色，并在主页切换
 - 简化为“首页 / 桌宠 / 设置”的控制中心
 
@@ -60,7 +60,7 @@ pnpm build          # 前端类型检查与构建
 pnpm desktop:build  # 生成 Windows NSIS 安装包
 ```
 
-GitHub Actions 会在 Windows 环境验证全部角色资源并编译 Tauri；推送版本标签时会直接发布 Windows `.exe` 安装包。
+GitHub Actions 会在 Windows 环境验证全部角色资源并编译 Tauri；推送版本标签时会发布 Windows `.exe` 安装包和轻量 `update.json` 清单，供客户端安全检查、下载并校验更新。
 
 ## 目录
 

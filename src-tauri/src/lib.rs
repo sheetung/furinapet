@@ -2,6 +2,7 @@ mod commands;
 mod pet;
 mod settings;
 mod tray;
+mod updater;
 
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -47,6 +48,8 @@ pub fn run() {
             commands::trigger_reaction,
             commands::show_control_center,
             commands::quit_app,
+            updater::check_for_updates,
+            updater::download_and_install_update,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Furina desktop pet");
