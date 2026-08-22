@@ -3,7 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 const releasesUrl = "https://github.com/sheetung/furinapet/releases";
-const latestReleaseApi = "https://api.github.com/repos/sheetung/furinapet/releases/latest";
+const latestVersionManifest = "https://raw.githubusercontent.com/sheetung/furinapet/main/package.json";
 
 export const desktop = {
   getSettings: () => invoke<AppSettings>("get_settings"),
@@ -28,10 +28,10 @@ export interface UpdateResult {
 
 export async function checkForUpdates(currentVersion: string): Promise<UpdateResult> {
   try {
-    const response = await fetch(latestReleaseApi, { headers: { Accept: "application/vnd.github+json" } });
+    const response = await fetch(latestVersionManifest, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const release = await response.json() as { tag_name?: string };
-    const latestVersion = String(release.tag_name ?? "").replace(/^v/, "");
+    const manifest = await response.json() as { version?: string };
+    const latestVersion = String(manifest.version ?? "").replace(/^v/, "");
     if (!latestVersion) throw new Error("发布版本号无效");
     const available = compareVersions(latestVersion, currentVersion) > 0;
     return {

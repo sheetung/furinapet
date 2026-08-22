@@ -37,7 +37,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [update, setUpdate] = useState<UpdateResult | null>(null);
-  const version = dashboard?.version ?? "1.0.2";
+  const version = dashboard?.version ?? "1.0.3";
   const activeCharacter = getCharacter(settings.selectedCharacterId);
 
   useEffect(() => {
