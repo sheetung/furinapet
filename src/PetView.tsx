@@ -190,16 +190,26 @@ export function PetView() {
         const size = await petWindow.outerSize();
 
         if (currentSettings.autoWander && !currentSettings.reducedMotion && isLocomotionState) {
+          const monitor = await currentMonitor();
+          const padding = 24;
+          const minX = monitor ? monitor.position.x + padding : position.x;
+          const maxX = monitor
+            ? Math.max(minX, monitor.position.x + monitor.size.width - size.width - padding)
+            : position.x;
+          const groundY = monitor
+            ? monitor.position.y + monitor.size.height - size.height - GROUND_CLEARANCE
+            : position.y;
+
+          if (wander.target && monitor) {
+            wander.target.x = Math.min(maxX, Math.max(minX, wander.target.x));
+            if (currentSettings.gravityEnabled) wander.target.y = groundY;
+          }
+
           if (!wander.target && Date.now() >= wander.nextAt) {
             wander.nextAt = Date.now() + 7000 + Math.random() * 9000;
-            const monitor = await currentMonitor();
             if (monitor && Math.random() <= currentSettings.wanderProbability) {
-              const padding = 24;
-              const minX = monitor.position.x + padding;
-              const maxX = monitor.position.x + monitor.size.width - size.width - padding;
-              const groundY = monitor.position.y + monitor.size.height - size.height - GROUND_CLEARANCE;
               wander.target = {
-                x: Math.round(minX + Math.random() * Math.max(1, maxX - minX)),
+                x: Math.round(minX + Math.random() * (maxX - minX)),
                 y: currentSettings.gravityEnabled ? groundY : position.y,
               };
             }
