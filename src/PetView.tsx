@@ -209,13 +209,19 @@ export function PetView() {
           const maxX = monitor
             ? Math.max(minX, monitor.position.x + monitor.size.width - size.width - padding)
             : position.x;
+          const minY = monitor ? monitor.position.y + padding : position.y;
+          const maxY = monitor
+            ? Math.max(minY, monitor.position.y + monitor.size.height - size.height - padding)
+            : position.y;
           const groundY = monitor
             ? monitor.position.y + monitor.size.height - size.height - GROUND_CLEARANCE
             : position.y;
 
           if (wander.target && monitor) {
             wander.target.x = Math.min(maxX, Math.max(minX, wander.target.x));
-            if (currentSettings.gravityEnabled) wander.target.y = groundY;
+            wander.target.y = currentSettings.gravityEnabled
+              ? groundY
+              : Math.min(maxY, Math.max(minY, wander.target.y));
           }
 
           if (!wander.target && Date.now() >= wander.nextAt) {
@@ -223,7 +229,9 @@ export function PetView() {
             if (monitor && Math.random() <= currentSettings.wanderProbability) {
               wander.target = {
                 x: Math.round(minX + Math.random() * (maxX - minX)),
-                y: currentSettings.gravityEnabled ? groundY : position.y,
+                y: currentSettings.gravityEnabled
+                  ? groundY
+                  : Math.round(minY + Math.random() * (maxY - minY)),
               };
             }
           }
