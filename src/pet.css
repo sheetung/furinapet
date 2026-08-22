@@ -1,4 +1,4 @@
-html:has(.pet-stage), body:has(.pet-stage), body:has(.pet-stage) #root {
+html.pet-window, html.pet-window body, html.pet-window #root {
   overflow: hidden;
   background: transparent !important;
 }
@@ -20,17 +20,11 @@ html:has(.pet-stage), body:has(.pet-stage), body:has(.pet-stage) #root {
   background-image: url("/assets/furina-pet-spritesheet.webp");
   background-repeat: no-repeat;
   background-size: 1536px 2288px;
-  image-rendering: auto;
+  overflow: hidden;
+  contain: strict;
+  image-rendering: pixelated;
+  will-change: background-position;
   pointer-events: none;
-}
-.sprite.animating {
-  background-position: 0 var(--row-y);
-  animation: sprite-frames var(--duration) steps(var(--frames)) infinite;
-}
-.sprite.looking { animation: none; }
-@keyframes sprite-frames {
-  from { background-position-x: 0; }
-  to { background-position-x: var(--travel-x); }
 }
 .pet-bubble {
   position: absolute;

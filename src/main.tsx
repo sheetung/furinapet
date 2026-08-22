@@ -5,6 +5,8 @@ import { PetView } from "./PetView";
 import "./styles.css";
 
 const params = new URLSearchParams(window.location.search);
+const isPetWindow = params.get("window") === "pet";
+if (isPetWindow) document.documentElement.classList.add("pet-window");
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>{params.get("window") === "pet" ? <PetView /> : <App />}</StrictMode>,
+  <StrictMode>{isPetWindow ? <PetView /> : <App />}</StrictMode>,
 );

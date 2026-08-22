@@ -48,7 +48,7 @@ pub fn get_dashboard(app: AppHandle, state: State<'_, AppState>) -> Result<Dashb
         app_name: "芙宁娜桌宠",
         version: app.package_info().version.to_string(),
         engine: "Tauri 2 + WebView2",
-        feature_count: 2,
+        feature_count: 3,
         settings: snapshot(&state)?,
     })
 }

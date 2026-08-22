@@ -12,6 +12,7 @@ pub struct Settings {
     pub look_at_cursor: bool,
     pub auto_wander: bool,
     pub wander_speed: f64,
+    pub gravity_enabled: bool,
     pub reduced_motion: bool,
 }
 
@@ -25,6 +26,7 @@ impl Default for Settings {
             look_at_cursor: true,
             auto_wander: false,
             wander_speed: 1.0,
+            gravity_enabled: true,
             reduced_motion: false,
         }
     }
@@ -40,6 +42,7 @@ pub struct SettingsPatch {
     pub look_at_cursor: Option<bool>,
     pub auto_wander: Option<bool>,
     pub wander_speed: Option<f64>,
+    pub gravity_enabled: Option<bool>,
     pub reduced_motion: Option<bool>,
 }
 
@@ -50,6 +53,7 @@ impl Settings {
         if let Some(value) = patch.launch_at_login { self.launch_at_login = value; }
         if let Some(value) = patch.look_at_cursor { self.look_at_cursor = value; }
         if let Some(value) = patch.auto_wander { self.auto_wander = value; }
+        if let Some(value) = patch.gravity_enabled { self.gravity_enabled = value; }
         if let Some(value) = patch.reduced_motion { self.reduced_motion = value; }
         if let Some(value) = patch.scale {
             if !(0.65..=1.5).contains(&value) { return Err("scale must be between 0.65 and 1.5".into()); }

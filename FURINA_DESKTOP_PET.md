@@ -11,7 +11,7 @@
 - `tray.rs`：托盘菜单。
 - `commands.rs`：前后端的窄命令接口。
 - `src/core/look-direction.ts`：16 向注视映射。
-- `PetView.tsx`：v2 11 行动画渲染与拖动交互。
+- `PetView.tsx`：v2 精确逐帧渲染、非重入漫步循环、拖动与重力落地。
 
 桌宠包继续遵守 Codex v2 规范，标准源位于 `pets/furina--lingxiaotian`，桌面安装包使用 `public/assets` 中的同源资源。
 

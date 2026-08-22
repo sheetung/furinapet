@@ -8,6 +8,7 @@ export interface AppSettings {
   lookAtCursor: boolean;
   autoWander: boolean;
   wanderSpeed: number;
+  gravityEnabled: boolean;
   reducedMotion: boolean;
 }
 
