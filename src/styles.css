@@ -60,7 +60,13 @@ button { color: inherit; }
 .sidebar nav button.active { color: #eff8ff; border-color: rgba(103,176,255,.2); background: linear-gradient(90deg, rgba(67,139,218,.2), rgba(52,96,157,.08)); }
 .sidebar-foot { margin-top: auto; color: #63728a; font-size: 10px; line-height: 1.7; text-align: center; }
 
-.content { overflow: auto; padding: 34px 38px 42px; }
+.content {
+  overflow: auto;
+  padding: 34px 38px 42px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.content::-webkit-scrollbar { width: 0; height: 0; }
 .page { max-width: 900px; margin: 0 auto; animation: page-in .22s ease-out; }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
 .page-header span, .hero-kicker, .section-title span { color: var(--cyan); font-size: 10px; font-weight: 750; letter-spacing: .18em; text-transform: uppercase; }

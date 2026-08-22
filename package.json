@@ -1,6 +1,6 @@
 {
   "name": "furina-desktop-pet",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "A lightweight Furina desktop pet for Windows, powered by Tauri and WebView2.",
   "license": "MIT",

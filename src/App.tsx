@@ -35,7 +35,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [update, setUpdate] = useState<UpdateResult | null>(null);
-  const version = dashboard?.version ?? "1.0.1";
+  const version = dashboard?.version ?? "1.0.2";
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -75,7 +75,7 @@ export function App() {
   }
 
   async function react(reaction: Reaction, message: string) {
-    await desktop.showPet();
+    if (!settings.petVisible) await desktop.showPet();
     await desktop.react(reaction, message);
     setSettings((current) => ({ ...current, petVisible: true }));
   }

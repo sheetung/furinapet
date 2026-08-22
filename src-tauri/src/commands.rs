@@ -67,6 +67,11 @@ pub fn update_settings(app: AppHandle, state: State<'_, AppState>, patch: Settin
 pub fn set_pet_visible_inner(app: &AppHandle, visible: bool) -> Result<Settings, String> {
     let state = app.state::<AppState>();
     let mut next = snapshot(&state)?;
+    if next.pet_visible == visible {
+        let window = app.get_webview_window("pet").ok_or("pet window is unavailable")?;
+        if visible { window.show() } else { window.hide() }.map_err(|error| error.to_string())?;
+        return Ok(next);
+    }
     next.pet_visible = visible;
     persist_and_apply(app, &state, next)
 }
