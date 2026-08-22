@@ -42,6 +42,7 @@ export function App() {
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [characterManagerOpen, setCharacterManagerOpen] = useState(false);
   const version = dashboard?.version ?? "1.0.4";
   const activeCharacter = getCharacter(settings.selectedCharacterId);
 
@@ -185,10 +186,15 @@ export function App() {
                   onClick={() => void updateSettings({ selectedCharacterId: character.id })}
                 >
                   <img src={character.avatarUrl} alt="" />
-                  <span><strong>{character.name}</strong><small>{character.description}</small></span>
-                  <i>{character.id === activeCharacter.id ? "使用中" : "切换"}</i>
+                  <strong>{character.name}</strong>
+                  <i>{character.id === activeCharacter.id ? "使用中" : "点击切换"}</i>
                 </button>
               ))}
+              <button className="character-card add-character" onClick={() => setCharacterManagerOpen(true)}>
+                <span>＋</span>
+                <strong>添加角色</strong>
+                <i>在线安装或导入</i>
+              </button>
             </div>
             <div className="section-title"><div><span>快捷互动</span><h3>今天想看什么？</h3></div></div>
             <div className="reaction-grid">
@@ -290,6 +296,29 @@ export function App() {
                 <button className="primary" disabled={updateInstalling} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新…" : "↓ 立即更新"}</button>
               </div>
             </footer>
+          </div>
+        </div>
+      )}
+      {characterManagerOpen && (
+        <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="character-manager-title">
+          <div className="character-dialog">
+            <header>
+              <div><img src="/assets/furina-app-icon.png" alt="" /><strong id="character-manager-title">添加桌面角色</strong></div>
+              <button aria-label="关闭" onClick={() => setCharacterManagerOpen(false)}>×</button>
+            </header>
+            <div className="character-dialog-body">
+              <h2>选择添加方式</h2>
+              <p>角色包保持独立的 v2 结构，不会引入插件市场或修改桌宠运动内核。</p>
+              <div className="character-source-grid">
+                <button onClick={() => showToast("在线安装功能正在开发")}>
+                  <span>◎</span><strong>在线安装</strong><small>浏览并安装兼容的角色包</small><i>即将开放</i>
+                </button>
+                <button onClick={() => showToast("本地导入功能正在开发")}>
+                  <span>⇧</span><strong>本地导入</strong><small>从电脑导入完整角色包</small><i>即将开放</i>
+                </button>
+              </div>
+            </div>
+            <footer><button className="secondary" onClick={() => setCharacterManagerOpen(false)}>完成</button></footer>
           </div>
         </div>
       )}
