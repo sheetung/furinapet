@@ -29,8 +29,12 @@ html.pet-window, html.pet-window body, html.pet-window #root {
 .pet-bubble {
   position: absolute;
   z-index: 2;
-  left: 50%; top: 4px;
-  max-width: calc(100% - 18px);
+  left: 50%; bottom: calc(var(--pet-height) + 6px);
+  width: max-content;
+  max-width: calc(100% - 12px);
+  max-height: 80px;
+  box-sizing: border-box;
+  overflow: hidden;
   transform: translateX(-50%);
   padding: 8px 11px;
   border: 1px solid rgba(139,190,239,.34);

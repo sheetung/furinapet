@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { cursorPosition, currentMonitor, getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import {
+  cursorPosition,
+  currentMonitor,
+  getCurrentWindow,
+  PhysicalPosition,
+  PhysicalSize,
+} from "@tauri-apps/api/window";
 import { desktop } from "./api";
 import { computeLookDirection, type LookCell } from "./core/look-direction";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
@@ -8,6 +14,7 @@ import "./pet.css";
 
 const CELL_WIDTH = 192;
 const CELL_HEIGHT = 208;
+const BUBBLE_SPACE = 92;
 const GROUND_CLEARANCE = 72;
 const MOTION_INTERVAL_MS = 32;
 const GRAVITY_ACCELERATION = 2200;
@@ -57,9 +64,35 @@ export function PetView() {
   const reactionRef = useRef<MotionReaction>(reaction);
   const settingsRef = useRef(settings);
   const motionRef = useRef<MotionState>({ dragging: false, falling: false, fallToken: 0 });
+  const layoutQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+
+  function resizeForBubble(expanded: boolean, scale: number) {
+    if (!("__TAURI_INTERNALS__" in window)) return Promise.resolve();
+
+    layoutQueue.current = layoutQueue.current.then(async () => {
+      const petWindow = getCurrentWindow();
+      const [factor, position, size] = await Promise.all([
+        petWindow.scaleFactor(),
+        petWindow.outerPosition(),
+        petWindow.outerSize(),
+      ]);
+      const targetWidth = Math.round(CELL_WIDTH * scale * factor);
+      const targetHeight = Math.round((CELL_HEIGHT * scale + (expanded ? BUBBLE_SPACE : 0)) * factor);
+      const heightDelta = targetHeight - size.height;
+
+      await Promise.all([
+        petWindow.setSize(new PhysicalSize(targetWidth, targetHeight)),
+        petWindow.setPosition(new PhysicalPosition(position.x, position.y - heightDelta)),
+      ]);
+    }).catch(() => {
+      // The pet window may be hidden or closing while a reaction ends.
+    });
+
+    return layoutQueue.current;
+  }
 
   function changeReaction(next: MotionReaction, restart = false) {
     if (reactionRef.current !== next) {
@@ -115,6 +148,11 @@ export function PetView() {
       window.clearTimeout(timer);
     };
   }, [reaction, animationEpoch, look?.index, settings?.reducedMotion]);
+
+  useEffect(() => {
+    if (!settings) return;
+    void resizeForBubble(message.length > 0, settings.scale);
+  }, [message.length > 0, settings?.scale]);
 
   useEffect(() => {
     const petWindow = getCurrentWindow();
@@ -191,7 +229,11 @@ export function PetView() {
         if (!wander.target && currentSettings.lookAtCursor && reactionRef.current === "idle" && now - lastLookAt >= 96) {
           lastLookAt = now;
           const cursor = await cursorPosition();
-          const origin = { x: position.x + size.width / 2, y: position.y + size.height / 2 };
+          const petHeight = CELL_HEIGHT * currentSettings.scale * window.devicePixelRatio;
+          const origin = {
+            x: position.x + size.width / 2,
+            y: position.y + size.height - petHeight / 2,
+          };
           if (Math.hypot(cursor.x - origin.x, cursor.y - origin.y) > Math.max(size.width, size.height) * 0.55) {
             const cell = computeLookDirection(origin, cursor);
             if (cell.index !== lastLook) {
@@ -286,6 +328,7 @@ export function PetView() {
     setLook(null);
     changeReaction("idle");
     try {
+      await resizeForBubble(false, settingsRef.current?.scale ?? 1);
       await getCurrentWindow().startDragging();
     } finally {
       motionRef.current.dragging = false;
@@ -301,10 +344,12 @@ export function PetView() {
     backgroundPosition: `${-column * CELL_WIDTH}px ${-row * CELL_HEIGHT}px`,
     transform: `scale(${settings.scale})`,
   } as React.CSSProperties;
+  const stageStyle = { "--pet-height": `${CELL_HEIGHT * settings.scale}px` } as React.CSSProperties;
 
   return (
     <div
       className="pet-stage"
+      style={stageStyle}
       onPointerDown={(event) => void beginDrag(event)}
       onDoubleClick={() => void desktop.react("waving", "哼哼，是在叫我吗？")}
       onContextMenu={(event) => { event.preventDefault(); void desktop.showControlCenter(); }}
