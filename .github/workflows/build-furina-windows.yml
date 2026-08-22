@@ -79,26 +79,26 @@ jobs:
           name: tauri-build-log
           path: tauri-build.log
 
-      - name: Collect release files
+      - name: Prepare tagged release executable
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if ($tauri.version -ne $version) {
+            throw "Tag version $version does not match Tauri version $($tauri.version)."
+          }
+
           New-Item -ItemType Directory -Path release -Force | Out-Null
           $installer = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter "*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $installer) { throw "Furina installer was not produced." }
-          Copy-Item $installer.FullName "release/$($installer.Name)"
-          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $($installer.Name)" | Set-Content -NoNewline release/SHA256SUMS.windows.txt
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: furina-desktop-pet-windows-x64
-          path: release/*
-          if-no-files-found: error
+          $releaseName = "芙宁娜桌宠-Windows-$tag.exe"
+          Copy-Item $installer.FullName "release/$releaseName"
 
       - name: Publish tagged GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" release/* --repo "${{ github.repository }}" --title "芙宁娜桌宠 ${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" "release/芙宁娜桌宠-Windows-${{ github.ref_name }}.exe" --repo "${{ github.repository }}" --title "芙宁娜桌宠 ${{ github.ref_name }}" --generate-notes --verify-tag
