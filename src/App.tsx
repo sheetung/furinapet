@@ -3,7 +3,6 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { checkForUpdates, desktop, type UpdateResult } from "./api";
 import { characterRegistry, getCharacter } from "./characters/registry";
-import { featureRegistry } from "./extensions/registry";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 type Page = "home" | "pet" | "settings";
@@ -245,10 +244,6 @@ export function App() {
               <SettingRow title="始终置顶" description="让芙宁娜保持在普通窗口上方。"><Switch checked={settings.alwaysOnTop} disabled={busy} onChange={(value) => void updateSettings({ alwaysOnTop: value })} /></SettingRow>
               <SettingRow title="开机自动启动" description="登录 Windows 后在托盘启动，不弹出终端。"><Switch checked={settings.launchAtLogin} disabled={busy} onChange={(value) => void updateSettings({ launchAtLogin: value })} /></SettingRow>
               <SettingRow title="减少动态效果" description="停止自动漫步，保留必要的角色动画。"><Switch checked={settings.reducedMotion} disabled={busy} onChange={(value) => void updateSettings({ reducedMotion: value, autoWander: value ? false : settings.autoWander })} /></SettingRow>
-            </div>
-            <div className="section-title"><div><span>可扩展结构</span><h3>编译期功能模块</h3></div></div>
-            <div className="feature-list">
-              {featureRegistry.map((feature) => <div className="feature-card" key={feature.id}><span>✓</span><div><strong>{feature.name}</strong><p>{feature.description}</p></div></div>)}
             </div>
             <div className="update-card card">
               <div><span className="tag">更新</span><h3>版本 {version}</h3><p>{update?.message ?? "从 GitHub Releases 检查新版本。"}</p></div>
