@@ -30,7 +30,6 @@ const defaultSettings: AppSettings = {
   wanderProbability: 1,
   wanderSpeed: 1,
   gravityEnabled: true,
-  reducedMotion: false,
 };
 
 const reactions: readonly { id: Reaction; label: string; icon: string }[] = [
@@ -317,7 +316,7 @@ export function App() {
             <div className="settings-list">
               <SettingRow title="显示桌宠" description={`在桌面显示或隐藏${activeCharacter.name}。`}><Switch checked={settings.petVisible} disabled={busy} onChange={(value) => void updateSettings({ petVisible: value })} /></SettingRow>
               <SettingRow title="视线跟随" description="空闲时看向全局鼠标位置。"><Switch checked={settings.lookAtCursor} disabled={busy} onChange={(value) => void updateSettings({ lookAtCursor: value })} /></SettingRow>
-              <SettingRow title="自动漫步" description="按设定概率在当前显示器内开始一次漫步。"><Switch checked={settings.autoWander} disabled={busy || settings.reducedMotion} onChange={(value) => void updateSettings({ autoWander: value })} /></SettingRow>
+              <SettingRow title="自动漫步" description="按设定概率在当前显示器内开始一次漫步。"><Switch checked={settings.autoWander} disabled={busy} onChange={(value) => void updateSettings({ autoWander: value })} /></SettingRow>
               <SettingRow title="漫步概率" description="每次漫步机会实际出发的概率。">
                 <select className="select" value={settings.wanderProbability} disabled={busy || !settings.autoWander} onChange={(event) => void updateSettings({ wanderProbability: Number(event.target.value) })}>
                   <option value="0.25">偶尔 · 25%</option>
@@ -344,7 +343,6 @@ export function App() {
             <div className="settings-list">
               <SettingRow title="始终置顶" description={`让${activeCharacter.name}保持在普通窗口上方。`}><Switch checked={settings.alwaysOnTop} disabled={busy} onChange={(value) => void updateSettings({ alwaysOnTop: value })} /></SettingRow>
               <SettingRow title="开机自动启动" description="登录 Windows 后在托盘启动，不弹出终端。"><Switch checked={settings.launchAtLogin} disabled={busy} onChange={(value) => void updateSettings({ launchAtLogin: value })} /></SettingRow>
-              <SettingRow title="减少动态效果" description="停止自动漫步，保留必要的角色动画。"><Switch checked={settings.reducedMotion} disabled={busy} onChange={(value) => void updateSettings({ reducedMotion: value, autoWander: value ? false : settings.autoWander })} /></SettingRow>
             </div>
             <div className="update-card card">
               <div><span className="tag">更新</span><h3>版本 {version}</h3><p>{update?.message ?? "从 GitHub Releases 检查新版本。"}</p></div>

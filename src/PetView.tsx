@@ -144,10 +144,8 @@ export function PetView() {
   useEffect(() => {
     setSpriteFrame(0);
     if (look) return;
-    if (settings?.reducedMotion && reaction === "idle") return;
 
     const spec = frameRows[reaction];
-    const speedFactor = settings?.reducedMotion ? 1.55 : 1;
     let stopped = false;
     let timer = 0;
     let frame = 0;
@@ -158,14 +156,14 @@ export function PetView() {
         frame = (frame + 1) % spec.durations.length;
         setSpriteFrame(frame);
         scheduleNext();
-      }, spec.durations[frame] * speedFactor);
+      }, spec.durations[frame]);
     };
     scheduleNext();
     return () => {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [reaction, animationEpoch, look?.index, settings?.reducedMotion, settings?.selectedCharacterId]);
+  }, [reaction, animationEpoch, look?.index, settings?.selectedCharacterId]);
 
   useEffect(() => {
     if (!settings) return;
@@ -204,7 +202,7 @@ export function PetView() {
         let position = await petWindow.outerPosition();
         const size = await petWindow.outerSize();
 
-        if (currentSettings.autoWander && !currentSettings.reducedMotion && isLocomotionState) {
+        if (currentSettings.autoWander && isLocomotionState) {
           const monitor = await currentMonitor();
           const padding = 24;
           const minX = monitor ? monitor.position.x + padding : position.x;
@@ -316,7 +314,7 @@ export function PetView() {
       if (!monitor) return;
 
       const groundY = monitor.position.y + monitor.size.height - size.height - GROUND_CLEARANCE;
-      if (currentSettings.reducedMotion || position.y >= groundY - 1) {
+      if (position.y >= groundY - 1) {
         await petWindow.setPosition(new PhysicalPosition(position.x, groundY));
         return;
       }
