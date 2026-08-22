@@ -1,0 +1,19 @@
+{
+  "id": "furina",
+  "name": "芙宁娜",
+  "description": "枫丹舞台上的明星，使用完整的 v2 动画与视线方向。",
+  "isDefault": true,
+  "order": 0,
+  "spriteVersionNumber": 2,
+  "cellWidth": 192,
+  "cellHeight": 208,
+  "columns": 8,
+  "rows": 11,
+  "reactionMessages": {
+    "waving": "贵安，今天也请多关照啦。",
+    "jumping": "看来值得好好庆祝一下！",
+    "review": "让我看看事情的真相。",
+    "waiting": "我就在这里等你。",
+    "failed": "这可不在剧本里……"
+  }
+}

@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { checkForUpdates, desktop, type UpdateResult } from "./api";
+import { characterRegistry, getCharacter } from "./characters/registry";
 import { featureRegistry } from "./extensions/registry";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 type Page = "home" | "pet" | "settings";
 
 const defaultSettings: AppSettings = {
+  selectedCharacterId: "furina",
   petVisible: true,
   alwaysOnTop: true,
   launchAtLogin: false,
@@ -20,12 +22,12 @@ const defaultSettings: AppSettings = {
   reducedMotion: false,
 };
 
-const reactions: readonly { id: Reaction; label: string; icon: string; message: string }[] = [
-  { id: "waving", label: "挥手", icon: "👋", message: "贵安，今天也请多关照啦。" },
-  { id: "jumping", label: "开心", icon: "✨", message: "看来值得好好庆祝一下！" },
-  { id: "review", label: "思考", icon: "🔍", message: "让我看看事情的真相。" },
-  { id: "waiting", label: "等待", icon: "⏳", message: "我就在这里等你。" },
-  { id: "failed", label: "沮丧", icon: "💧", message: "这可不在剧本里……" },
+const reactions: readonly { id: Reaction; label: string; icon: string }[] = [
+  { id: "waving", label: "挥手", icon: "👋" },
+  { id: "jumping", label: "开心", icon: "✨" },
+  { id: "review", label: "思考", icon: "🔍" },
+  { id: "waiting", label: "等待", icon: "⏳" },
+  { id: "failed", label: "沮丧", icon: "💧" },
 ];
 
 export function App() {
@@ -36,6 +38,7 @@ export function App() {
   const [toast, setToast] = useState("");
   const [update, setUpdate] = useState<UpdateResult | null>(null);
   const version = dashboard?.version ?? "1.0.2";
+  const activeCharacter = getCharacter(settings.selectedCharacterId);
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -71,7 +74,7 @@ export function App() {
   async function togglePet() {
     const next = await desktop.togglePet();
     setSettings(next);
-    showToast(next.petVisible ? "芙宁娜已回到桌面" : "芙宁娜暂时隐藏了");
+    showToast(next.petVisible ? `${activeCharacter.name}已回到桌面` : `${activeCharacter.name}暂时隐藏了`);
   }
 
   async function react(reaction: Reaction, message: string) {
@@ -95,8 +98,8 @@ export function App() {
       </header>
 
       <aside className="sidebar">
-        <div className="pet-avatar"><img src="/assets/furina-app-icon.png" alt="芙宁娜" /></div>
-        <div className="sidebar-name">芙宁娜</div>
+        <div className="pet-avatar"><img src={activeCharacter.avatarUrl} alt={activeCharacter.name} /></div>
+        <div className="sidebar-name">{activeCharacter.name}</div>
         <div className={`status-pill ${settings.petVisible ? "online" : ""}`}><span />{statusText}</div>
         <nav>
           <NavButton active={page === "home"} icon="⌂" label="主页" onClick={() => setPage("home")} />
@@ -113,19 +116,34 @@ export function App() {
             <div className="hero-card">
               <div>
                 <span className="hero-kicker">当前状态</span>
-                <h2>{settings.petVisible ? "芙宁娜正在舞台上" : "芙宁娜正在后台休息"}</h2>
+                <h2>{settings.petVisible ? `${activeCharacter.name}正在舞台上` : `${activeCharacter.name}正在后台休息`}</h2>
                 <p>视线、动画和漫步均在本地运行，不需要插件市场或后台服务。</p>
                 <div className="button-row">
-                  <button className="primary" onClick={() => void togglePet()}>{settings.petVisible ? "暂时隐藏" : "显示芙宁娜"}</button>
-                  <button className="secondary" onClick={() => void react("waving", "贵安，今天也请多关照啦。")}>让她打招呼</button>
+                  <button className="primary" onClick={() => void togglePet()}>{settings.petVisible ? "暂时隐藏" : `显示${activeCharacter.name}`}</button>
+                  <button className="secondary" onClick={() => void react("waving", activeCharacter.reactionMessages?.waving ?? "你好呀！")}>让她打招呼</button>
                 </div>
               </div>
-              <img src="/assets/furina-pet-thumbnail.png" alt="芙宁娜桌宠预览" />
+              <img src={activeCharacter.thumbnailUrl} alt={`${activeCharacter.name}桌宠预览`} />
+            </div>
+            <div className="section-title"><div><span>角色</span><h3>选择桌面伙伴</h3></div><small>{characterRegistry.length} 位已发现</small></div>
+            <div className="character-grid">
+              {characterRegistry.map((character) => (
+                <button
+                  key={character.id}
+                  className={`character-card ${character.id === activeCharacter.id ? "active" : ""}`}
+                  disabled={busy}
+                  onClick={() => void updateSettings({ selectedCharacterId: character.id })}
+                >
+                  <img src={character.avatarUrl} alt="" />
+                  <span><strong>{character.name}</strong><small>{character.description}</small></span>
+                  <i>{character.id === activeCharacter.id ? "使用中" : "切换"}</i>
+                </button>
+              ))}
             </div>
             <div className="section-title"><div><span>快捷互动</span><h3>今天想看什么？</h3></div></div>
             <div className="reaction-grid">
               {reactions.map((item) => (
-                <button key={item.id} className="reaction-card" onClick={() => void react(item.id, item.message)}>
+                <button key={item.id} className="reaction-card" onClick={() => void react(item.id, activeCharacter.reactionMessages?.[item.id] ?? "")}>
                   <span>{item.icon}</span><strong>{item.label}</strong>
                 </button>
               ))}
@@ -135,13 +153,13 @@ export function App() {
 
         {page === "pet" && (
           <section className="page">
-            <PageHeader eyebrow="Companion" title="宠物" description="只保留一位主角，也只维护一套可靠的动画契约。" />
+            <PageHeader eyebrow="Companion" title="宠物" description="所有角色共享一套可靠的 v2 动画契约。" />
             <div className="pet-profile card">
-              <img src="/assets/furina-pet-thumbnail.png" alt="芙宁娜" />
-              <div><span className="tag">内置 · v2</span><h2>芙宁娜</h2><p>11 行、8 列图集，包含 9 种基础动画和 16 个顺时针视线方向。</p></div>
+              <img src={activeCharacter.thumbnailUrl} alt={activeCharacter.name} />
+              <div><span className="tag">已注册 · v2</span><h2>{activeCharacter.name}</h2><p>{activeCharacter.description} 11 行、8 列图集，包含 9 种基础动画和 16 个顺时针视线方向。</p></div>
             </div>
             <div className="settings-list">
-              <SettingRow title="显示桌宠" description="在桌面显示或隐藏芙宁娜。"><Switch checked={settings.petVisible} disabled={busy} onChange={(value) => void updateSettings({ petVisible: value })} /></SettingRow>
+              <SettingRow title="显示桌宠" description={`在桌面显示或隐藏${activeCharacter.name}。`}><Switch checked={settings.petVisible} disabled={busy} onChange={(value) => void updateSettings({ petVisible: value })} /></SettingRow>
               <SettingRow title="视线跟随" description="空闲时看向全局鼠标位置。"><Switch checked={settings.lookAtCursor} disabled={busy} onChange={(value) => void updateSettings({ lookAtCursor: value })} /></SettingRow>
               <SettingRow title="自动漫步" description="按设定概率在当前显示器内开始一次漫步。"><Switch checked={settings.autoWander} disabled={busy || settings.reducedMotion} onChange={(value) => void updateSettings({ autoWander: value })} /></SettingRow>
               <SettingRow title="漫步概率" description="每次漫步机会实际出发的概率。">

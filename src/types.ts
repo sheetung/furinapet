@@ -1,6 +1,7 @@
 export type Reaction = "idle" | "waving" | "jumping" | "failed" | "waiting" | "running" | "review";
 
 export interface AppSettings {
+  selectedCharacterId: string;
   petVisible: boolean;
   alwaysOnTop: boolean;
   launchAtLogin: boolean;

@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    pub selected_character_id: String,
     pub pet_visible: bool,
     pub always_on_top: bool,
     pub launch_at_login: bool,
@@ -20,6 +21,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            selected_character_id: "furina".into(),
             pet_visible: true,
             always_on_top: true,
             launch_at_login: false,
@@ -37,6 +39,7 @@ impl Default for Settings {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsPatch {
+    pub selected_character_id: Option<String>,
     pub pet_visible: Option<bool>,
     pub always_on_top: Option<bool>,
     pub launch_at_login: Option<bool>,
@@ -51,6 +54,18 @@ pub struct SettingsPatch {
 
 impl Settings {
     pub fn apply(&mut self, patch: SettingsPatch) -> Result<(), String> {
+        if let Some(value) = patch.selected_character_id {
+            let valid = !value.is_empty()
+                && value.len() <= 48
+                && !value.ends_with('-')
+                && value.bytes().enumerate().all(|(index, byte)| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || (byte == b'-' && index > 0)
+                });
+            if !valid { return Err("selectedCharacterId is invalid".into()); }
+            self.selected_character_id = value;
+        }
         if let Some(value) = patch.pet_visible { self.pet_visible = value; }
         if let Some(value) = patch.always_on_top { self.always_on_top = value; }
         if let Some(value) = patch.launch_at_login { self.launch_at_login = value; }

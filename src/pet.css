@@ -17,7 +17,6 @@ html.pet-window, html.pet-window body, html.pet-window #root {
   width: 192px; height: 208px;
   margin-left: -96px;
   transform-origin: bottom center;
-  background-image: url("/assets/furina-pet-spritesheet.webp");
   background-repeat: no-repeat;
   background-size: 1536px 2288px;
   overflow: hidden;

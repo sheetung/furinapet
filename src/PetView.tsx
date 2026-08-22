@@ -8,6 +8,7 @@ import {
   PhysicalSize,
 } from "@tauri-apps/api/window";
 import { desktop } from "./api";
+import { getCharacter } from "./characters/registry";
 import { computeLookDirection, type LookCell } from "./core/look-direction";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
 import "./pet.css";
@@ -149,7 +150,7 @@ export function PetView() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [reaction, animationEpoch, look?.index, settings?.reducedMotion]);
+  }, [reaction, animationEpoch, look?.index, settings?.reducedMotion, settings?.selectedCharacterId]);
 
   useEffect(() => {
     if (!settings) return;
@@ -340,11 +341,13 @@ export function PetView() {
   }
 
   if (!settings) return null;
+  const activeCharacter = getCharacter(settings.selectedCharacterId);
   const state = frameRows[reaction];
   const column = look ? look.column : Math.min(spriteFrame, state.durations.length - 1);
   const row = look ? look.row : state.row;
   const style = {
     backgroundPosition: `${-column * CELL_WIDTH}px ${-row * CELL_HEIGHT}px`,
+    backgroundImage: `url("${activeCharacter.spriteSheetUrl}")`,
     transform: `scale(${settings.scale})`,
   } as React.CSSProperties;
   const stageStyle = { "--pet-height": `${CELL_HEIGHT * settings.scale}px` } as React.CSSProperties;
@@ -358,7 +361,7 @@ export function PetView() {
       onContextMenu={(event) => { event.preventDefault(); void desktop.showControlCenter(); }}
     >
       {message && <div className="pet-bubble">{message}</div>}
-      <div className="sprite" style={style} role="img" aria-label={`芙宁娜：${reaction}`} />
+      <div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`} />
     </div>
   );
 }

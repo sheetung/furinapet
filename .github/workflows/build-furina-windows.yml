@@ -47,16 +47,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate Furina v2 resources
+      - name: Validate character registry and Furina v2 resources
         shell: pwsh
         run: |
           $pet = Get-Content pets/furina--lingxiaotian/pet.json -Raw | ConvertFrom-Json
           if ($pet.id -ne "furina--lingxiaotian") { throw "Unexpected Furina pet id." }
           if ($pet.spriteVersionNumber -ne 2) { throw "Furina must remain a v2 pet." }
           $canonical = "pets/furina--lingxiaotian/$($pet.spriteSheetPath)"
-          $bundled = "public/assets/furina-pet-spritesheet.webp"
-          if (-not (Test-Path $canonical) -or -not (Test-Path $bundled)) { throw "Furina spritesheet is missing." }
-          if ((Get-FileHash $canonical).Hash -ne (Get-FileHash $bundled).Hash) { throw "Bundled spritesheet differs from the v2 pet package." }
+          $registered = "characters/furina/spritesheet.webp"
+          if (-not (Test-Path $canonical) -or -not (Test-Path $registered)) { throw "Furina spritesheet is missing." }
+          if ((Get-FileHash $canonical).Hash -ne (Get-FileHash $registered).Hash) { throw "Registered Furina spritesheet differs from the v2 pet package." }
+
+          $manifests = Get-ChildItem characters -Directory | ForEach-Object {
+            $manifestPath = Join-Path $_.FullName "character.json"
+            if (-not (Test-Path $manifestPath)) { throw "Missing character.json in $($_.Name)." }
+            foreach ($asset in @("avatar.png", "thumbnail.png", "spritesheet.webp")) {
+              if (-not (Test-Path (Join-Path $_.FullName $asset))) { throw "Missing $asset in $($_.Name)." }
+            }
+            $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+            if ($manifest.id -ne $_.Name) { throw "Character id must match directory name: $($_.Name)." }
+            if ($manifest.id -notmatch '^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$') { throw "Character id is invalid: $($manifest.id)." }
+            if ($manifest.spriteVersionNumber -ne 2 -or $manifest.cellWidth -ne 192 -or $manifest.cellHeight -ne 208 -or $manifest.columns -ne 8 -or $manifest.rows -ne 11) {
+              throw "Character $($_.Name) does not satisfy the v2 sprite contract."
+            }
+            $manifest
+          }
+          if (@($manifests).Count -lt 1) { throw "At least one character must be registered." }
+          if (@($manifests | Where-Object isDefault).Count -ne 1) { throw "Exactly one character must be the default." }
 
       - name: Build frontend
         run: pnpm build
