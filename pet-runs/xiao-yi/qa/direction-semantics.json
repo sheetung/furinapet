@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "directions": [
+    {"angle": "000", "semantic": "up"},
+    {"angle": "022.5", "semantic": "up-right"},
+    {"angle": "045", "semantic": "up-right"},
+    {"angle": "067.5", "semantic": "up-right"},
+    {"angle": "090", "semantic": "screen-right"},
+    {"angle": "112.5", "semantic": "down-right"},
+    {"angle": "135", "semantic": "down-right"},
+    {"angle": "157.5", "semantic": "down-right"},
+    {"angle": "180", "semantic": "down"},
+    {"angle": "202.5", "semantic": "down-left"},
+    {"angle": "225", "semantic": "down-left"},
+    {"angle": "247.5", "semantic": "down-left"},
+    {"angle": "270", "semantic": "screen-left"},
+    {"angle": "292.5", "semantic": "up-left"},
+    {"angle": "315", "semantic": "up-left"},
+    {"angle": "337.5", "semantic": "up-left"}
+  ],
+  "visualQa": "pass",
+  "blindQa": "pass"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "xiao-yi",
+  "name": "萧逸",
+  "description": "来自《光与夜之恋》的自信赛车手，以利落身手与温柔陪伴加入桌面。",
+  "order": 100,
+  "spriteVersionNumber": 2,
+  "cellWidth": 192,
+  "cellHeight": 208,
+  "columns": 8,
+  "rows": 11,
+  "reactionMessages": {
+    "idle": "今天的风，正适合出发。",
+    "waving": "萧小五，今天想去哪儿？",
+    "jumping": "抓稳了，带你去看终点后的风景。",
+    "failed": "这点意外，还拦不住我。",
+    "waiting": "我就在这儿，慢慢来。",
+    "running": "生活的每一处都要我忍耐和思考，只有赛车叫我向前。",
+    "review": "别急，让我再看一遍。"
+  }
+}

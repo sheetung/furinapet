@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "repairs": [
+    "Swapped the symmetric 090/270 cells after the first blind review identified reversed horizontal semantics.",
+    "Swapped the symmetric 135/225 cells after the first blind review identified reversed diagonal semantics."
+  ],
+  "verification": "Three new independent blind reviews were combined by strict majority; all 14 pairs and both hard cardinal gates passed without warnings."
+}

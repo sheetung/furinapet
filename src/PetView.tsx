@@ -375,7 +375,7 @@ export function PetView() {
       className="pet-stage"
       style={stageStyle}
       onPointerDown={(event) => void beginDrag(event)}
-      onDoubleClick={() => void desktop.react("waving", "哼哼，是在叫我吗？")}
+      onDoubleClick={() => void desktop.react("waving", activeCharacter.reactionMessages?.waving ?? "你好呀！")}
       onContextMenu={(event) => { event.preventDefault(); void desktop.showControlCenter(); }}
     >
       {message && <div className="pet-bubble">{message}</div>}

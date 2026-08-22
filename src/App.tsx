@@ -232,7 +232,7 @@ export function App() {
       <main className="content">
         {page === "home" && (
           <section className="page">
-            <PageHeader eyebrow="Bonjour" title="欢迎回来" description="一个专注于芙宁娜的轻量桌面伴侣。" />
+            <PageHeader eyebrow="Bonjour" title="欢迎回来" description={`一个专注于${activeCharacter.name}的轻量桌面伴侣。`} />
             <div className="hero-card">
               <div>
                 <span className="hero-kicker">当前状态</span>
@@ -311,7 +311,7 @@ export function App() {
           <section className="page">
             <PageHeader eyebrow="Preferences" title="设置" description="没有插件权限、账户或远程服务，只有必要的桌面选项。" />
             <div className="settings-list">
-              <SettingRow title="始终置顶" description="让芙宁娜保持在普通窗口上方。"><Switch checked={settings.alwaysOnTop} disabled={busy} onChange={(value) => void updateSettings({ alwaysOnTop: value })} /></SettingRow>
+              <SettingRow title="始终置顶" description={`让${activeCharacter.name}保持在普通窗口上方。`}><Switch checked={settings.alwaysOnTop} disabled={busy} onChange={(value) => void updateSettings({ alwaysOnTop: value })} /></SettingRow>
               <SettingRow title="开机自动启动" description="登录 Windows 后在托盘启动，不弹出终端。"><Switch checked={settings.launchAtLogin} disabled={busy} onChange={(value) => void updateSettings({ launchAtLogin: value })} /></SettingRow>
               <SettingRow title="减少动态效果" description="停止自动漫步，保留必要的角色动画。"><Switch checked={settings.reducedMotion} disabled={busy} onChange={(value) => void updateSettings({ reducedMotion: value, autoWander: value ? false : settings.autoWander })} /></SettingRow>
             </div>

@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "states": {
+    "idle": {"frames": 6, "errors": [], "warnings": []},
+    "running-right": {"frames": 8, "errors": [], "warnings": []},
+    "running-left": {"frames": 8, "errors": [], "warnings": []},
+    "waving": {"frames": 4, "errors": [], "warnings": []},
+    "jumping": {"frames": 5, "errors": [], "warnings": []},
+    "failed": {"frames": 8, "errors": [], "warnings": []},
+    "waiting": {"frames": 6, "errors": [], "warnings": []},
+    "running": {"frames": 6, "errors": [], "warnings": []},
+    "review": {"frames": 6, "errors": [], "warnings": []}
+  },
+  "visualQa": "pass",
+  "notes": "All standard rows passed frame count, component, scale, baseline, identity, motion semantics, and final despill review."
+}
