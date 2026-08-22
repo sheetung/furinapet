@@ -11,6 +11,7 @@ export interface CharacterManifest {
   cellHeight: number;
   columns: number;
   rows: number;
+  lookDirectionOrder?: "clockwise" | "counterclockwise";
   reactionMessages?: Partial<Record<Reaction, string>>;
 }
 
@@ -39,6 +40,7 @@ const STORE_NAME = "characters";
 const DATABASE_VERSION = 1;
 const ONLINE_ROOT = "https://raw.githubusercontent.com/sheetung/furinapet/main/online-characters";
 const ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
+const LEGACY_COUNTERCLOCKWISE_LOOK_IDS = new Set(["xiao-yi"]);
 const REQUIRED_FILES = ["character.json", "avatar.png", "thumbnail.png", "spritesheet.webp"] as const;
 const REACTIONS: readonly Reaction[] = ["idle", "waving", "jumping", "failed", "waiting", "running", "review"];
 
@@ -94,6 +96,9 @@ function validateManifest(value: unknown, directoryId?: string): CharacterManife
   if (source.reactionMessages !== undefined && (!source.reactionMessages || typeof source.reactionMessages !== "object")) {
     throw new Error("reactionMessages 必须是对象。");
   }
+  if (source.lookDirectionOrder !== undefined && source.lookDirectionOrder !== "clockwise" && source.lookDirectionOrder !== "counterclockwise") {
+    throw new Error("lookDirectionOrder 仅支持 clockwise 或 counterclockwise。");
+  }
 
   const reactionMessages: Partial<Record<Reaction, string>> = {};
   for (const reaction of REACTIONS) {
@@ -114,6 +119,8 @@ function validateManifest(value: unknown, directoryId?: string): CharacterManife
     cellHeight: 208,
     columns: 8,
     rows: 11,
+    lookDirectionOrder: source.lookDirectionOrder
+      ?? (LEGACY_COUNTERCLOCKWISE_LOOK_IDS.has(source.id) ? "counterclockwise" : "clockwise"),
     reactionMessages,
   };
 }
@@ -177,6 +184,7 @@ async function storedCharacters(): Promise<StoredCharacter[]> {
 }
 
 function importedDefinition(stored: StoredCharacter): CharacterDefinition {
+  const manifest = validateManifest(stored.manifest, stored.id);
   const urls = [
     URL.createObjectURL(stored.avatar),
     URL.createObjectURL(stored.thumbnail),
@@ -184,7 +192,7 @@ function importedDefinition(stored: StoredCharacter): CharacterDefinition {
   ];
   importedObjectUrls.push(...urls);
   return {
-    ...stored.manifest,
+    ...manifest,
     isDefault: false,
     source: "imported",
     avatarUrl: urls[0],

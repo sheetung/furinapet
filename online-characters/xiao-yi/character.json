@@ -8,6 +8,7 @@
   "cellHeight": 208,
   "columns": 8,
   "rows": 11,
+  "lookDirectionOrder": "counterclockwise",
   "reactionMessages": {
     "idle": "今天的风，正适合出发。",
     "waving": "萧小五，今天想去哪儿？",

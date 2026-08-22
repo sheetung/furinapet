@@ -9,7 +9,7 @@ import {
 } from "@tauri-apps/api/window";
 import { desktop } from "./api";
 import { characterRegistry, getCharacter, loadCharacterRegistry, type CharacterDefinition } from "./characters/registry";
-import { computeLookDirection, type LookCell } from "./core/look-direction";
+import { computeLookDirection, mapLookDirection, type LookCell } from "./core/look-direction";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
 import "./pet.css";
 
@@ -360,9 +360,12 @@ export function PetView() {
 
   if (!settings) return null;
   const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
+  const displayedLook = look
+    ? mapLookDirection(look, activeCharacter.lookDirectionOrder)
+    : null;
   const state = frameRows[reaction];
-  const column = look ? look.column : Math.min(spriteFrame, state.durations.length - 1);
-  const row = look ? look.row : state.row;
+  const column = displayedLook ? displayedLook.column : Math.min(spriteFrame, state.durations.length - 1);
+  const row = displayedLook ? displayedLook.row : state.row;
   const style = {
     backgroundPosition: `${-column * CELL_WIDTH}px ${-row * CELL_HEIGHT}px`,
     backgroundImage: `url("${activeCharacter.spriteSheetUrl}")`,
