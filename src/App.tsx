@@ -240,7 +240,7 @@ export function App() {
                 <p>视线、动画和漫步均在本地运行，不需要插件市场或后台服务。</p>
                 <div className="button-row">
                   <button className="primary" onClick={() => void togglePet()}>{settings.petVisible ? "暂时隐藏" : `显示${activeCharacter.name}`}</button>
-                  <button className="secondary" onClick={() => void react("waving", activeCharacter.reactionMessages?.waving ?? "你好呀！")}>让她打招呼</button>
+                  <button className="secondary" onClick={() => void react("waving", activeCharacter.reactionMessages?.waving ?? "你好呀！")}>打个招呼</button>
                 </div>
               </div>
               <img src={activeCharacter.thumbnailUrl} alt={`${activeCharacter.name}桌宠预览`} />
