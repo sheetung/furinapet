@@ -60,6 +60,7 @@ export function PetView() {
   const [spriteFrame, setSpriteFrame] = useState(0);
   const [look, setLook] = useState<LookCell | null>(null);
   const [message, setMessage] = useState("");
+  const [bubbleEpoch, setBubbleEpoch] = useState(0);
   const reactionTimer = useRef<number | null>(null);
   const reactionRef = useRef<MotionReaction>(reaction);
   const settingsRef = useRef(settings);
@@ -114,6 +115,7 @@ export function PetView() {
         setLook(null);
         changeReaction(payload.reaction, true);
         setMessage(payload.message ?? "");
+        setBubbleEpoch((value) => value + 1);
         reactionTimer.current = window.setTimeout(() => {
           changeReaction("idle");
           setMessage("");
@@ -152,7 +154,7 @@ export function PetView() {
   useEffect(() => {
     if (!settings) return;
     void resizeForBubble(message.length > 0, settings.scale);
-  }, [message.length > 0, settings?.scale]);
+  }, [message.length > 0, settings?.scale, bubbleEpoch]);
 
   useEffect(() => {
     const petWindow = getCurrentWindow();
