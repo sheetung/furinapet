@@ -11,6 +11,7 @@ export interface CharacterManifest {
   cellHeight: number;
   columns: number;
   rows: number;
+  packageVersion?: string;
   lookDirectionOrder?: "clockwise" | "counterclockwise";
   reactionMessages?: Partial<Record<Reaction, string>>;
 }
@@ -40,6 +41,7 @@ const STORE_NAME = "characters";
 const DATABASE_VERSION = 1;
 const ONLINE_ROOT = "https://raw.githubusercontent.com/sheetung/furinapet/main/online-characters";
 const ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
+const PACKAGE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 const LEGACY_COUNTERCLOCKWISE_LOOK_IDS = new Set(["xiao-yi"]);
 const REQUIRED_FILES = ["character.json", "avatar.png", "thumbnail.png", "spritesheet.webp"] as const;
 const REACTIONS: readonly Reaction[] = ["idle", "waving", "jumping", "failed", "waiting", "running", "review"];
@@ -99,6 +101,9 @@ function validateManifest(value: unknown, directoryId?: string): CharacterManife
   if (source.lookDirectionOrder !== undefined && source.lookDirectionOrder !== "clockwise" && source.lookDirectionOrder !== "counterclockwise") {
     throw new Error("lookDirectionOrder 仅支持 clockwise 或 counterclockwise。");
   }
+  if (source.packageVersion !== undefined && (typeof source.packageVersion !== "string" || !PACKAGE_VERSION_PATTERN.test(source.packageVersion))) {
+    throw new Error("packageVersion 必须使用 x.y.z 格式。");
+  }
 
   const reactionMessages: Partial<Record<Reaction, string>> = {};
   for (const reaction of REACTIONS) {
@@ -119,6 +124,7 @@ function validateManifest(value: unknown, directoryId?: string): CharacterManife
     cellHeight: 208,
     columns: 8,
     rows: 11,
+    packageVersion: source.packageVersion ?? "1.0.0",
     lookDirectionOrder: source.lookDirectionOrder
       ?? (LEGACY_COUNTERCLOCKWISE_LOOK_IDS.has(source.id) ? "counterclockwise" : "clockwise"),
     reactionMessages,
@@ -266,9 +272,11 @@ async function validateAssets(avatar: Blob, thumbnail: Blob, spriteSheet: Blob):
   }
 }
 
-async function saveCharacter(manifest: CharacterManifest, avatar: Blob, thumbnail: Blob, spriteSheet: Blob): Promise<void> {
+async function saveCharacter(manifest: CharacterManifest, avatar: Blob, thumbnail: Blob, spriteSheet: Blob, replace = false): Promise<void> {
   if (characterRegistry.some((character) => character.id === manifest.id)) throw new Error(`内置角色 ${manifest.id} 不能被覆盖。`);
-  if ((await storedCharacters()).some((character) => character.id === manifest.id)) throw new Error(`角色 ${manifest.name} 已经安装。`);
+  const installed = (await storedCharacters()).some((character) => character.id === manifest.id);
+  if (!replace && installed) throw new Error(`角色 ${manifest.name} 已经安装。`);
+  if (replace && !installed) throw new Error(`角色 ${manifest.name} 尚未安装。`);
   await validateAssets(avatar, thumbnail, spriteSheet);
 
   const stored: StoredCharacter = {
@@ -281,7 +289,8 @@ async function saveCharacter(manifest: CharacterManifest, avatar: Blob, thumbnai
   const database = await openCharacterDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, "readwrite");
-    await requestResult(transaction.objectStore(STORE_NAME).add(stored));
+    const store = transaction.objectStore(STORE_NAME);
+    await requestResult(replace ? store.put(stored) : store.add(stored));
   } finally {
     database.close();
   }
@@ -359,5 +368,30 @@ export async function installOnlineCharacter(character: CharacterDefinition): Pr
   ]);
   const manifest = validateManifest(character, character.id);
   await saveCharacter(manifest, avatar, thumbnail, spriteSheet);
+  return manifest;
+}
+
+function versionParts(version: string | undefined): number[] {
+  return (version ?? "1.0.0").split(".").map((part) => Number(part));
+}
+
+export function hasCharacterUpdate(installed: CharacterDefinition, online: CharacterDefinition): boolean {
+  const current = versionParts(installed.packageVersion);
+  const latest = versionParts(online.packageVersion);
+  for (let index = 0; index < 3; index += 1) {
+    if (latest[index] !== current[index]) return latest[index] > current[index];
+  }
+  return false;
+}
+
+export async function updateOnlineCharacter(character: CharacterDefinition): Promise<CharacterManifest> {
+  if (character.source !== "online") throw new Error("这不是在线角色。");
+  const [avatar, thumbnail, spriteSheet] = await Promise.all([
+    fetchRequired(character.avatarUrl).then((response) => response.blob()),
+    fetchRequired(character.thumbnailUrl).then((response) => response.blob()),
+    fetchRequired(character.spriteSheetUrl).then((response) => response.blob()),
+  ]);
+  const manifest = validateManifest(character, character.id);
+  await saveCharacter(manifest, avatar, thumbnail, spriteSheet, true);
   return manifest;
 }

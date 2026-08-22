@@ -87,6 +87,7 @@ jobs:
             }
             $manifest = Get-Content "$directory/character.json" -Raw | ConvertFrom-Json
             if ($manifest.id -ne $id) { throw "Online character id must match its directory: $id." }
+            if ($manifest.packageVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Online character $id must provide a semantic packageVersion." }
             if ($manifest.spriteVersionNumber -ne 2 -or $manifest.cellWidth -ne 192 -or $manifest.cellHeight -ne 208 -or $manifest.columns -ne 8 -or $manifest.rows -ne 11) {
               throw "Online character $id does not satisfy the v2 sprite contract."
             }

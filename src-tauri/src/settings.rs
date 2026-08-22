@@ -16,6 +16,7 @@ pub struct Settings {
     pub wander_speed: f64,
     pub gravity_enabled: bool,
     pub reduced_motion: bool,
+    pub resting: bool,
 }
 
 impl Default for Settings {
@@ -32,6 +33,7 @@ impl Default for Settings {
             wander_speed: 1.0,
             gravity_enabled: true,
             reduced_motion: false,
+            resting: false,
         }
     }
 }
@@ -50,6 +52,7 @@ pub struct SettingsPatch {
     pub wander_speed: Option<f64>,
     pub gravity_enabled: Option<bool>,
     pub reduced_motion: Option<bool>,
+    pub resting: Option<bool>,
 }
 
 impl Settings {
@@ -73,6 +76,7 @@ impl Settings {
         if let Some(value) = patch.auto_wander { self.auto_wander = value; }
         if let Some(value) = patch.gravity_enabled { self.gravity_enabled = value; }
         if let Some(value) = patch.reduced_motion { self.reduced_motion = value; }
+        if let Some(value) = patch.resting { self.resting = value; }
         if let Some(value) = patch.scale {
             if !(0.65..=1.5).contains(&value) { return Err("scale must be between 0.65 and 1.5".into()); }
             self.scale = (value * 20.0).round() / 20.0;

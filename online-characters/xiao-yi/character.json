@@ -8,6 +8,7 @@
   "cellHeight": 208,
   "columns": 8,
   "rows": 11,
+  "packageVersion": "1.0.1",
   "lookDirectionOrder": "counterclockwise",
   "reactionMessages": {
     "idle": "今天的风，正适合出发。",

@@ -78,6 +78,14 @@ export function PetView() {
     });
   }, [settings?.selectedCharacterId]);
 
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const cleanup = listen<string>("characters-changed", () => {
+      void loadCharacterRegistry().then(setCharacters);
+    });
+    return () => { void cleanup.then((unlisten) => unlisten()); };
+  }, []);
+
   function resizeForBubble(expanded: boolean, scale: number) {
     if (!("__TAURI_INTERNALS__" in window)) return Promise.resolve();
 
@@ -136,7 +144,7 @@ export function PetView() {
   useEffect(() => {
     setSpriteFrame(0);
     if (look) return;
-    if (settings?.reducedMotion && reaction === "idle") return;
+    if ((settings?.reducedMotion || settings?.resting) && reaction === "idle") return;
 
     const spec = frameRows[reaction];
     const speedFactor = settings?.reducedMotion ? 1.55 : 1;
@@ -157,7 +165,7 @@ export function PetView() {
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [reaction, animationEpoch, look?.index, settings?.reducedMotion, settings?.selectedCharacterId]);
+  }, [reaction, animationEpoch, look?.index, settings?.reducedMotion, settings?.resting, settings?.selectedCharacterId]);
 
   useEffect(() => {
     if (!settings) return;
@@ -196,7 +204,7 @@ export function PetView() {
         let position = await petWindow.outerPosition();
         const size = await petWindow.outerSize();
 
-        if (currentSettings.autoWander && !currentSettings.reducedMotion && isLocomotionState) {
+        if (currentSettings.autoWander && !currentSettings.reducedMotion && !currentSettings.resting && isLocomotionState) {
           const monitor = await currentMonitor();
           const padding = 24;
           const minX = monitor ? monitor.position.x + padding : position.x;
@@ -247,7 +255,7 @@ export function PetView() {
           if (reactionRef.current === "run-left" || reactionRef.current === "run-right") changeReaction("idle");
         }
 
-        if (!wander.target && currentSettings.lookAtCursor && reactionRef.current === "idle" && now - lastLookAt >= 96) {
+        if (!currentSettings.resting && !wander.target && currentSettings.lookAtCursor && reactionRef.current === "idle" && now - lastLookAt >= 96) {
           lastLookAt = now;
           const cursor = await cursorPosition();
           const petHeight = CELL_HEIGHT * currentSettings.scale * window.devicePixelRatio;
@@ -265,7 +273,7 @@ export function PetView() {
             lastLook = -1;
             setLook(null);
           }
-        } else if ((wander.target || reactionRef.current !== "idle") && lastLook !== -1) {
+        } else if ((currentSettings.resting || wander.target || reactionRef.current !== "idle") && lastLook !== -1) {
           lastLook = -1;
           setLook(null);
         }

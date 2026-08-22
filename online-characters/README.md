@@ -9,6 +9,12 @@
 - `thumbnail.png`
 - `spritesheet.webp`（v2：1536 × 2288）
 
+每个在线角色应在 `character.json` 中提供独立版本号，应用会据此检查并覆盖更新已安装的角色：
+
+```json
+"packageVersion": "1.0.0"
+```
+
 角色图集的 16 向视线默认按顺时针排列。如果素材的左右方向相反，可在 `character.json` 中设置：
 
 ```json

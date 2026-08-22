@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { checkForUpdates, desktop, type UpdateResult } from "./api";
 import {
   characterRegistry,
   getCharacter,
+  hasCharacterUpdate,
   importCharacterFolder,
   installOnlineCharacter,
   loadCharacterRegistry,
   loadOnlineCharacters,
+  updateOnlineCharacter,
   type CharacterDefinition,
 } from "./characters/registry";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
@@ -29,6 +31,7 @@ const defaultSettings: AppSettings = {
   wanderSpeed: 1,
   gravityEnabled: true,
   reducedMotion: false,
+  resting: false,
 };
 
 const reactions: readonly { id: Reaction; label: string; icon: string }[] = [
@@ -55,6 +58,7 @@ export function App() {
   const [characters, setCharacters] = useState<CharacterDefinition[]>(characterRegistry);
   const [onlineCharacters, setOnlineCharacters] = useState<CharacterDefinition[]>([]);
   const [characterBusy, setCharacterBusy] = useState(false);
+  const [characterUpdateChecking, setCharacterUpdateChecking] = useState(false);
   const localCharacterInput = useRef<HTMLInputElement | null>(null);
   const version = dashboard?.version ?? "1.0.6";
   const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
@@ -84,7 +88,10 @@ export function App() {
     return () => { void cleanup.then((unlisten) => unlisten()); };
   }, []);
 
-  const statusText = useMemo(() => settings.petVisible ? "正在陪伴" : "暂时休息", [settings.petVisible]);
+  const statusText = useMemo(
+    () => !settings.petVisible ? "暂时隐藏" : settings.resting ? "正在休息" : "正在陪伴",
+    [settings.petVisible, settings.resting],
+  );
 
   function showToast(message: string) {
     setToast(message);
@@ -113,6 +120,47 @@ export function App() {
     if (!settings.petVisible) await desktop.showPet();
     await desktop.react(reaction, message);
     setSettings((current) => ({ ...current, petVisible: true }));
+  }
+
+  async function toggleCharacterRest() {
+    setBusy(true);
+    try {
+      const next = await desktop.updateSettings({ resting: !settings.resting });
+      setSettings(next);
+      showToast(next.resting ? `${activeCharacter.name}开始休息了` : `${activeCharacter.name}结束休息了`);
+    } catch (error) {
+      showToast(`休息状态切换失败：${String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkCharacterUpdate() {
+    setCharacterUpdateChecking(true);
+    try {
+      if (activeCharacter.source === "built-in") {
+        showToast(`${activeCharacter.name}是内置角色，将随 furinapet 一起更新`);
+        return;
+      }
+      const online = await loadOnlineCharacters();
+      const latest = online.find((character) => character.id === activeCharacter.id);
+      if (!latest) {
+        showToast(`${activeCharacter.name}不是在线角色，无法自动更新`);
+        return;
+      }
+      if (!hasCharacterUpdate(activeCharacter, latest)) {
+        showToast(`${activeCharacter.name}已经是最新版本`);
+        return;
+      }
+      const manifest = await updateOnlineCharacter(latest);
+      setCharacters(await loadCharacterRegistry());
+      await emit("characters-changed", manifest.id);
+      showToast(`${manifest.name}已更新到 ${manifest.packageVersion ?? "最新版本"}`);
+    } catch (error) {
+      showToast(`角色更新失败：${String(error)}`);
+    } finally {
+      setCharacterUpdateChecking(false);
+    }
   }
 
   async function runUpdateCheck(currentVersion = version, automatic = false) {
@@ -236,11 +284,16 @@ export function App() {
             <div className="hero-card">
               <div>
                 <span className="hero-kicker">当前状态</span>
-                <h2>{settings.petVisible ? `${activeCharacter.name}正在舞台上` : `${activeCharacter.name}正在后台休息`}</h2>
+                <h2>{!settings.petVisible
+                  ? `${activeCharacter.name}暂时隐藏了`
+                  : settings.resting
+                    ? `${activeCharacter.name}正在休息`
+                    : `${activeCharacter.name}正在舞台上`}</h2>
                 <p>视线、动画和漫步均在本地运行，不需要插件市场或后台服务。</p>
                 <div className="button-row">
                   <button className="primary" onClick={() => void togglePet()}>{settings.petVisible ? "暂时隐藏" : `显示${activeCharacter.name}`}</button>
-                  <button className="secondary" onClick={() => void react("waving", activeCharacter.reactionMessages?.waving ?? "你好呀！")}>打个招呼</button>
+                  <button className="secondary" disabled={busy || !settings.petVisible} onClick={() => void toggleCharacterRest()}>{settings.resting ? "结束休息" : "角色休息"}</button>
+                  <button className="secondary" disabled={characterUpdateChecking} onClick={() => void checkCharacterUpdate()}>{characterUpdateChecking ? "检查中…" : "角色更新"}</button>
                 </div>
               </div>
               <img src={activeCharacter.thumbnailUrl} alt={`${activeCharacter.name}桌宠预览`} />
