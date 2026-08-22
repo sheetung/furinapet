@@ -11,6 +11,7 @@ pub struct Settings {
     pub scale: f64,
     pub look_at_cursor: bool,
     pub auto_wander: bool,
+    pub wander_probability: f64,
     pub wander_speed: f64,
     pub gravity_enabled: bool,
     pub reduced_motion: bool,
@@ -25,6 +26,7 @@ impl Default for Settings {
             scale: 1.0,
             look_at_cursor: true,
             auto_wander: false,
+            wander_probability: 1.0,
             wander_speed: 1.0,
             gravity_enabled: true,
             reduced_motion: false,
@@ -41,6 +43,7 @@ pub struct SettingsPatch {
     pub scale: Option<f64>,
     pub look_at_cursor: Option<bool>,
     pub auto_wander: Option<bool>,
+    pub wander_probability: Option<f64>,
     pub wander_speed: Option<f64>,
     pub gravity_enabled: Option<bool>,
     pub reduced_motion: Option<bool>,
@@ -62,6 +65,10 @@ impl Settings {
         if let Some(value) = patch.wander_speed {
             if !(0.6..=1.8).contains(&value) { return Err("wanderSpeed must be between 0.6 and 1.8".into()); }
             self.wander_speed = (value * 10.0).round() / 10.0;
+        }
+        if let Some(value) = patch.wander_probability {
+            if ![0.25, 0.5, 0.75, 1.0].contains(&value) { return Err("wanderProbability must be 0.25, 0.5, 0.75, or 1.0".into()); }
+            self.wander_probability = value;
         }
         if self.reduced_motion { self.auto_wander = false; }
         Ok(())

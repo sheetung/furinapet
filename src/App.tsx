@@ -14,6 +14,7 @@ const defaultSettings: AppSettings = {
   scale: 1,
   lookAtCursor: true,
   autoWander: false,
+  wanderProbability: 1,
   wanderSpeed: 1,
   gravityEnabled: true,
   reducedMotion: false,
@@ -142,7 +143,15 @@ export function App() {
             <div className="settings-list">
               <SettingRow title="显示桌宠" description="在桌面显示或隐藏芙宁娜。"><Switch checked={settings.petVisible} disabled={busy} onChange={(value) => void updateSettings({ petVisible: value })} /></SettingRow>
               <SettingRow title="视线跟随" description="空闲时看向全局鼠标位置。"><Switch checked={settings.lookAtCursor} disabled={busy} onChange={(value) => void updateSettings({ lookAtCursor: value })} /></SettingRow>
-              <SettingRow title="自动漫步" description="偶尔在当前显示器内走动，不依赖 Walkabout 插件。"><Switch checked={settings.autoWander} disabled={busy || settings.reducedMotion} onChange={(value) => void updateSettings({ autoWander: value })} /></SettingRow>
+              <SettingRow title="自动漫步" description="按设定概率在当前显示器内开始一次漫步。"><Switch checked={settings.autoWander} disabled={busy || settings.reducedMotion} onChange={(value) => void updateSettings({ autoWander: value })} /></SettingRow>
+              <SettingRow title="漫步概率" description="每次漫步机会实际出发的概率。">
+                <select className="select" value={settings.wanderProbability} disabled={busy || !settings.autoWander} onChange={(event) => void updateSettings({ wanderProbability: Number(event.target.value) })}>
+                  <option value="0.25">偶尔 · 25%</option>
+                  <option value="0.5">适中 · 50%</option>
+                  <option value="0.75">经常 · 75%</option>
+                  <option value="1">总是 · 100%</option>
+                </select>
+              </SettingRow>
               <SettingRow title="重力落地" description="拖动松手后自然落到当前屏幕底部，漫步时保持贴地。"><Switch checked={settings.gravityEnabled} disabled={busy} onChange={(value) => void updateSettings({ gravityEnabled: value })} /></SettingRow>
               <SettingRow title="宠物大小" description={`${Math.round(settings.scale * 100)}%`} wide>
                 <input className="range" type="range" min="0.65" max="1.5" step="0.05" value={settings.scale} onChange={(event) => setSettings((current) => ({ ...current, scale: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ scale: Number(event.currentTarget.value) })} />

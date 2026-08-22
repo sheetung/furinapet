@@ -188,8 +188,9 @@ export function PetView() {
 
         if (currentSettings.autoWander && !currentSettings.reducedMotion && isLocomotionState) {
           if (!wander.target && Date.now() >= wander.nextAt) {
+            wander.nextAt = Date.now() + 7000 + Math.random() * 9000;
             const monitor = await currentMonitor();
-            if (monitor) {
+            if (monitor && Math.random() <= currentSettings.wanderProbability) {
               const padding = 24;
               const minX = monitor.position.x + padding;
               const maxX = monitor.position.x + monitor.size.width - size.width - padding;

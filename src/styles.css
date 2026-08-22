@@ -109,6 +109,9 @@ button { color: inherit; }
 .switch.on { border-color: rgba(98,190,255,.55); background: rgba(63,143,217,.32); }
 .switch.on span { transform: translateX(17px); background: #8fe5ff; box-shadow: 0 0 9px rgba(104,211,255,.6); }
 .switch:disabled { opacity: .45; }
+.select { min-width: 132px; height: 34px; padding: 0 30px 0 11px; border: 1px solid #3d4960; border-radius: 9px; color: #dcecff; background: #202a3d; font: inherit; cursor: pointer; }
+.select:focus { outline: 1px solid rgba(88,173,245,.6); border-color: rgba(88,173,245,.7); }
+.select:disabled { opacity: .45; cursor: default; }
 .range { width: 100%; accent-color: #58adf5; }
 .feature-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .feature-card { display: flex; gap: 12px; padding: 15px; border-radius: 14px; }
