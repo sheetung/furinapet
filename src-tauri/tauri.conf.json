@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "芙宁娜桌宠",
+  "version": "1.0.0",
+  "identifier": "dev.furinapet.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "芙宁娜桌宠",
+        "width": 920,
+        "height": 660,
+        "minWidth": 720,
+        "minHeight": 560,
+        "center": true,
+        "visible": false,
+        "decorations": false,
+        "resizable": true,
+        "shadow": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:; connect-src ipc: http://ipc.localhost https://api.github.com; font-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "category": "Utility",
+    "shortDescription": "轻量芙宁娜 Windows 桌宠",
+    "longDescription": "基于 Tauri 与 WebView2 的轻量芙宁娜桌宠，支持动画、视线跟随、自动漫步、托盘和开机启动。",
+    "copyright": "Copyright © 2026 Furina Desktop Pet contributors",
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

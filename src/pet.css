@@ -1,0 +1,50 @@
+html:has(.pet-stage), body:has(.pet-stage), body:has(.pet-stage) #root {
+  overflow: hidden;
+  background: transparent !important;
+}
+
+.pet-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  user-select: none;
+  cursor: grab;
+}
+.pet-stage:active { cursor: grabbing; }
+.sprite {
+  position: absolute;
+  left: 50%; bottom: 0;
+  width: 192px; height: 208px;
+  margin-left: -96px;
+  transform-origin: bottom center;
+  background-image: url("/assets/furina-pet-spritesheet.webp");
+  background-repeat: no-repeat;
+  background-size: 1536px 2288px;
+  image-rendering: auto;
+  pointer-events: none;
+}
+.sprite.animating {
+  background-position: 0 var(--row-y);
+  animation: sprite-frames var(--duration) steps(var(--frames)) infinite;
+}
+.sprite.looking { animation: none; }
+@keyframes sprite-frames {
+  from { background-position-x: 0; }
+  to { background-position-x: var(--travel-x); }
+}
+.pet-bubble {
+  position: absolute;
+  z-index: 2;
+  left: 50%; top: 4px;
+  max-width: calc(100% - 18px);
+  transform: translateX(-50%);
+  padding: 8px 11px;
+  border: 1px solid rgba(139,190,239,.34);
+  border-radius: 12px 12px 12px 3px;
+  color: #142139;
+  background: rgba(242,249,255,.94);
+  box-shadow: 0 6px 18px rgba(13,31,61,.22);
+  font: 600 12px/1.45 "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  text-align: center;
+  pointer-events: none;
+}

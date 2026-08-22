@@ -1,22 +1,8 @@
-v1
-node_modules
-dist
-.blume
-web
-remotion
-dist-electron
-.test-dist
-apps/desktop/dist-electron
-apps/desktop/.release-state/
+node_modules/
+dist/
+.npm-cache/
+src-tauri/target/
+src-tauri/gen/
+*.log
 *.tsbuildinfo
 .DS_Store
-local/
-.slim/deepwork/
-opencode.json
-.slim/worktrees/
-.slim/worktrees.json
-third-parties/
-
-# BEGIN oh-my-opencode-slim clonedeps
-.slim/clonedeps/repos/
-# END oh-my-opencode-slim clonedeps

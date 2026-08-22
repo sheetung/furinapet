@@ -1,0 +1,30 @@
+[package]
+name = "furina-desktop-pet"
+version = "1.0.0"
+description = "Lightweight Furina desktop pet"
+authors = ["sheetung"]
+license = "MIT"
+repository = "https://github.com/sheetung/furinapet"
+edition = "2021"
+rust-version = "1.85"
+
+[lib]
+name = "furina_desktop_pet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.11.5", features = ["tray-icon"] }
+tauri-plugin-autostart = "2.5.1"
+tauri-plugin-opener = "2.5.4"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

@@ -1,62 +1,27 @@
-# Furina Desktop Pet
+# 轻量化架构说明
 
-This repository is a Furina-only Windows desktop-pet distribution powered by
-the OpenPets host. It keeps the OpenPets tray, plugin platform, agent
-integrations, bubbles, movement, multi-monitor behavior, and settings while
-shipping a single protected built-in pet: Furina.
+## 目标边界
 
-## Distribution boundary
+这不是一个换皮 OpenPets，也不再承担通用桌宠平台的职责。它是芙宁娜专用 Windows 桌宠，目标是启动快、驻留小、无终端闪窗、功能边界清楚。
 
-`apps/desktop/src/distribution.ts` is the central specialization switch. The
-distribution:
+## 内核
 
-- uses Furina's validated Codex v2 atlas as the built-in/default pet;
-- uses the final two atlas rows for 16-direction global-cursor gaze;
-- removes the Professor Hoot spritesheet and thumbnail from packaged assets;
-- suppresses the remote pet catalog, Codex pet discovery, and local pet import;
-- normalizes persisted pet state back to the protected built-in Furina pet;
-- leaves the plugin catalog and bundled official plugins enabled;
-- checks `sheetung/furinapet` for application updates.
+- `settings.rs`：持久化少量用户设置。
+- `pet.rs`：创建透明窗口并负责漫游、缩放和位置约束。
+- `tray.rs`：托盘菜单。
+- `commands.rs`：前后端的窄命令接口。
+- `src/core/look-direction.ts`：16 向注视映射。
+- `PetView.tsx`：v2 11 行动画渲染与拖动交互。
 
-The canonical standalone pet package and deterministic validation report remain
-under `pets/furina--lingxiaotian/`.
+桌宠包继续遵守 Codex v2 规范，标准源位于 `pets/furina--lingxiaotian`，桌面安装包使用 `public/assets` 中的同源资源。
 
-## Local development
+## 扩展方式
 
-```powershell
-pnpm install --frozen-lockfile
-pnpm --filter @open-pets/desktop typecheck
-pnpm --filter @open-pets/desktop build
-pnpm --filter @open-pets/desktop test:build
-```
+不提供运行时 JavaScript 插件、插件商店、动态权限或第三方代码加载。后续功能采用编译期模块：
 
-## Automatic Windows packaging
+1. 在 `src/extensions/registry.ts` 声明模块元数据；
+2. 前端页面按模块边界实现；
+3. 需要原生能力时，在 `src-tauri/src` 增加独立 Rust 模块和最小命令；
+4. 新模块不得直接读取或改写桌宠窗口内部状态。
 
-`.github/workflows/build-furina-windows.yml` builds an unsigned x64 NSIS
-installer on pushes, pull requests, and manual dispatches. Download it from the
-workflow run's `furina-desktop-pet-windows-x64` artifact.
-
-Pushing a `v*` tag also creates a GitHub Release containing the installer and
-`SHA256SUMS.windows.txt`:
-
-```powershell
-git tag v3.4.0-furina.1
-git push origin v3.4.0-furina.1
-```
-
-## Sync upstream
-
-```powershell
-git fetch upstream
-git switch codex/furina-desktop-pet
-git merge upstream/main
-```
-
-Most OpenPets features remain untouched. Conflicts should normally be limited
-to the small distribution integration surface and desktop packaging metadata.
-
-## License and assets
-
-OpenPets code remains under its upstream MIT license. The Furina character
-sprites are intended for personal desktop-pet use; users remain responsible for
-following the relevant character and source-asset rights.
+该边界比通用插件宿主小得多，但仍可逐步加入提醒、专注计时、日程提示等可信功能。
