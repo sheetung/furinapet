@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { I18nProvider, useI18n, type I18nSnapshot } from "./i18n";
 import "./styles.css";
 import openPetsLogoUrl from "../../../assets/openpets.webp";
-import defaultThumbUrl from "../../../assets/default-pet-thumbnail.png";
+import defaultThumbUrl from "../../../assets/furina-pet-thumbnail.png";
+import { furinaOnlyDistribution } from "./distribution";
 
 import claudeLogoUrl from "../../../assets/integrations/claude.svg";
 import opencodeLogoUrl from "../../../assets/integrations/opencode.svg";
@@ -14,6 +15,7 @@ import windsurfLogoUrl from "../../../assets/integrations/windsurf.svg";
 import zedLogoUrl from "../../../assets/integrations/zed.svg";
 
 type Filter = "all" | "installed" | "featured" | "originals" | "codex";
+const petFilterOptions: readonly Filter[] = furinaOnlyDistribution ? ["installed"] : ["all", "installed", "featured", "originals", "codex"];
 type InstalledPet = { id: string; displayName: string; description?: string; builtIn: boolean; protected: boolean; installed: boolean; broken?: boolean; brokenReason?: string; source?: { kind?: "catalog"; preview?: string } | { kind: "codex"; path: string } };
 type PetEntry = { id: string; displayName: string; description?: string; searchText?: string; preview?: string; thumbnail?: string; spritesheet?: string; category?: "western" | "asian"; original?: boolean; featured?: boolean; catalogPage?: number; sourceKind?: "installed" | "catalog" | "codex"; installed?: boolean; builtIn?: boolean; protected?: boolean; broken?: boolean; brokenReason?: string };
 type SearchPetEntry = Pick<PetEntry, "id" | "displayName" | "category" | "original" | "featured"> & { searchText?: string; catalogPage?: number };
@@ -3628,7 +3630,7 @@ function ControlCenter({ onAppearanceThemeChange }: { onAppearanceThemeChange: (
   const [catalogPage, setCatalogPage] = useState(0);
   const [codex, setCodex] = useState<CodexState>({ pets: [] });
   const [selectedId, setSelectedId] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(furinaOnlyDistribution ? "installed" : "all");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -3895,7 +3897,7 @@ function ControlCenter({ onAppearanceThemeChange }: { onAppearanceThemeChange: (
             <div className="toolbar"><SearchInput value={query} onChange={(e) => setQuery(e.target.value)} /></div>
             <div className="filter-row">
               <div className="filters">
-                {(["all", "installed", "featured", "originals", "codex"] as Filter[]).map((f) => (
+                {petFilterOptions.map((f) => (
                   <button
                     key={f}
                     className={`filter ${filter === f ? "active" : ""} ${f === "originals" ? "original" : ""} ${f === "featured" ? "featured" : ""}`}
@@ -3907,10 +3909,10 @@ function ControlCenter({ onAppearanceThemeChange }: { onAppearanceThemeChange: (
                   </button>
                 ))}
               </div>
-              <div className="filter-actions">
+              {!furinaOnlyDistribution && <div className="filter-actions">
                 <Button variant="secondary" size="compact" icon={<FolderPlusIcon />} disabled={!!busy} onClick={() => void act(t("pets.busy.importing"), () => api.installLocalPet())}>{t("pets.import")}</Button>
                 <Button variant="secondary" size="compact" icon={<HeartIcon />} onClick={() => void api.openGallery().catch((err) => setError(String(err?.message ?? err)))}>{t("pets.gallery")}</Button>
-              </div>
+              </div>}
             </div>
             <div className="pets-grid">{pets.map((pet) => {
               const isBuiltIn = pet.builtIn;

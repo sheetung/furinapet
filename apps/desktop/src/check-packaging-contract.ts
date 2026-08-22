@@ -17,8 +17,9 @@ const builderConfigPath = join(appDir, "electron-builder.yml");
 const builderConfig = readFileSync(builderConfigPath, "utf8");
 const realtimeRendererSource = readFileSync(join(appDir, "assets", "voice-realtime.html"), "utf8");
 const realtimeTransportSource = readFileSync(join(appDir, "src", "voice-realtime-electron.ts"), "utf8");
+const distributionSource = readFileSync(join(appDir, "src", "distribution.ts"), "utf8");
 
-assert.equal(packageJson.description, "OpenPets tray-first desktop companion app.");
+assert.equal(packageJson.description, "Furina-only desktop pet distribution powered by OpenPets.");
 assert.equal(packageJson.author, "OpenPets");
 assert.match(packageJson.scripts?.["dev:debug"] ?? "", /OPENPETS_LOG_LEVEL=debug OPENPETS_LOG_CONSOLE=1 pnpm dev/, "desktop debug dev script must enable verbose log mirroring.");
 assert.match(packageJson.scripts?.package ?? "", /node scripts\/clean-package-output\.cjs && electron-builder/);
@@ -35,9 +36,9 @@ assert.match(workspaceConfig, /supportedArchitectures:[\s\S]*?os:[\s\S]*?- darwi
 assert.match(workspaceConfig, /supportedArchitectures:[\s\S]*?cpu:[\s\S]*?- x64[\s\S]*?- arm64/, "pnpm must install optional sharp binaries for desktop release CPU targets.");
 assert.match(workspaceConfig, /supportedArchitectures:[\s\S]*?libc:[\s\S]*?- glibc/, "pnpm must install optional sharp binaries for Linux glibc release targets.");
 assert.match(packageJson.devDependencies?.["electron-builder"] ?? "", /^\^26\.(?:9|[1-9]\d)\./, "desktop AppImage packaging must use electron-builder 26.9+ for conditional Linux sandbox handling.");
-assert.match(builderConfig, /appId:\s*dev\.openpets\.app/);
-assert.match(builderConfig, /productName:\s*OpenPets/);
-assert.match(builderConfig, /executableName:\s*openpets/, "desktop packages must use a safe executable name for the stricter AppImage toolset.");
+assert.match(builderConfig, /appId:\s*dev\.openpets\.furina/);
+assert.match(builderConfig, /productName:\s*Furina Desktop Pet/);
+assert.match(builderConfig, /executableName:\s*furina-desktop-pet/, "desktop packages must use a safe executable name for the stricter AppImage toolset.");
 assert.match(builderConfig, /output:\s*dist-electron/);
 assert.match(builderConfig, /linux:[\s\S]*?target:[\s\S]*?- AppImage[\s\S]*?- deb[\s\S]*?- rpm[\s\S]*?- tar\.gz/, "desktop Linux packaging must include AppImage, deb, rpm, and tar.gz targets.");
 assert.match(builderConfig, /publish:\s*null/);
@@ -68,8 +69,8 @@ assert.ok(existsSync(join(appDir, "voice-realtime-preload.cjs")), "voice-realtim
 assert.ok(existsSync(join(appDir, "assets", "tray-icon.png")), "tray icon must exist for packaging.");
 assert.ok(existsSync(join(appDir, "assets", "app-icon.icns")), "app icon must exist for packaging.");
 assert.ok(existsSync(join(appDir, "assets", "app-icon.ico")), "Windows app icon must exist for packaging.");
-assertNonEmptyFile(join(appDir, "assets", "default-pet-spritesheet.webp"), "default pet spritesheet must exist for packaging.");
-assertNonEmptyFile(join(appDir, "assets", "default-pet-thumbnail.png"), "default pet thumbnail must exist for Pet Manager preview.");
+assertNonEmptyFile(join(appDir, "assets", "furina-pet-spritesheet.webp"), "Furina spritesheet must exist for packaging.");
+assertNonEmptyFile(join(appDir, "assets", "furina-pet-thumbnail.png"), "Furina thumbnail must exist for Pet Manager preview.");
 assertNonEmptyFile(join(appDir, "assets", "NotoColorEmoji.ttf"), "pet windows must bundle an emoji font so fresh Linux installs render plugin emoji icons.");
 for (const icon of ["claude.svg", "cursor.svg", "opencode.svg", "pi.svg", "vscode.svg", "windsurf.svg", "zed.svg"]) {
   assertSafeBundledSvg(join(appDir, "assets", "integrations", icon), `integration icon must be safe and packaged: ${icon}`);
@@ -117,7 +118,7 @@ assert.doesNotMatch(mainSource + lifecycleSource + windowsSource + localIpcSourc
 assert.match(appStateSource, /activity:\s*{[\s\S]*messagesSent/, "local dashboard activity counters must remain in app state without analytics identity fields.");
 assert.doesNotMatch(appStateSource, /distinctId|OpenPetsAnalyticsState|DesktopAnalyticsConsentState|recordDesktopAppStarted|markFirstAgentReactionTracked/, "app state must not retain PostHog identity or consent fields.");
 assert.match(mainSource, /isLinux && !allowWayland[\s\S]*?appendSwitch\("ozone-platform", "x11"\)/, "Linux desktop pets must force X11/Xwayland because native Wayland blocks always-on-top and programmatic window positioning.");
-assert.match(mainSource, /if \(process\.platform === "linux"\) \{\n\s*const isKde = \(process\.env\.XDG_CURRENT_DESKTOP \?\? ""\)\.toLowerCase\(\)\.includes\("kde"\);\n\s*app\.commandLine\.appendSwitch\("password-store", isKde \? "kwallet6" : "gnome-libsecret"\);\n\s*\} else \{\n\s*app\.commandLine\.appendSwitch\("password-store", "basic"\);\n\s*\}/, "Linux desktop must gate password-store as kwallet6 on KDE sessions, gnome-libsecret elsewhere on Linux, with basic only in the non-Linux else branch; an unconditional switch would disable Electron safeStorage and break plugin secret saves with 'Secret storage encryption is unavailable on this system'.");
+assert.match(mainSource, /if \(process\.platform === "linux"\) \{\r?\n\s*const isKde = \(process\.env\.XDG_CURRENT_DESKTOP \?\? ""\)\.toLowerCase\(\)\.includes\("kde"\);\r?\n\s*app\.commandLine\.appendSwitch\("password-store", isKde \? "kwallet6" : "gnome-libsecret"\);\r?\n\s*\} else \{\r?\n\s*app\.commandLine\.appendSwitch\("password-store", "basic"\);\r?\n\s*\}/, "Linux desktop must gate password-store as kwallet6 on KDE sessions, gnome-libsecret elsewhere on Linux, with basic only in the non-Linux else branch; an unconditional switch would disable Electron safeStorage and break plugin secret saves with 'Secret storage encryption is unavailable on this system'.");
 const passwordStoreValues = [...mainSource.matchAll(/"(kwallet6|gnome-libsecret|basic)"/g)].map((match) => match[1]);
 assert.deepStrictEqual(passwordStoreValues, ["kwallet6", "gnome-libsecret", "basic"], "desktop must set password-store to exactly these three values (kwallet6 on KDE, gnome-libsecret elsewhere on Linux, basic otherwise); any extra or unconditional switch would override the backend and re-break plugin secret saves.");
 assert.match(mainSource, /OPENPETS_ALLOW_WAYLAND/, "Linux X11 override must support the OPENPETS_ALLOW_WAYLAND opt-out escape hatch.");
@@ -213,7 +214,8 @@ assert.match(agentPetControllerSource, /function clearAgentPetLeaseState/, "agen
 assert.match(localIpcSource, /handleLastExplicitLease/, "agent pet dismissal must clear when the explicit lease group ends.");
 assert.match(localIpcSource, /clearAgentPetLeaseState\(petId\)/, "last explicit lease cleanup must reset dismissed agent pet state.");
 assert.match(localIpcSource, /reason: applied\.reason/, "IPC responses must report dismissed explicit pet events as not shown.");
-assert.match(updateCheckerSource, /alvinunreal\/openpets/, "GitHub release notice must check the public OpenPets repository.");
+assert.match(updateCheckerSource, /furinaDistribution\.githubRepository/, "GitHub release notice must use the distribution repository.");
+assert.match(distributionSource, /githubRepository:\s*"sheetung\/furinapet"/, "Furina releases must be checked from the public fork repository.");
 assert.match(updateCheckerSource, /api\.github\.com\/repos\/\$\{githubRepository\}\/releases\/latest/, "update checker must use GitHub latest release API.");
 assert.match(updateCheckerSource, /shell\.openExternal\(url\)/, "update action must open the GitHub release page externally.");
 assert.match(traySource, /t\("tray\.updateAvailable"/, "tray menu must surface available updates.");

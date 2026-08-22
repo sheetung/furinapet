@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { app } from "electron";
 
 import { validateCatalogV2, validateCatalogV3Index, validateCatalogV3Page, validateCatalogV3SearchIndex, validateCatalogV3SearchPage, type CatalogPetV2, type CatalogV2, type CatalogV3Index, type CatalogV3SearchPet } from "./catalog-validation.js";
+import { furinaDistribution } from "./distribution.js";
 
 export const catalogUrl = "https://openpets.dev/pets/catalog.v2.json";
 export const catalogV3Url = "https://openpets.dev/pets/catalog.v3.json";
@@ -41,6 +42,7 @@ let v3SearchPromise: Promise<readonly CatalogV3SearchPet[]> | null = null;
 let v2CatalogPromise: Promise<CatalogV2> | null = null;
 
 export async function getCatalogUiState(): Promise<CatalogUiState> {
+  if (furinaDistribution.exclusivePet) return emptyExclusiveCatalog();
   const remoteV3 = await tryLoadRemoteCatalogV3Index();
 
   if (remoteV3.ok) {
@@ -65,6 +67,7 @@ export async function getCatalogUiState(): Promise<CatalogUiState> {
 }
 
 export async function getCatalogPageUiState(page: number): Promise<CatalogUiState> {
+  if (furinaDistribution.exclusivePet) return emptyExclusiveCatalog();
   if (!Number.isInteger(page) || page < 0) throw new Error("Catalog page must be a non-negative integer.");
   const remoteV3 = await tryLoadRemoteCatalogV3Index();
   if (!remoteV3.ok) return { source: "error", pets: [], error: remoteV3.error };
@@ -88,6 +91,7 @@ export async function getCatalogPageUiState(page: number): Promise<CatalogUiStat
 }
 
 export async function getCatalogSearchUiState(): Promise<CatalogSearchUiState> {
+  if (furinaDistribution.exclusivePet) return { source: "remote", pets: [], total: 0 };
   const remoteV3 = await tryLoadRemoteCatalogV3Index();
   if (!remoteV3.ok) return { source: "error", pets: [], error: remoteV3.error };
 
@@ -100,6 +104,7 @@ export async function getCatalogSearchUiState(): Promise<CatalogSearchUiState> {
 }
 
 export async function getCatalogPet(petId: string): Promise<CatalogPetV2> {
+  if (furinaDistribution.exclusivePet) throw new Error("This distribution only supports Furina.");
   const remoteV3 = await tryLoadRemoteCatalogV3Index();
   if (remoteV3.ok) {
     try {
@@ -119,6 +124,10 @@ export async function getCatalogPet(petId: string): Promise<CatalogPetV2> {
   const pet = filterSurfaceablePets(catalog.pets).find((candidate) => candidate.id === petId);
   if (!pet) throw new Error(`Pet is not available in the validated catalog: ${petId}`);
   return pet;
+}
+
+function emptyExclusiveCatalog(): CatalogUiState {
+  return { source: "fixture", pets: [], version: 2, total: 0, supportsCategories: false };
 }
 
 async function getV2OrFixtureCatalogUiState(remoteV3Error: string): Promise<CatalogUiState> {

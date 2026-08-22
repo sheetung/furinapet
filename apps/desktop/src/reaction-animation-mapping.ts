@@ -1,5 +1,6 @@
 import { allowedReactions, type OpenPetsReaction } from "./local-ipc-protocol.js";
 import { defaultWaitingAnimationDurationMs, type WaitingAnimationDurationMs } from "./app-state-core.js";
+import { furinaDistribution } from "./distribution.js";
 
 export type PetMotionState = "idle" | "run-left" | "run-right";
 export type UniversalSpriteState = "idle" | "running-right" | "running-left" | "waving" | "jumping" | "failed" | "waiting" | "running" | "review";
@@ -36,11 +37,11 @@ export const defaultReactionToSpriteState = {
 } as const satisfies Record<OpenPetsReaction, UserSelectableAnimationState>;
 
 export const defaultPetSprite = {
-  fileName: "default-pet-spritesheet.webp",
+  fileName: furinaDistribution.petSpriteFileName,
   frameWidth: 192,
   frameHeight: 208,
   columns: 8,
-  rows: 9,
+  rows: furinaDistribution.petSpriteRows,
   states: {
     idle: { row: 0, frames: 6, durationMs: 5500, iterations: "infinite" },
     "running-right": { row: 1, frames: 8, durationMs: 1060 },

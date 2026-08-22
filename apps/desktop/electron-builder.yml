@@ -1,12 +1,12 @@
-appId: dev.openpets.app
-productName: OpenPets
-executableName: openpets
-copyright: Copyright © 2026 OpenPets
+appId: dev.openpets.furina
+productName: Furina Desktop Pet
+executableName: furina-desktop-pet
+copyright: Copyright © 2026 OpenPets contributors and Furina Desktop Pet contributors
 
 directories:
   output: dist-electron
 
-artifactName: OpenPets-${version}-${os}-${arch}.${ext}
+artifactName: FurinaDesktopPet-${version}-${os}-${arch}.${ext}
 
 files:
   - dist/**
@@ -54,7 +54,7 @@ win:
   verifyUpdateCodeSignature: false
 
 nsis:
-  artifactName: OpenPets-${version}-win-${arch}-setup.${ext}
+  artifactName: FurinaDesktopPet-${version}-win-${arch}-setup.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

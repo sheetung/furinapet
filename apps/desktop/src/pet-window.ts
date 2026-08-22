@@ -12,6 +12,7 @@ import { getInstalledPetDir } from "./pet-paths.js";
 import { readBoundedRegularFile } from "./pet-file-safety.js";
 import { getActiveLocale, getActiveLocaleLang, t } from "./i18n/index.js";
 import { computeLookDirectionIndex, getLookDirectionCell } from "./look-direction.js";
+import { furinaDistribution } from "./distribution.js";
 import { defaultMediaDurationMs, type OpenPetsReaction } from "./local-ipc-protocol.js";
 import { pickReactionMessage } from "./reaction-messages.js";
 import { debug, error as logError, info, warn } from "./logger.js";
@@ -974,7 +975,8 @@ async function createDefaultPetRender(paused: boolean, display: PetTransientDisp
 function createBuiltInPetRender(paused: boolean, display: PetTransientDisplay | null, badge: PetStatusBadgeReaction | null, scale: PetScaleValue, cachePrefix: string, dismissToken?: string, pluginBubbles: PetPluginBubbles | null = null): PetContentRender {
   const spriteUrl = pathToFileURL(join(app.getAppPath(), "assets", defaultPetSprite.fileName)).toString();
   const hasPinned = Boolean(pluginBubbles?.pinned);
-  const bodyHtml = createPetBodyMarkup("OpenPets default pet", createBubbleMarkup(display, paused, badge, dismissToken, pluginBubbles), `<div class="sprite" role="img" aria-label="Claude animated default pet"></div>`, createPinnedBubbleMarkup(pluginBubbles), hasPinned);
+  const lookClass = furinaDistribution.petSpriteVersionNumber === 2 ? " look-capable" : "";
+  const bodyHtml = createPetBodyMarkup(furinaDistribution.petDisplayName, createBubbleMarkup(display, paused, badge, dismissToken, pluginBubbles), `<div class="sprite${lookClass}" role="img" aria-label="${furinaDistribution.petDisplayName}"></div>`, createPinnedBubbleMarkup(pluginBubbles), hasPinned);
   const reactionState = getReactionSpriteState(display?.reaction);
   const waitingAnimationDurationMs = getAppStateSnapshot().preferences.waitingAnimationDurationMs;
   const stateRows = getConfiguredSpriteStates(waitingAnimationDurationMs);
@@ -989,7 +991,7 @@ function createBuiltInPetRender(paused: boolean, display: PetTransientDisplay | 
         <meta charset="utf-8" />
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src file: data:; media-src data:; font-src file:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-src 'none'" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>OpenPets Default Pet</title>
+        <title>${furinaDistribution.appName}</title>
         <style>
           ${createPetWindowCss(paused, scale)}
           .sprite {

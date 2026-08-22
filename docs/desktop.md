@@ -126,6 +126,10 @@ While a pet is idle, the main process samples the global cursor position and the
 renderer selects the nearest 22.5-degree look cell. Active reactions and
 movement retain their normal animation rows.
 
+The Furina distribution keeps this renderer and the full plugin/integration
+host, but ships Furina as the only protected built-in pet and disables other
+pet discovery and installation through `src/distribution.ts`.
+
 Pet rendering lives in `pet-window.ts` plus the two controllers
 (`default-pet-controller.ts`, `agent-pet-controller.ts`) and the motion/mapping
 helpers. This is covered in depth in [Pets](/pets).

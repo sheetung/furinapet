@@ -193,6 +193,7 @@ main.ts/settings → i18n.setLocaleFromPreference(system/user locale)
 - `state.ts`: Simple shell pause state
 - `app-state.ts`: Persistent JSON state with V1 schema, atomic writes, reaction animation overrides, and the validated waiting animation duration preference
 - `app-state-core.ts`: Pet scale options, waiting-duration options/normalization, onboarding normalization
+- `distribution.ts`: Furina-only product identity, update repository, exclusive-pet policy, and bundled v2 sprite metadata
 - `logger.ts`: Structured logging with scopes (app, ipc, lease, pet.default, pet.agent, pet.window, state, tray, ui), log rotation, redaction
 
 **UI**:

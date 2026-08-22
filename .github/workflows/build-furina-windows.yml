@@ -1,0 +1,100 @@
+name: Build Furina Windows desktop pet
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/furina-desktop-pet
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: furina-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build Windows x64 installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Furina package metadata
+        shell: pwsh
+        run: |
+          $pet = Get-Content pets/furina--lingxiaotian/pet.json -Raw | ConvertFrom-Json
+          if ($pet.id -ne "furina--lingxiaotian") { throw "Unexpected Furina pet id." }
+          if ($pet.spriteVersionNumber -ne 2) { throw "Furina must remain a v2 pet." }
+          if (-not (Test-Path apps/desktop/assets/furina-pet-spritesheet.webp)) { throw "Bundled Furina spritesheet is missing." }
+
+      - name: Typecheck and build desktop
+        run: |
+          pnpm --filter @open-pets/desktop typecheck
+          pnpm --filter @open-pets/desktop build
+          pnpm --filter @open-pets/desktop test:build
+
+      - name: Run Furina and v2 regression tests
+        shell: pwsh
+        run: |
+          node apps/desktop/.test-dist/tests/look-direction.test.js
+          node apps/desktop/.test-dist/tests/distribution.test.js
+          node apps/desktop/.test-dist/tests/codex-pets.test.js
+          node apps/desktop/.test-dist/tests/reaction-animation-mapping.test.js
+          node --check apps/desktop/pet-preload.cjs
+
+      - name: Package Windows installer
+        shell: pwsh
+        working-directory: apps/desktop
+        run: |
+          node scripts/clean-package-output.cjs
+          & .\node_modules\.bin\electron-builder.CMD --win nsis --x64 --publish never
+
+      - name: Collect release files
+        id: release-files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          $installer = Get-ChildItem apps/desktop/dist-electron -Filter "FurinaDesktopPet-*-win-x64-setup.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $installer) { throw "Furina installer was not produced." }
+          Copy-Item $installer.FullName "release/$($installer.Name)"
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content -NoNewline release/SHA256SUMS.windows.txt
+          "installer_name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: furina-desktop-pet-windows-x64
+          path: release/*
+          if-no-files-found: error
+
+      - name: Publish tagged GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" release/* --repo "${{ github.repository }}" --title "Furina Desktop Pet ${{ github.ref_name }}" --generate-notes

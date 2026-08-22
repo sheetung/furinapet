@@ -2,7 +2,7 @@
   "name": "@open-pets/desktop",
   "version": "3.4.0",
   "private": true,
-  "description": "OpenPets tray-first desktop companion app.",
+  "description": "Furina-only desktop pet distribution powered by OpenPets.",
   "license": "MIT",
   "repository": {
     "type": "git",

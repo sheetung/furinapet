@@ -1,6 +1,8 @@
+import { furinaDistribution } from "./distribution.js";
+
 export const builtInPet = {
   id: "builtin",
-  displayName: "Professor Hoot",
+  displayName: furinaDistribution.petDisplayName,
   builtIn: true,
   protected: true,
   installed: true,

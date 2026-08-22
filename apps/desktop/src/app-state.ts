@@ -5,6 +5,7 @@ import { app } from "electron";
 
 import { defaultAppearanceTheme, defaultPetScale, defaultWaitingAnimationDurationMs, markOnboardingCompleted, normalizeAppearanceTheme, normalizeOnboardingCompleted, normalizePetConfinementEnabled, normalizePetCrossDisplayEnabled, normalizePetGravityEnabled, normalizePetScale, normalizeWaitingAnimationDurationMs, petScaleOptions, waitingAnimationDurationOptions, type AppearanceTheme, type PetScaleValue, type WaitingAnimationDurationMs } from "./app-state-core.js";
 import { builtInPet } from "./built-in-pet.js";
+import { furinaDistribution } from "./distribution.js";
 import type { Point } from "./display.js";
 import { isSupportedLocale, type LocalePreference } from "./i18n/catalog.js";
 import { allowedReactions, type OpenPetsReaction } from "./local-ipc-protocol.js";
@@ -304,6 +305,7 @@ export function recordOpenPetsActivity(activity: OpenPetsActivityRecord, now: nu
 }
 
 export function installPetState(pet: Omit<InstalledPetState, "builtIn" | "protected" | "installed">): OpenPetsStateV1 {
+  if (furinaDistribution.exclusivePet) throw new Error("This distribution only supports the built-in Furina pet.");
   const state = getInitializedState();
 
   if (state.pets.installed.some((installedPet) => installedPet.id === pet.id)) {
@@ -330,6 +332,7 @@ export function installPetState(pet: Omit<InstalledPetState, "builtIn" | "protec
 }
 
 export function upsertPetState(pet: Omit<InstalledPetState, "builtIn" | "protected" | "installed">): OpenPetsStateV1 {
+  if (furinaDistribution.exclusivePet) throw new Error("This distribution only supports the built-in Furina pet.");
   const state = getInitializedState();
   const nextPet: InstalledPetState = {
     ...pet,
@@ -557,6 +560,7 @@ function normalizeCommandPath(value: unknown): string | undefined {
 }
 
 function normalizeInstalledPets(value: Record<string, unknown>): InstalledPetState[] {
+  if (furinaDistribution.exclusivePet) return [builtInPet];
   const installed = isRecord(value.pets) && Array.isArray(value.pets.installed)
     ? value.pets.installed
     : [];

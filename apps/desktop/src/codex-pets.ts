@@ -9,6 +9,7 @@ import { maxCodexPetJsonBytes, maxCodexPets, maxCodexSpritesheetBytes, maxCodexT
 import { readBoundedRegularFile } from "./pet-file-safety.js";
 import { withPetOperation } from "./pet-installation.js";
 import { assertInsideRoot, assertSafePetId, getInstalledPetDir, getPetsRoot } from "./pet-paths.js";
+import { furinaDistribution } from "./distribution.js";
 
 const codexPetsRoot = join(homedir(), ".codex", "pets");
 const codexThumbnailCache = new Map<string, string>();
@@ -28,6 +29,7 @@ export interface CodexPetUiItem {
 }
 
 export async function getCodexPetsUiState(): Promise<CodexPetUiState> {
+  if (furinaDistribution.exclusivePet) return { source: "codex", pets: [] };
   try {
     const root = await validateCodexRoot();
     const entries = (await readdir(codexPetsRoot, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name));
@@ -53,6 +55,7 @@ export async function getCodexPetsUiState(): Promise<CodexPetUiState> {
 }
 
 export async function importCodexPet(petId: string): Promise<OpenPetsStateV1> {
+  if (furinaDistribution.exclusivePet) throw new Error("This distribution only supports the built-in Furina pet.");
   return withPetOperation(petId, async () => {
     assertSafePetId(petId);
     if (getAppStateSnapshot().pets.installed.some((pet) => pet.id === petId)) {

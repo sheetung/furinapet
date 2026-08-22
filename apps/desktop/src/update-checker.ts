@@ -2,6 +2,7 @@ import { app, shell } from "electron";
 import https from "node:https";
 
 import { createParsedUpdateStatus, normalizeVersion } from "./update-version.js";
+import { furinaDistribution } from "./distribution.js";
 
 export type UpdateStatusState = "idle" | "checking" | "available" | "current" | "error";
 
@@ -20,7 +21,7 @@ interface GitHubReleaseResponse {
   readonly html_url?: unknown;
 }
 
-const githubRepository = process.env.OPENPETS_GITHUB_REPOSITORY || "alvinunreal/openpets";
+const githubRepository = process.env.OPENPETS_GITHUB_REPOSITORY || furinaDistribution.githubRepository;
 const latestReleaseApiUrl = `https://api.github.com/repos/${githubRepository}/releases/latest`;
 const releasesPageUrl = `https://github.com/${githubRepository}/releases`;
 const releaseCheckTimeoutMs = 6_000;

@@ -27,6 +27,7 @@ import { registerPluginAssetProtocol } from "./plugin-asset-protocol.js";
 import { checkForGitHubReleaseUpdate, getUpdateStatus, openUpdateReleasePage } from "./update-checker.js";
 import { getRemoteControlService } from "./remote-control-service.js";
 import { validateRemoteScopeList, type RemoteControlScope } from "./remote-control-protocol.js";
+import { furinaDistribution } from "./distribution.js";
 
 type InternalUiWindowKind = "control-center";
 export type ControlCenterRoute = "dashboard" | "pets" | "settings" | "plugins" | "integrations";
@@ -505,6 +506,7 @@ export function installInternalUiHandlers(): void {
 
   ipcMain.handle("openpets:install-pet", async (event, petId: unknown) => {
     assertAllowedSender(event, ["control-center"]);
+    if (furinaDistribution.exclusivePet) throw new Error("This distribution only supports Furina.");
     if (typeof petId !== "string") {
       throw new Error("Invalid pet id.");
     }
@@ -515,6 +517,7 @@ export function installInternalUiHandlers(): void {
 
   ipcMain.handle("openpets:install-local-pet", async (event) => {
     assertAllowedSender(event, ["control-center"]);
+    if (furinaDistribution.exclusivePet) throw new Error("This distribution only supports Furina.");
     const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
     const importKind = await chooseLocalPetImportKind(owner);
     if (!importKind) return getPetsStateSnapshot();
@@ -545,11 +548,13 @@ export function installInternalUiHandlers(): void {
 
   ipcMain.handle("openpets:open-gallery", async (event) => {
     assertAllowedSender(event, ["control-center"]);
+    if (furinaDistribution.exclusivePet) throw new Error("The pet gallery is disabled in the Furina distribution.");
     await shell.openExternal("https://openpets.dev/gallery");
   });
 
   ipcMain.handle("openpets:import-codex-pet", async (event, petId: unknown) => {
     assertAllowedSender(event, ["control-center"]);
+    if (furinaDistribution.exclusivePet) throw new Error("This distribution only supports the built-in Furina pet.");
     if (typeof petId !== "string") {
       throw new Error("Invalid pet id.");
     }
@@ -560,6 +565,7 @@ export function installInternalUiHandlers(): void {
 
   ipcMain.handle("openpets:remove-pet", async (event, petId: unknown) => {
     assertAllowedSender(event, ["control-center"]);
+    if (furinaDistribution.exclusivePet) throw new Error("The built-in Furina pet cannot be removed.");
     if (typeof petId !== "string") {
       throw new Error("Invalid pet id.");
     }

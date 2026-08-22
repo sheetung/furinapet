@@ -55,11 +55,11 @@ function assertSameMembers<T>(actual: T[], expected: T[], message: string): void
 }
 
 // Sprite fixed metadata
-assert.equal(defaultPetSprite.fileName, "default-pet-spritesheet.webp", "sprite filename must match bundled asset");
+assert.equal(defaultPetSprite.fileName, "furina-pet-spritesheet.webp", "sprite filename must match the Furina distribution asset");
 assert.equal(defaultPetSprite.frameWidth, 192, "sprite frame width must be 192");
 assert.equal(defaultPetSprite.frameHeight, 208, "sprite frame height must be 208");
 assert.equal(defaultPetSprite.columns, 8, "sprite columns must be 8");
-assert.equal(defaultPetSprite.rows, 9, "sprite rows must be 9");
+assert.equal(defaultPetSprite.rows, 11, "sprite rows must include the v2 look-direction rows");
 
 // Waiting duration preference normalization and supported values.
 assert.equal(defaultWaitingAnimationDurationMs, 1010, "waiting animation default must remain 1010 ms");
