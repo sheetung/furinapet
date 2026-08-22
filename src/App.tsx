@@ -56,7 +56,7 @@ export function App() {
   const [onlineCharacters, setOnlineCharacters] = useState<CharacterDefinition[]>([]);
   const [characterBusy, setCharacterBusy] = useState(false);
   const localCharacterInput = useRef<HTMLInputElement | null>(null);
-  const version = dashboard?.version ?? "1.0.5";
+  const version = dashboard?.version ?? "1.0.6";
   const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 [package]
 name = "furina-desktop-pet"
-version = "1.0.5"
+version = "1.0.6"
 description = "Lightweight Furina desktop pet"
 authors = ["sheetung"]
 license = "MIT"
