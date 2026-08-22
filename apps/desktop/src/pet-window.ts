@@ -11,6 +11,7 @@ import { builtInPet } from "./built-in-pet.js";
 import { getInstalledPetDir } from "./pet-paths.js";
 import { readBoundedRegularFile } from "./pet-file-safety.js";
 import { getActiveLocale, getActiveLocaleLang, t } from "./i18n/index.js";
+import { computeLookDirectionIndex, getLookDirectionCell } from "./look-direction.js";
 import { defaultMediaDurationMs, type OpenPetsReaction } from "./local-ipc-protocol.js";
 import { pickReactionMessage } from "./reaction-messages.js";
 import { debug, error as logError, info, warn } from "./logger.js";
@@ -148,6 +149,7 @@ export function createDefaultPetWindow(options: DefaultPetWindowOptions, dismiss
   info("pet.window", "default window create", { windowId: window.id, position: options.position, paused: options.paused, hasDisplay: Boolean(options.display), badge: options.badge });
   installMousePassthroughAndDrag(window, options);
   installMotionStatePublisher(window);
+  installLookDirectionPublisher(window);
   installPetContextMenu(window, { label: t("pet.menu.hidePet"), click: options.onHideRequested, defaultPet: true });
 
   const savePosition = debounce(() => {
@@ -175,6 +177,7 @@ export function createAgentPetWindow(options: AgentPetWindowOptions, dismissToke
   info("pet.window", "agent window create", { windowId: window.id, petId: options.petId, displayName: options.displayName, position: options.position, hasDisplay: Boolean(options.display), badge: options.badge });
   installMousePassthroughAndDrag(window, options);
   installMotionStatePublisher(window);
+  installLookDirectionPublisher(window);
   installPetContextMenu(window, { label: t("pet.menu.closePet"), click: options.onCloseRequested, focusSessionWindow: options.onFocusSessionWindow });
   void loadExplicitPetContent(window, options.petId, options.display, options.badge, dismissToken, options.scale);
   return window;
@@ -634,6 +637,22 @@ function isScreenPoint(value: unknown): value is { readonly screenX: number; rea
   return typeof value === "object" && value !== null && typeof (value as { readonly screenX?: unknown }).screenX === "number" && typeof (value as { readonly screenY?: unknown }).screenY === "number";
 }
 
+function installLookDirectionPublisher(window: BrowserWindow): void {
+  let lastDirection = -1;
+  const publish = (): void => {
+    if (window.isDestroyed() || !window.isVisible()) return;
+    const bounds = window.getBounds();
+    const origin = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height - defaultPetSprite.frameHeight / 2 };
+    const direction = computeLookDirectionIndex(origin, screen.getCursorScreenPoint());
+    if (direction === lastDirection) return;
+    lastDirection = direction;
+    window.webContents.send("openpets:pet-look-direction", getLookDirectionCell(direction));
+  };
+  const timer = setInterval(publish, 100);
+  window.on("show", publish);
+  window.on("closed", () => clearInterval(timer));
+}
+
 function createBasePetWindow(title: string, position: Point, focusOptions: { readonly hasInteractiveInput?: boolean } = {}): BrowserWindow {
   const effectiveWaylandBackend = isEffectiveWaylandBackend();
   const focusable = shouldPetWindowBeFocusable(process.platform, effectiveWaylandBackend, focusOptions.hasInteractiveInput === true);
@@ -1034,7 +1053,8 @@ async function createInstalledPetRender(petId: string, displayName: string, paus
 
   const imageUrl = pathToFileURL(spritesheetPath).toString();
   const hasPinned = Boolean(pluginBubbles?.pinned);
-  const bodyHtml = createPetBodyMarkup(escapeHtml(displayName), createBubbleMarkup(display, paused, badge, dismissToken, pluginBubbles), `<div class="installed-card" role="img" aria-label="${escapeHtml(displayName)}"><div class="installed-sprite"></div></div>`, createPinnedBubbleMarkup(pluginBubbles), hasPinned);
+  const lookClass = spriteLayout.version === 2 ? " look-capable" : "";
+  const bodyHtml = createPetBodyMarkup(escapeHtml(displayName), createBubbleMarkup(display, paused, badge, dismissToken, pluginBubbles), `<div class="installed-card" role="img" aria-label="${escapeHtml(displayName)}"><div class="installed-sprite${lookClass}"></div></div>`, createPinnedBubbleMarkup(pluginBubbles), hasPinned);
   const reactionState = getReactionSpriteState(display?.reaction);
   const waitingAnimationDurationMs = getAppStateSnapshot().preferences.waitingAnimationDurationMs;
   const stateRows = getConfiguredSpriteStates(waitingAnimationDurationMs);
@@ -1310,6 +1330,10 @@ function createPetWindowCss(paused: boolean, scale: PetScaleValue): string {
     .bubble-hud-item-fill.tone-pink { background: #db2777; }
     .bubble-hud-item-fill.tone-slate { background: #475569; }
     .bubble-hud-item-fill.tone-red { background: #dc2626; }
+    html[data-motion-state="idle"][data-reaction-state="idle"] .look-capable[data-look-active="true"] {
+      animation: none !important;
+      background-position: var(--look-x) var(--look-y) !important;
+    }
     @keyframes bubble-in { from { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.96); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
     @keyframes status-pulse { 0%, 100% { opacity: 0.52; } 50% { opacity: 1; } }
     @media (prefers-reduced-motion: reduce) { .sprite, .installed-sprite, .bubble, .bubble-status-icon::before { animation: none !important; } }

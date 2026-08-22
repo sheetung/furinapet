@@ -61,6 +61,24 @@ ipcRenderer.on("openpets:pet-reaction-state", (_event, state) => {
   }
 });
 
+let lastLookCell = null;
+const applyLookDirection = () => {
+  if (!lastLookCell) return;
+  const cell = lastLookCell;
+  for (const sprite of document.querySelectorAll(".look-capable")) {
+    sprite.style.setProperty("--look-x", `${-cell.column * 192}px`);
+    sprite.style.setProperty("--look-y", `${-cell.row * 208}px`);
+    sprite.dataset.lookActive = "true";
+  }
+};
+
+ipcRenderer.on("openpets:pet-look-direction", (_event, cell) => {
+  if (!cell || !Number.isInteger(cell.column) || cell.column < 0 || cell.column > 7 || (cell.row !== 9 && cell.row !== 10)) return;
+  lastLookCell = cell;
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", applyLookDirection, { once: true });
+  else applyLookDirection();
+});
+
 ipcRenderer.on("openpets:pet-content-state", (_event, state) => {
   if (!state || typeof state.bodyHtml !== "string" || state.bodyHtml.length > 64 * 1024 || !allowedReactionStates.has(state.reactionState)) {
     return;
@@ -69,6 +87,7 @@ ipcRenderer.on("openpets:pet-content-state", (_event, state) => {
   const apply = () => {
     document.documentElement.dataset.reactionState = state.reactionState;
     document.body.innerHTML = state.bodyHtml;
+    applyLookDirection();
   };
 
   if (document.readyState === "loading") {

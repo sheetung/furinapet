@@ -121,6 +121,11 @@ docs (the `web/` marketing site is out of scope). See
 
 ### Pet windows
 
+V2 pets can use their final two atlas rows as a 16-direction cursor gaze loop.
+While a pet is idle, the main process samples the global cursor position and the
+renderer selects the nearest 22.5-degree look cell. Active reactions and
+movement retain their normal animation rows.
+
 Pet rendering lives in `pet-window.ts` plus the two controllers
 (`default-pet-controller.ts`, `agent-pet-controller.ts`) and the motion/mapping
 helpers. This is covered in depth in [Pets](/pets).
