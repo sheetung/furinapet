@@ -8,7 +8,7 @@ import {
   PhysicalSize,
 } from "@tauri-apps/api/window";
 import { desktop } from "./api";
-import { getCharacter } from "./characters/registry";
+import { characterRegistry, getCharacter, loadCharacterRegistry, type CharacterDefinition } from "./characters/registry";
 import { computeLookDirection, type LookCell } from "./core/look-direction";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
 import "./pet.css";
@@ -56,6 +56,7 @@ const delay = (milliseconds: number) => new Promise<void>((resolve) => window.se
 
 export function PetView() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [characters, setCharacters] = useState<CharacterDefinition[]>(characterRegistry);
   const [reaction, setReaction] = useState<MotionReaction>("idle");
   const [animationEpoch, setAnimationEpoch] = useState(0);
   const [spriteFrame, setSpriteFrame] = useState(0);
@@ -70,6 +71,12 @@ export function PetView() {
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+
+  useEffect(() => {
+    void loadCharacterRegistry().then(setCharacters).catch(() => {
+      // Keep the built-in Furina character when local storage is unavailable.
+    });
+  }, [settings?.selectedCharacterId]);
 
   function resizeForBubble(expanded: boolean, scale: number) {
     if (!("__TAURI_INTERNALS__" in window)) return Promise.resolve();
@@ -352,7 +359,7 @@ export function PetView() {
   }
 
   if (!settings) return null;
-  const activeCharacter = getCharacter(settings.selectedCharacterId);
+  const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
   const state = frameRows[reaction];
   const column = look ? look.column : Math.min(spriteFrame, state.durations.length - 1);
   const row = look ? look.row : state.row;

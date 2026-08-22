@@ -1,12 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { checkForUpdates, desktop, type UpdateResult } from "./api";
-import { characterRegistry, getCharacter } from "./characters/registry";
+import {
+  characterRegistry,
+  getCharacter,
+  importCharacterFolder,
+  installOnlineCharacter,
+  loadCharacterRegistry,
+  loadOnlineCharacters,
+  type CharacterDefinition,
+} from "./characters/registry";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 type Page = "home" | "pet" | "settings";
 type DownloadProgress = { downloaded: number; total: number; percent: number };
+type CharacterManagerView = "sources" | "online";
 
 const defaultSettings: AppSettings = {
   selectedCharacterId: "furina",
@@ -42,8 +51,19 @@ export function App() {
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [characterManagerOpen, setCharacterManagerOpen] = useState(false);
-  const version = dashboard?.version ?? "1.0.4";
-  const activeCharacter = getCharacter(settings.selectedCharacterId);
+  const [characterManagerView, setCharacterManagerView] = useState<CharacterManagerView>("sources");
+  const [characters, setCharacters] = useState<CharacterDefinition[]>(characterRegistry);
+  const [onlineCharacters, setOnlineCharacters] = useState<CharacterDefinition[]>([]);
+  const [characterBusy, setCharacterBusy] = useState(false);
+  const localCharacterInput = useRef<HTMLInputElement | null>(null);
+  const version = dashboard?.version ?? "1.0.5";
+  const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
+
+  useEffect(() => {
+    void loadCharacterRegistry()
+      .then(setCharacters)
+      .catch((error) => showToast(`角色加载失败：${String(error)}`));
+  }, []);
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
@@ -133,6 +153,56 @@ export function App() {
     else void desktop.openReleases();
   }
 
+  function openCharacterManager() {
+    setCharacterManagerView("sources");
+    setCharacterManagerOpen(true);
+  }
+
+  async function showOnlineCharacters() {
+    setCharacterBusy(true);
+    setCharacterManagerView("online");
+    try {
+      setOnlineCharacters(await loadOnlineCharacters());
+    } catch (error) {
+      showToast(`在线角色加载失败：${String(error)}`);
+    } finally {
+      setCharacterBusy(false);
+    }
+  }
+
+  async function handleLocalCharacterFiles(files: FileList | null) {
+    if (!files?.length) return;
+    setCharacterBusy(true);
+    try {
+      const manifest = await importCharacterFolder(files);
+      const nextCharacters = await loadCharacterRegistry();
+      setCharacters(nextCharacters);
+      await updateSettings({ selectedCharacterId: manifest.id });
+      setCharacterManagerOpen(false);
+      showToast(`${manifest.name}已导入并切换`);
+    } catch (error) {
+      showToast(`导入失败：${String(error)}`);
+    } finally {
+      setCharacterBusy(false);
+      if (localCharacterInput.current) localCharacterInput.current.value = "";
+    }
+  }
+
+  async function installOnline(character: CharacterDefinition) {
+    setCharacterBusy(true);
+    try {
+      const manifest = await installOnlineCharacter(character);
+      const nextCharacters = await loadCharacterRegistry();
+      setCharacters(nextCharacters);
+      await updateSettings({ selectedCharacterId: manifest.id });
+      showToast(`${manifest.name}已安装并切换`);
+    } catch (error) {
+      showToast(`安装失败：${String(error)}`);
+    } finally {
+      setCharacterBusy(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="titlebar" data-tauri-drag-region>
@@ -175,9 +245,9 @@ export function App() {
               </div>
               <img src={activeCharacter.thumbnailUrl} alt={`${activeCharacter.name}桌宠预览`} />
             </div>
-            <div className="section-title"><div><span>角色</span><h3>选择桌面伙伴</h3></div><small>{characterRegistry.length} 位已发现</small></div>
+            <div className="section-title"><div><span>角色</span><h3>选择桌面伙伴</h3></div><small>{characters.length} 位已发现</small></div>
             <div className="character-grid">
-              {characterRegistry.map((character) => (
+              {characters.map((character) => (
                 <button
                   key={character.id}
                   className={`character-card ${character.id === activeCharacter.id ? "active" : ""}`}
@@ -189,7 +259,7 @@ export function App() {
                   <i>{character.id === activeCharacter.id ? "使用中" : "点击切换"}</i>
                 </button>
               ))}
-              <button className="character-card add-character" onClick={() => setCharacterManagerOpen(true)}>
+              <button className="character-card add-character" onClick={openCharacterManager}>
                 <span>＋</span>
                 <strong>添加角色</strong>
                 <i>在线安装或导入</i>
@@ -302,18 +372,58 @@ export function App() {
               <button aria-label="关闭" onClick={() => setCharacterManagerOpen(false)}>×</button>
             </header>
             <div className="character-dialog-body">
-              <h2>选择添加方式</h2>
-              <p>角色包保持独立的 v2 结构，不会引入插件市场或修改桌宠运动内核。</p>
-              <div className="character-source-grid">
-                <button onClick={() => showToast("在线安装功能正在开发")}>
-                  <span>◎</span><strong>在线安装</strong><small>浏览并安装兼容的角色包</small><i>即将开放</i>
-                </button>
-                <button onClick={() => showToast("本地导入功能正在开发")}>
-                  <span>⇧</span><strong>本地导入</strong><small>从电脑导入完整角色包</small><i>即将开放</i>
-                </button>
-              </div>
+              {characterManagerView === "sources" ? (
+                <>
+                  <h2>选择添加方式</h2>
+                  <p>角色包保持独立的 v2 结构，不会修改桌宠运动内核。</p>
+                  <div className="character-source-grid">
+                    <button disabled={characterBusy} onClick={() => void showOnlineCharacters()}>
+                      <span>◎</span><strong>在线安装</strong><small>从 GitHub 角色库选择并安装</small><i>GitHub</i>
+                    </button>
+                    <button disabled={characterBusy} onClick={() => localCharacterInput.current?.click()}>
+                      <span>⇧</span><strong>本地导入</strong><small>选择包含完整 v2 资源的文件夹</small><i>选择文件夹</i>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2>在线角色</h2>
+                  <p>角色从 GitHub 下载到本机，不会增加 furinapet 安装包体积。</p>
+                  {characterBusy && onlineCharacters.length === 0 ? (
+                    <div className="character-empty">正在读取在线角色库…</div>
+                  ) : onlineCharacters.length === 0 ? (
+                    <div className="character-empty">暂无可安装角色。在工程的 online-characters 目录添加后会显示在这里。</div>
+                  ) : (
+                    <div className="online-character-list">
+                      {onlineCharacters.map((character) => {
+                        const installed = characters.some((item) => item.id === character.id);
+                        return (
+                          <div key={character.id} className="online-character-item">
+                            <img src={character.avatarUrl} alt="" />
+                            <div><strong>{character.name}</strong><small>{character.description}</small></div>
+                            <button className={installed ? "secondary" : "primary"} disabled={installed || characterBusy} onClick={() => void installOnline(character)}>{installed ? "已安装" : "安装"}</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+              <input
+                ref={(node) => {
+                  localCharacterInput.current = node;
+                  if (node) node.setAttribute("webkitdirectory", "");
+                }}
+                className="character-folder-input"
+                type="file"
+                multiple
+                onChange={(event) => void handleLocalCharacterFiles(event.currentTarget.files)}
+              />
             </div>
-            <footer><button className="secondary" onClick={() => setCharacterManagerOpen(false)}>完成</button></footer>
+            <footer>
+              {characterManagerView === "online" && <button className="secondary" disabled={characterBusy} onClick={() => setCharacterManagerView("sources")}>返回</button>}
+              <button className="secondary" disabled={characterBusy} onClick={() => setCharacterManagerOpen(false)}>完成</button>
+            </footer>
           </div>
         </div>
       )}

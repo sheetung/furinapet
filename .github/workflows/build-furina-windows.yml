@@ -75,6 +75,23 @@ jobs:
           if (@($manifests).Count -lt 1) { throw "At least one character must be registered." }
           if (@($manifests | Where-Object isDefault).Count -ne 1) { throw "Exactly one character must be the default." }
 
+          $onlineCatalog = Get-Content online-characters/catalog.json -Raw | ConvertFrom-Json
+          if ($onlineCatalog.schemaVersion -ne 1) { throw "Unsupported online character catalog schema." }
+          $onlineIds = @($onlineCatalog.characters)
+          if (@($onlineIds | Select-Object -Unique).Count -ne $onlineIds.Count) { throw "Online character ids must be unique." }
+          foreach ($id in $onlineIds) {
+            if ($id -notmatch '^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$') { throw "Online character id is invalid: $id." }
+            $directory = "online-characters/$id"
+            foreach ($asset in @("character.json", "avatar.png", "thumbnail.png", "spritesheet.webp")) {
+              if (-not (Test-Path "$directory/$asset")) { throw "Online character $id is missing $asset." }
+            }
+            $manifest = Get-Content "$directory/character.json" -Raw | ConvertFrom-Json
+            if ($manifest.id -ne $id) { throw "Online character id must match its directory: $id." }
+            if ($manifest.spriteVersionNumber -ne 2 -or $manifest.cellWidth -ne 192 -or $manifest.cellHeight -ne 208 -or $manifest.columns -ne 8 -or $manifest.rows -ne 11) {
+              throw "Online character $id does not satisfy the v2 sprite contract."
+            }
+          }
+
       - name: Build frontend
         run: pnpm build
 
