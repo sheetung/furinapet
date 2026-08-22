@@ -62,7 +62,22 @@ jobs:
         run: pnpm build
 
       - name: Build Windows installer
-        run: pnpm desktop:build
+        shell: pwsh
+        run: |
+          pnpm desktop:build 2>&1 | Tee-Object -FilePath tauri-build.log
+          if ($LASTEXITCODE -ne 0) {
+            $tail = (Get-Content tauri-build.log -Tail 80) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Tauri build failed::$escaped"
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload failed build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-build-log
+          path: tauri-build.log
 
       - name: Collect release files
         shell: pwsh
