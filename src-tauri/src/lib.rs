@@ -45,6 +45,7 @@ pub fn run() {
             commands::set_pet_visible,
             commands::toggle_pet,
             commands::reset_pet_position,
+            commands::wait_for_drag_release,
             commands::trigger_reaction,
             commands::show_control_center,
             commands::quit_app,

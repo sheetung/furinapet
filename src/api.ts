@@ -12,6 +12,7 @@ export const desktop = {
   hidePet: () => invoke<AppSettings>("set_pet_visible", { visible: false }),
   togglePet: () => invoke<AppSettings>("toggle_pet"),
   resetPetPosition: () => invoke<void>("reset_pet_position"),
+  waitForDragRelease: () => invoke<void>("wait_for_drag_release"),
   react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message }),
   showControlCenter: () => invoke<void>("show_control_center"),
   quit: () => invoke<void>("quit_app"),

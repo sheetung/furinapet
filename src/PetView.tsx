@@ -344,6 +344,7 @@ export function PetView() {
     try {
       await resizeForBubble(false, settingsRef.current?.scale ?? 1);
       await getCurrentWindow().startDragging();
+      await desktop.waitForDragRelease();
     } finally {
       motionRef.current.dragging = false;
       await settleWithGravity();

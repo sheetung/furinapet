@@ -89,6 +89,27 @@ pub fn toggle_pet(app: AppHandle) -> Result<Settings, String> {
 #[tauri::command]
 pub fn reset_pet_position(app: AppHandle) -> Result<(), String> { pet::reset_position(&app) }
 
+#[tauri::command]
+pub async fn wait_for_drag_release() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        tauri::async_runtime::spawn_blocking(|| {
+            use std::time::{Duration, Instant};
+            use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+
+            let started = Instant::now();
+            while started.elapsed() < Duration::from_secs(30) {
+                let pressed = unsafe { GetAsyncKeyState(VK_LBUTTON as i32) } < 0;
+                if !pressed { return; }
+                std::thread::sleep(Duration::from_millis(24));
+            }
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn trigger_reaction_inner(app: &AppHandle, reaction: String, message: Option<String>) -> Result<(), String> {
     const ALLOWED: [&str; 7] = ["idle", "waving", "jumping", "failed", "waiting", "running", "review"];
     if !ALLOWED.contains(&reaction.as_str()) { return Err("unsupported reaction".into()); }
