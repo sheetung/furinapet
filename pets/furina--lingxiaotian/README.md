@@ -1,6 +1,6 @@
 # 芙宁娜
 
-Codex/OpenPets v2 pet package:
+Codex v2 pet package:
 
 - atlas: `1536x2288` WebP
 - cell: `192x208`

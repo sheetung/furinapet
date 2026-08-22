@@ -36,7 +36,7 @@ button { color: inherit; }
 }
 .titlebar-brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: .02em; }
 .titlebar-brand small { color: var(--cyan); font-size: 10px; padding: 3px 7px; border: 1px solid rgba(102, 215, 232, .24); border-radius: 999px; }
-.brand-orb { width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, #dff9ff, #55a8ff 55%, #7457c9); box-shadow: 0 0 14px rgba(93, 168, 255, .6); }
+.brand-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 12px rgba(93, 168, 255, .42); }
 .window-actions { height: 100%; display: flex; }
 .window-actions button { width: 48px; border: 0; background: transparent; color: #a9b7cc; font-size: 17px; }
 .window-actions button:hover { background: rgba(255,255,255,.07); color: white; }
@@ -48,7 +48,7 @@ button { color: inherit; }
   background: rgba(14, 19, 34, .78);
 }
 .pet-avatar { width: 76px; height: 76px; display: grid; place-items: center; border-radius: 24px; overflow: hidden; background: linear-gradient(145deg, #24314c, #12192c); border: 1px solid rgba(135,189,255,.2); box-shadow: 0 15px 30px rgba(0,0,0,.25); }
-.pet-avatar img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.42); }
+.pet-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .sidebar-name { margin-top: 12px; font-size: 16px; font-weight: 700; }
 .status-pill { display: flex; gap: 6px; align-items: center; margin: 7px 0 28px; color: var(--muted); font-size: 11px; }
 .status-pill span { width: 7px; height: 7px; border-radius: 50%; background: #596579; }

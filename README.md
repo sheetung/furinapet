@@ -1,6 +1,10 @@
 # 芙宁娜桌宠
 
-面向 Windows 的轻量芙宁娜桌宠。项目由 OpenPets 分支演化而来，现已改为独立维护，不再追踪上游，也不包含 OpenPets 的插件市场、Agent 集成、局域网控制、语音和多宠物框架。
+<p align="center">
+  <img src="public/assets/furina-app-icon.png" width="128" alt="芙宁娜桌宠头像" />
+</p>
+
+面向 Windows 独立维护的轻量芙宁娜桌宠。专注透明桌面动画、互动、漫游和基础设置，不包含通用插件市场、Agent 集成、局域网控制、语音或多宠物框架。
 
 ## 保留的基础能力
 
@@ -14,7 +18,7 @@
 
 ## 为什么更轻
 
-桌面端使用 Tauri 2，直接复用 Windows WebView2，不再随应用打包 Chromium。前端只有一个 React 页面；后端只有窗口、托盘、设置、漫游和更新检查等必要模块。运行时插件宿主已经删除。
+桌面端使用 Tauri 2，直接复用 Windows WebView2，不随应用打包 Chromium。前端只有一个 React 页面；后端只有窗口、托盘、设置、漫游和更新检查等必要模块。
 
 项目仍保留编译期扩展边界：
 

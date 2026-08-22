@@ -83,7 +83,7 @@ export function App() {
     <div className="app-shell">
       <header className="titlebar" data-tauri-drag-region>
         <div className="titlebar-brand" data-tauri-drag-region>
-          <span className="brand-orb" />
+          <img className="brand-avatar" src="/assets/furina-app-icon.png" alt="" />
           <span>芙宁娜桌宠</span>
           <small>轻量版</small>
         </div>
@@ -94,7 +94,7 @@ export function App() {
       </header>
 
       <aside className="sidebar">
-        <div className="pet-avatar"><img src="/assets/furina-pet-thumbnail.png" alt="芙宁娜" /></div>
+        <div className="pet-avatar"><img src="/assets/furina-app-icon.png" alt="芙宁娜" /></div>
         <div className="sidebar-name">芙宁娜</div>
         <div className={`status-pill ${settings.petVisible ? "online" : ""}`}><span />{statusText}</div>
         <nav>
