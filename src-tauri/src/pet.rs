@@ -23,7 +23,14 @@ pub fn create(app: &AppHandle, settings: &Settings) -> tauri::Result<WebviewWind
         .focused(false)
         .visible(settings.pet_visible)
         .build()?;
-    reset_position(app)?;
+    if let Some(monitor) = window.primary_monitor()? {
+        let size = window.outer_size()?;
+        let monitor_position = monitor.position();
+        let monitor_size = monitor.size();
+        let x = monitor_position.x + monitor_size.width as i32 - size.width as i32 - 32;
+        let y = monitor_position.y + monitor_size.height as i32 - size.height as i32 - 96;
+        window.set_position(PhysicalPosition::new(x, y))?;
+    }
     Ok(window)
 }
 
