@@ -8,14 +8,14 @@
   "cellHeight": 208,
   "columns": 8,
   "rows": 11,
-  "packageVersion": "1.0.3",
+  "packageVersion": "1.0.4",
   "lookDirectionOrder": "counterclockwise",
   "wanderProfile": {
     "movementStyle": "grounded",
     "activity": 0.78,
     "curiosity": 0.68,
     "preferredSpeed": 1.12,
-    "windowDockChance": 0.14,
+    "windowDockChance": 0.28,
     "shortMoveChance": 0.5,
     "pauseMinMs": 1800,
     "pauseMaxMs": 6000

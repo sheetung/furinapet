@@ -44,12 +44,18 @@ export interface PetSize {
   height: number;
 }
 
+export type DockEdge = "top" | "bottom-inside" | "left" | "right";
+
+export interface DockPlacement extends Point {
+  edge: DockEdge;
+}
+
 export const DEFAULT_WANDER_PROFILE: WanderProfile = {
   movementStyle: "grounded",
   activity: 0.65,
   curiosity: 0.65,
   preferredSpeed: 1,
-  windowDockChance: 0.15,
+  windowDockChance: 0.25,
   shortMoveChance: 0.6,
   pauseMinMs: 2500,
   pauseMaxMs: 8000,
@@ -152,12 +158,14 @@ export function advanceSpeed(currentSpeed: number, distance: number, elapsedSeco
     : Math.max(desiredSpeed, currentSpeed - deceleration * elapsedSeconds);
 }
 
-export function chooseDockPoint(
+export function chooseDockPlacement(
   surface: WindowSurface,
   petSize: PetSize,
   workArea: WorkArea,
-  random = Math.random,
-): Point | null {
+  edgeRoll = Math.random(),
+  positionRatio = Math.random(),
+  preferredEdge?: DockEdge,
+): DockPlacement | null {
   const workRight = workArea.x + workArea.width;
   const workBottom = workArea.y + workArea.height;
   const surfaceRight = surface.x + surface.width;
@@ -166,16 +174,41 @@ export function chooseDockPoint(
     && surface.height >= workArea.height * 0.9
     && surface.x <= workArea.x + 8
     && surface.y <= workArea.y + 8;
-  if (coversWorkArea || surface.width < petSize.width + 260 || surface.height < 120) return null;
+  if (coversWorkArea || surface.width < 220 || surface.height < 120) return null;
   if (surfaceRight <= workArea.x || surface.x >= workRight || surfaceBottom <= workArea.y || surface.y >= workBottom) return null;
 
-  const y = surface.y - petSize.height;
-  if (y < workArea.y + 8) return null;
-  const minimumX = Math.max(surface.x + 56, workArea.x + 8);
-  const maximumX = Math.min(surfaceRight - petSize.width - 176, workRight - petSize.width - 8);
-  if (maximumX < minimumX) return null;
-  return {
-    x: Math.round(minimumX + random() * (maximumX - minimumX)),
-    y: Math.round(y),
+  const ratio = clamp(positionRatio, 0, 1);
+  const placements: DockPlacement[] = [];
+  const addHorizontal = (edge: DockEdge, y: number, leftInset: number, rightInset: number) => {
+    const minimumX = Math.max(surface.x + leftInset, workArea.x + 8);
+    const maximumX = Math.min(surfaceRight - petSize.width - rightInset, workRight - petSize.width - 8);
+    if (maximumX >= minimumX && y >= workArea.y + 8 && y + petSize.height <= workBottom) {
+      placements.push({ edge, x: Math.round(minimumX + ratio * (maximumX - minimumX)), y: Math.round(y) });
+    }
   };
+  const addVertical = (edge: DockEdge, x: number) => {
+    const minimumY = Math.max(surface.y + 48, workArea.y + 8);
+    const maximumY = Math.min(surfaceBottom - petSize.height - 24, workBottom - petSize.height - 8);
+    if (maximumY >= minimumY && x >= workArea.x + 8 && x + petSize.width <= workRight - 8) {
+      placements.push({ edge, x: Math.round(x), y: Math.round(minimumY + ratio * (maximumY - minimumY)) });
+    }
+  };
+
+  addHorizontal("top", surface.y - petSize.height + 2, 56, 176);
+  addHorizontal("bottom-inside", surfaceBottom - petSize.height - 8, 24, 24);
+  addVertical("left", surface.x - petSize.width + 12);
+  addVertical("right", surfaceRight - 12);
+  if (placements.length === 0) return null;
+  if (preferredEdge) return placements.find((placement) => placement.edge === preferredEdge) ?? null;
+
+  const edgePreference: DockEdge[] = edgeRoll < 0.42
+    ? ["top", "bottom-inside", "left", "right"]
+    : edgeRoll < 0.74
+      ? ["bottom-inside", "top", "left", "right"]
+      : edgeRoll < 0.87
+        ? ["left", "right", "top", "bottom-inside"]
+        : ["right", "left", "top", "bottom-inside"];
+  return edgePreference
+    .map((edge) => placements.find((placement) => placement.edge === edge))
+    .find((placement): placement is DockPlacement => placement !== undefined) ?? null;
 }

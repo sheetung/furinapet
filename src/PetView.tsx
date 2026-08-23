@@ -12,11 +12,13 @@ import { characterRegistry, getCharacter, loadCharacterRegistry, type CharacterD
 import { computeLookDirection, mapLookDirection, type LookCell } from "./core/look-direction";
 import {
   advanceSpeed,
-  chooseDockPoint,
+  chooseDockPlacement,
   chooseWanderTarget,
   effectiveWanderProbability,
   nextDecisionDelay,
   pauseDuration,
+  type DockEdge,
+  type DockPlacement,
   type Point,
   type WanderBounds,
   type WindowSurface,
@@ -59,6 +61,7 @@ interface WanderState {
   speed: number;
   missedOpportunities: number;
   dockSurfaceId: string | null;
+  dockEdge: DockEdge | null;
   dockRatio: number;
   dockUntil: number;
   dockRefreshAt: number;
@@ -202,6 +205,7 @@ export function PetView() {
       speed: 0,
       missedOpportunities: 0,
       dockSurfaceId: null,
+      dockEdge: null,
       dockRatio: 0.5,
       dockUntil: 0,
       dockRefreshAt: 0,
@@ -220,6 +224,7 @@ export function PetView() {
       wander.nextAt = nextAt;
       wander.speed = 0;
       wander.dockSurfaceId = null;
+      wander.dockEdge = null;
       wander.dockUntil = 0;
     };
 
@@ -258,9 +263,11 @@ export function PetView() {
       surfaces: WindowSurface[],
       size: PhysicalSize,
       workArea: WorkArea,
-    ): Promise<Point | null> => {
+    ): Promise<DockPlacement | null> => {
       const surface = surfaces.find((candidate) => candidate.id === wander.dockSurfaceId);
-      return surface ? chooseDockPoint(surface, size, workArea, () => wander.dockRatio) : null;
+      return surface && wander.dockEdge
+        ? chooseDockPlacement(surface, size, workArea, 0, wander.dockRatio, wander.dockEdge)
+        : null;
     };
 
     const tick = async () => {
@@ -333,21 +340,25 @@ export function PetView() {
                   .map((surface) => ({
                     surface,
                     ratio: 0.15 + Math.random() * 0.7,
+                    edgeRoll: Math.random(),
                   }))
                   .map((candidate) => ({
                     ...candidate,
-                    point: chooseDockPoint(candidate.surface, size, workArea, () => candidate.ratio),
+                    placement: chooseDockPlacement(
+                      candidate.surface,
+                      size,
+                      workArea,
+                      candidate.edgeRoll,
+                      candidate.ratio,
+                    ),
                   }))
-                  .filter((candidate): candidate is typeof candidate & { point: Point } => candidate.point !== null)
-                  .sort((left, right) => (
-                    Math.hypot(left.point.x - position.x, left.point.y - position.y)
-                    - Math.hypot(right.point.x - position.x, right.point.y - position.y)
-                  ));
-                const candidate = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
+                  .filter((candidate): candidate is typeof candidate & { placement: DockPlacement } => candidate.placement !== null);
+                const candidate = candidates[Math.floor(Math.random() * candidates.length)];
                 if (candidate) {
                   wander.mode = "approaching";
-                  wander.target = candidate.point;
+                  wander.target = candidate.placement;
                   wander.dockSurfaceId = candidate.surface.id;
+                  wander.dockEdge = candidate.placement.edge;
                   wander.dockRatio = candidate.ratio;
                 }
               }
@@ -370,9 +381,21 @@ export function PetView() {
           }
 
           if ((wander.mode === "walking" || wander.mode === "approaching") && wander.target) {
-            wander.target.x = Math.min(bounds.maxX, Math.max(bounds.minX, wander.target.x));
-            if (wander.mode === "walking" && currentSettings.gravityEnabled) wander.target.y = bounds.groundY;
-            else wander.target.y = Math.min(bounds.maxY, Math.max(bounds.minY, wander.target.y));
+            if (wander.mode === "approaching") {
+              wander.target.x = Math.min(
+                workArea.x + workArea.width - size.width - 8,
+                Math.max(workArea.x + 8, wander.target.x),
+              );
+              wander.target.y = Math.min(
+                workArea.y + workArea.height - size.height,
+                Math.max(workArea.y + 8, wander.target.y),
+              );
+            } else {
+              wander.target.x = Math.min(bounds.maxX, Math.max(bounds.minX, wander.target.x));
+              wander.target.y = currentSettings.gravityEnabled
+                ? bounds.groundY
+                : Math.min(bounds.maxY, Math.max(bounds.minY, wander.target.y));
+            }
             const dx = wander.target.x - position.x;
             const dy = wander.target.y - position.y;
             const distance = Math.hypot(dx, dy);
@@ -384,7 +407,8 @@ export function PetView() {
                 wander.speed = 0;
                 wander.dockUntil = wallClock + pauseDuration(profile);
                 wander.dockRefreshAt = 0;
-                changeReaction(Math.random() < profile.curiosity ? "review" : "waiting", true);
+                const sideDock = wander.dockEdge === "left" || wander.dockEdge === "right";
+                changeReaction(sideDock || Math.random() < profile.curiosity ? "review" : "waiting", true);
               } else {
                 resetWander(wallClock + pauseDuration(profile));
                 changeReaction("idle");

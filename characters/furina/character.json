@@ -14,7 +14,7 @@
     "activity": 0.72,
     "curiosity": 0.8,
     "preferredSpeed": 1.0,
-    "windowDockChance": 0.18,
+    "windowDockChance": 0.34,
     "shortMoveChance": 0.62,
     "pauseMinMs": 2200,
     "pauseMaxMs": 7000

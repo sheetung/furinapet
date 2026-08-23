@@ -59,7 +59,7 @@ export function App() {
   const [characterBusy, setCharacterBusy] = useState(false);
   const [characterUpdateChecking, setCharacterUpdateChecking] = useState(false);
   const localCharacterInput = useRef<HTMLInputElement | null>(null);
-  const version = dashboard?.version ?? "1.0.8";
+  const version = dashboard?.version ?? "1.0.9";
   const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
 
   useEffect(() => {
@@ -327,7 +327,7 @@ export function App() {
                 </select>
               </SettingRow>
               <SettingRow title="重力落地" description="开启后拖动松手自然落地并贴地漫步；关闭后可在屏幕内自由漫步。"><Switch checked={settings.gravityEnabled} disabled={busy} onChange={(value) => void updateSettings({ gravityEnabled: value })} /></SettingRow>
-              <SettingRow title="窗口停靠" description="允许角色偶尔停留在其他应用窗口顶部。"><Switch checked={settings.windowDocking} disabled={busy || !settings.autoWander} onChange={(value) => void updateSettings({ windowDocking: value })} /></SettingRow>
+              <SettingRow title="窗口停靠" description="允许角色停留在其他应用窗口的顶部、内侧底边或左右轮廓。"><Switch checked={settings.windowDocking} disabled={busy || !settings.autoWander} onChange={(value) => void updateSettings({ windowDocking: value })} /></SettingRow>
               <SettingRow title="宠物大小" description={`${Math.round(settings.scale * 100)}%`} wide>
                 <input className="range" type="range" min="0.65" max="1.5" step="0.05" value={settings.scale} onChange={(event) => setSettings((current) => ({ ...current, scale: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ scale: Number(event.currentTarget.value) })} />
               </SettingRow>
