@@ -10,10 +10,50 @@ export interface PluginSnapshot {
   name: string;
   description: string;
   version: string;
-  apiVersion: number;
+  installedVersion?: string;
+  latestVersion?: string;
+  sdkVersion: string;
+  minAppVersion: string;
+  publisherType: string;
+  installed: boolean;
   enabled: boolean;
   active: boolean;
+  updateAvailable: boolean;
+  configurable: boolean;
 }
+
+export interface PluginConfigOption {
+  value: unknown;
+  label: string;
+}
+
+export interface PluginConfigField {
+  type: "boolean" | "number" | "text" | "select";
+  label: string;
+  default: unknown;
+  min?: number;
+  max?: number;
+  step?: number;
+  maxLength?: number;
+  options?: PluginConfigOption[];
+}
+
+export interface PluginConfigSnapshot {
+  id: string;
+  name: string;
+  schema: Record<string, PluginConfigField>;
+  values: Record<string, unknown>;
+}
+
+export interface RuntimePlugin {
+  id: string;
+  version: string;
+  source: string;
+  permissions: string[];
+  config: Record<string, unknown>;
+}
+
+export type PetPluginEventName = "pet:clicked" | "pet:doubleClicked" | "pet:dragStart" | "pet:dragEnd";
 
 export const desktop = {
   getSettings: () => invoke<AppSettings>("get_settings"),
@@ -27,10 +67,18 @@ export const desktop = {
   getWorkAreaAt: (x: number, y: number) => invoke<WorkArea>("get_work_area_at", { x, y }),
   listDockSurfaces: () => invoke<WindowSurface[]>("list_dock_surfaces"),
   react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message }),
+
   listPlugins: () => invoke<PluginSnapshot[]>("list_plugins"),
-  setPluginEnabled: (id: string, enabled: boolean) => invoke<PluginSnapshot[]>("set_plugin_enabled", { id, enabled }),
-  publishPetEvent: (name: "pet:clicked" | "pet:doubleClicked" | "pet:dragStart" | "pet:dragEnd") =>
-    invoke<boolean>("publish_pet_event", { name }),
+  fetchPluginCatalog: () => invoke<PluginSnapshot[]>("fetch_plugin_catalog"),
+  installPlugin: (id: string) => invoke<void>("install_plugin", { id }),
+  uninstallPlugin: (id: string) => invoke<void>("uninstall_plugin", { id }),
+  setPluginEnabled: (id: string, enabled: boolean) => invoke<void>("set_plugin_enabled", { id, enabled }),
+  getPluginConfig: (id: string) => invoke<PluginConfigSnapshot>("get_plugin_config", { id }),
+  setPluginConfig: (id: string, values: Record<string, unknown>) => invoke<void>("set_plugin_config", { id, values }),
+  listRuntimePlugins: () => invoke<RuntimePlugin[]>("list_runtime_plugins"),
+  pluginSdkCall: (id: string, method: string, args: unknown) => invoke<unknown>("plugin_sdk_call", { id, method, args }),
+  publishPetEvent: (name: PetPluginEventName) => invoke<boolean>("publish_pet_event", { name }),
+
   showControlCenter: () => invoke<void>("show_control_center"),
   quit: () => invoke<void>("quit_app"),
   openReleases: () => openUrl(releasesUrl),
