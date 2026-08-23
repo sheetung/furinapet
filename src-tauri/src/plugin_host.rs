@@ -123,17 +123,16 @@ pub fn set_plugin_enabled(
     list_plugins(state)
 }
 
-#[tauri::command]
-pub fn publish_pet_event(
-    app: AppHandle,
-    state: State<'_, PluginHostState>,
-    name: String,
+pub fn handle_pet_event_inner(
+    app: &AppHandle,
+    state: &State<'_, PluginHostState>,
+    name: &str,
 ) -> Result<bool, String> {
-    if !is_enabled(&state, CLICK_REACTION_ID)? {
+    if !is_enabled(state, CLICK_REACTION_ID)? {
         return Ok(false);
     }
 
-    match name.as_str() {
+    match name {
         "pet:clicked" => {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -157,7 +156,7 @@ pub fn publish_pet_event(
 
             if streak >= 3 {
                 commands::trigger_reaction_inner(
-                    &app,
+                    app,
                     "jumping".into(),
                     Some("好啦好啦！我知道你在这里啦！✨".into()),
                 )?;
@@ -172,7 +171,7 @@ pub fn publish_pet_event(
                 ("failed", "再戳的话，我可要记仇啦……"),
             ];
             let (reaction, message) = INTERACTIONS[selector];
-            commands::trigger_reaction_inner(&app, reaction.into(), Some(message.into()))?;
+            commands::trigger_reaction_inner(app, reaction.into(), Some(message.into()))?;
             Ok(true)
         }
         "pet:doubleClicked" => {
@@ -180,7 +179,7 @@ pub fn publish_pet_event(
                 *click = ClickMemory::default();
             }
             commands::trigger_reaction_inner(
-                &app,
+                app,
                 "jumping".into(),
                 Some("哇！突然这么热情，我都吓了一跳！✨".into()),
             )?;
@@ -189,4 +188,13 @@ pub fn publish_pet_event(
         "pet:dragStart" | "pet:dragEnd" => Ok(false),
         _ => Err("unsupported pet event".into()),
     }
+}
+
+#[tauri::command]
+pub fn publish_pet_event(
+    app: AppHandle,
+    state: State<'_, PluginHostState>,
+    name: String,
+) -> Result<bool, String> {
+    handle_pet_event_inner(&app, &state, &name)
 }
