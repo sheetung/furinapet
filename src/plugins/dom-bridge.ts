@@ -1,4 +1,4 @@
-import { emit, listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 
 interface PluginChangedEvent {
   id: string;
@@ -12,9 +12,10 @@ interface PluginStateSnapshot {
 export function installPetDomBridge(): () => void {
   let singleClickTimer = 0;
   let clickEnhancementEnabled = false;
+  let receivedSnapshot = false;
 
   const sendInteraction = (type: "clicked" | "double-clicked", event: MouseEvent) => {
-    void emit("plugin-pet-interaction", {
+    void emitTo("main", "plugin-pet-interaction", {
       type,
       x: event.screenX,
       y: event.screenY,
@@ -48,11 +49,21 @@ export function installPetDomBridge(): () => void {
       }
     }),
     listen<PluginStateSnapshot>("plugin-state-snapshot", (event) => {
+      receivedSnapshot = true;
       clickEnhancementEnabled = event.payload.enabled.includes("click-reaction");
     }),
   ]);
 
-  void listeners.then(() => emit("plugin-state-request"));
+  let attempts = 0;
+  const requestState = () => {
+    attempts += 1;
+    void emitTo("main", "plugin-state-request");
+    if (!receivedSnapshot && attempts < 8) {
+      window.setTimeout(requestState, 500);
+    }
+  };
+
+  void listeners.then(requestState);
 
   return () => {
     window.clearTimeout(singleClickTimer);
