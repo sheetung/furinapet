@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { emit } from "@tauri-apps/api/event";
+import { emitTo } from "@tauri-apps/api/event";
 import { pluginManager } from "./manager";
 
 export function PluginNavigation() {
@@ -83,7 +83,7 @@ export function PluginNavigation() {
     try {
       await pluginManager.setEnabled(id, enabled);
       if ("__TAURI_INTERNALS__" in window) {
-        await emit("plugin-state-changed", { id, enabled });
+        await emitTo("pet", "plugin-state-changed", { id, enabled });
       }
     } finally {
       setBusyId(null);
