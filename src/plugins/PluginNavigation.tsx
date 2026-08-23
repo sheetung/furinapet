@@ -134,14 +134,6 @@ export function PluginNavigation() {
           );
         })}
       </div>
-
-      <div className="update-card card" style={{ marginTop: 20 }}>
-        <div>
-          <span className="tag">PLUGIN API v1</span>
-          <h3>插件系统</h3>
-          <p>当前版本支持内置 TypeScript 插件、事件总线、权限隔离和插件独立存储。后续可继续扩展本地插件包安装。</p>
-        </div>
-      </div>
     </section>,
     host,
   );
