@@ -5,6 +5,16 @@ import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./
 
 const releasesUrl = "https://github.com/sheetung/furinapet/releases";
 
+export interface PluginSnapshot {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  apiVersion: number;
+  enabled: boolean;
+  active: boolean;
+}
+
 export const desktop = {
   getSettings: () => invoke<AppSettings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<AppSettings>("update_settings", { patch }),
@@ -17,6 +27,10 @@ export const desktop = {
   getWorkAreaAt: (x: number, y: number) => invoke<WorkArea>("get_work_area_at", { x, y }),
   listDockSurfaces: () => invoke<WindowSurface[]>("list_dock_surfaces"),
   react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message }),
+  listPlugins: () => invoke<PluginSnapshot[]>("list_plugins"),
+  setPluginEnabled: (id: string, enabled: boolean) => invoke<PluginSnapshot[]>("set_plugin_enabled", { id, enabled }),
+  publishPetEvent: (name: "pet:clicked" | "pet:doubleClicked" | "pet:dragStart" | "pet:dragEnd") =>
+    invoke<boolean>("publish_pet_event", { name }),
   showControlCenter: () => invoke<void>("show_control_center"),
   quit: () => invoke<void>("quit_app"),
   openReleases: () => openUrl(releasesUrl),
