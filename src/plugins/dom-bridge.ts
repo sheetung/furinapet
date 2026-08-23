@@ -1,41 +1,63 @@
-import { pluginEventBus } from "./event-bus";
-import { pluginManager } from "./manager";
+import { emit, listen } from "@tauri-apps/api/event";
+
+interface PluginChangedEvent {
+  id: string;
+  enabled: boolean;
+}
+
+interface PluginStateSnapshot {
+  enabled: string[];
+}
 
 export function installPetDomBridge(): () => void {
   let singleClickTimer = 0;
+  let clickEnhancementEnabled = false;
 
-  const clickEnhancementEnabled = () =>
-    pluginManager.states().some((state) => state.id === "click-reaction" && state.enabled);
+  const sendInteraction = (type: "clicked" | "double-clicked", event: MouseEvent) => {
+    void emit("plugin-pet-interaction", {
+      type,
+      x: event.screenX,
+      y: event.screenY,
+    });
+  };
 
   const onClick = (event: MouseEvent) => {
+    if (!clickEnhancementEnabled) return;
     window.clearTimeout(singleClickTimer);
     singleClickTimer = window.setTimeout(() => {
-      pluginEventBus.emit("pet:clicked", { x: event.screenX, y: event.screenY });
+      sendInteraction("clicked", event);
     }, 220);
   };
 
   const onDoubleClick = (event: MouseEvent) => {
+    if (!clickEnhancementEnabled) return;
     window.clearTimeout(singleClickTimer);
-    if (clickEnhancementEnabled()) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-    pluginEventBus.emit("pet:double-clicked", { x: event.screenX, y: event.screenY });
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    sendInteraction("double-clicked", event);
   };
 
-  const onPointerDown = () => pluginEventBus.emit("pet:drag-start");
-  const onPointerUp = () => pluginEventBus.emit("pet:drag-end");
-
-  window.addEventListener("click", onClick);
+  window.addEventListener("click", onClick, true);
   window.addEventListener("dblclick", onDoubleClick, true);
-  window.addEventListener("pointerdown", onPointerDown);
-  window.addEventListener("pointerup", onPointerUp);
+
+  const listeners = Promise.all([
+    listen<PluginChangedEvent>("plugin-state-changed", (event) => {
+      if (event.payload.id === "click-reaction") {
+        clickEnhancementEnabled = event.payload.enabled;
+      }
+    }),
+    listen<PluginStateSnapshot>("plugin-state-snapshot", (event) => {
+      clickEnhancementEnabled = event.payload.enabled.includes("click-reaction");
+    }),
+  ]);
+
+  void listeners.then(() => emit("plugin-state-request"));
 
   return () => {
     window.clearTimeout(singleClickTimer);
-    window.removeEventListener("click", onClick);
+    window.removeEventListener("click", onClick, true);
     window.removeEventListener("dblclick", onDoubleClick, true);
-    window.removeEventListener("pointerdown", onPointerDown);
-    window.removeEventListener("pointerup", onPointerUp);
+    void listeners.then((unlisteners) => unlisteners.forEach((unlisten) => unlisten()));
   };
 }
