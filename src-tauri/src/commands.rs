@@ -1,10 +1,9 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::{
     pet,
-    plugin_host::{self, PluginHostState},
     settings::{self, AppState, Settings, SettingsPatch},
 };
 
@@ -70,7 +69,6 @@ pub fn update_settings(app: AppHandle, state: State<'_, AppState>, patch: Settin
     next.apply(patch)?;
     if let Some(enabled) = requested_autostart {
         if enabled {
-            // Always rewrite the entry so a stale setting or changed install path is repaired.
             app.autolaunch().enable().map_err(|error| error.to_string())?;
         } else if app.autolaunch().is_enabled().map_err(|error| error.to_string())? {
             app.autolaunch().disable().map_err(|error| error.to_string())?;
@@ -144,22 +142,7 @@ pub fn trigger_reaction_inner(app: &AppHandle, reaction: String, message: Option
 }
 
 #[tauri::command]
-pub fn trigger_reaction(
-    app: AppHandle,
-    window: WebviewWindow,
-    plugin_state: State<'_, PluginHostState>,
-    reaction: String,
-    message: Option<String>,
-) -> Result<(), String> {
-    // PetView's built-in double-click used to call `waving` directly.  Like
-    // OpenPets, let the host arbitrate the interaction first; only fall back
-    // to the built-in reaction when no enabled plugin consumes the event.
-    if window.label() == "pet"
-        && reaction == "waving"
-        && plugin_host::handle_pet_event_inner(&app, &plugin_state, "pet:doubleClicked")?
-    {
-        return Ok(());
-    }
+pub fn trigger_reaction(app: AppHandle, reaction: String, message: Option<String>) -> Result<(), String> {
     trigger_reaction_inner(&app, reaction, message)
 }
 
