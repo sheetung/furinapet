@@ -1,4 +1,4 @@
-import { emit, listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { pluginEventBus } from "./event-bus";
 import { pluginManager } from "./manager";
 import { registerBuiltinPlugins } from "./registry";
@@ -34,8 +34,10 @@ export async function bootstrapPlugins(): Promise<void> {
     });
 
     void listen("plugin-state-request", () => {
-      void emit("plugin-state-snapshot", { enabled: enabledPluginIds() });
+      void emitTo("pet", "plugin-state-snapshot", { enabled: enabledPluginIds() });
     });
+
+    void emitTo("pet", "plugin-state-snapshot", { enabled: enabledPluginIds() });
   }
 
   pluginEventBus.emit("app:ready");
