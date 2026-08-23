@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { desktop, type PluginSnapshot } from "../api";
 
+const LEGACY_ENABLED_KEY = "furinapet.plugins.enabled";
+
 export function PluginNavigation() {
   const [active, setActive] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -9,6 +11,7 @@ export function PluginNavigation() {
   const [error, setError] = useState("");
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const navButtonRef = useRef<HTMLButtonElement | null>(null);
+  const migratedLegacyState = useRef(false);
 
   useEffect(() => {
     let disposed = false;
@@ -77,7 +80,30 @@ export function PluginNavigation() {
 
   async function refreshPlugins() {
     try {
-      setPlugins(await desktop.listPlugins());
+      let next = await desktop.listPlugins();
+
+      if (!migratedLegacyState.current) {
+        migratedLegacyState.current = true;
+        const raw = localStorage.getItem(LEGACY_ENABLED_KEY);
+        if (raw) {
+          try {
+            const legacy = JSON.parse(raw);
+            if (
+              Array.isArray(legacy)
+              && legacy.includes("click-reaction")
+              && !next.some((plugin) => plugin.id === "click-reaction" && plugin.enabled)
+            ) {
+              next = await desktop.setPluginEnabled("click-reaction", true);
+            }
+          } catch {
+            // Invalid legacy state is simply discarded.
+          } finally {
+            localStorage.removeItem(LEGACY_ENABLED_KEY);
+          }
+        }
+      }
+
+      setPlugins(next);
       setError("");
     } catch (nextError) {
       setError(`插件状态读取失败：${String(nextError)}`);
