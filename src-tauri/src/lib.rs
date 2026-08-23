@@ -1,5 +1,6 @@
 mod commands;
 mod pet;
+mod plugin_host;
 mod settings;
 mod tray;
 mod updater;
@@ -17,6 +18,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let initial_settings = settings::load(&app_handle);
             app.manage(settings::AppState::new(initial_settings.clone()));
+            app.manage(plugin_host::PluginHostState::load(&app_handle));
 
             let pet_window = pet::create(&app_handle, &initial_settings)?;
             let pet_for_close = pet_window.clone();
@@ -52,6 +54,16 @@ pub fn run() {
             commands::trigger_reaction,
             commands::show_control_center,
             commands::quit_app,
+            plugin_host::list_plugins,
+            plugin_host::fetch_plugin_catalog,
+            plugin_host::install_plugin,
+            plugin_host::uninstall_plugin,
+            plugin_host::set_plugin_enabled,
+            plugin_host::get_plugin_config,
+            plugin_host::set_plugin_config,
+            plugin_host::list_runtime_plugins,
+            plugin_host::plugin_sdk_call,
+            plugin_host::publish_pet_event,
             updater::check_for_updates,
             updater::download_and_install_update,
         ])

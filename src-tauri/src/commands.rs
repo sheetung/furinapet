@@ -2,7 +2,10 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::{pet, settings::{self, AppState, Settings, SettingsPatch}};
+use crate::{
+    pet,
+    settings::{self, AppState, Settings, SettingsPatch},
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,7 +69,6 @@ pub fn update_settings(app: AppHandle, state: State<'_, AppState>, patch: Settin
     next.apply(patch)?;
     if let Some(enabled) = requested_autostart {
         if enabled {
-            // Always rewrite the entry so a stale setting or changed install path is repaired.
             app.autolaunch().enable().map_err(|error| error.to_string())?;
         } else if app.autolaunch().is_enabled().map_err(|error| error.to_string())? {
             app.autolaunch().disable().map_err(|error| error.to_string())?;
