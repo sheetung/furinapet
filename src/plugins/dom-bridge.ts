@@ -1,74 +1,55 @@
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { desktop } from "../api";
 
-interface PluginChangedEvent {
-  id: string;
-  enabled: boolean;
-}
-
-interface PluginStateSnapshot {
-  enabled: string[];
-}
-
+/**
+ * Thin pet-window sensor bridge, intentionally mirroring OpenPets' preload
+ * model: the renderer only reports curated interaction events; the backend
+ * plugin host owns plugin state and side effects.
+ */
 export function installPetDomBridge(): () => void {
   let singleClickTimer = 0;
-  let clickEnhancementEnabled = false;
-  let receivedSnapshot = false;
+  let pointerStart: { x: number; y: number } | null = null;
+  let suppressClickUntil = 0;
 
-  const sendInteraction = (type: "clicked" | "double-clicked", event: MouseEvent) => {
-    void emitTo("main", "plugin-pet-interaction", {
-      type,
-      x: event.screenX,
-      y: event.screenY,
-    });
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    pointerStart = { x: event.screenX, y: event.screenY };
+  };
+
+  const onPointerUp = (event: PointerEvent) => {
+    if (!pointerStart) return;
+    if (Math.hypot(event.screenX - pointerStart.x, event.screenY - pointerStart.y) > 4) {
+      suppressClickUntil = Date.now() + 300;
+    }
+    pointerStart = null;
   };
 
   const onClick = (event: MouseEvent) => {
-    if (!clickEnhancementEnabled) return;
+    if (event.button !== 0 || Date.now() < suppressClickUntil) return;
     window.clearTimeout(singleClickTimer);
     singleClickTimer = window.setTimeout(() => {
-      sendInteraction("clicked", event);
+      void desktop.publishPetEvent("pet:clicked").catch((error) => {
+        console.error("[plugin-host] pet click dispatch failed", error);
+      });
     }, 220);
   };
 
-  const onDoubleClick = (event: MouseEvent) => {
-    if (!clickEnhancementEnabled) return;
+  const onDoubleClick = () => {
+    // PetView already has a built-in double-click fallback. Its `waving`
+    // request is now intercepted by the Rust plugin host, so cancel the
+    // pending single-click without creating a second double-click dispatch.
     window.clearTimeout(singleClickTimer);
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    sendInteraction("double-clicked", event);
   };
 
+  window.addEventListener("pointerdown", onPointerDown, true);
+  window.addEventListener("pointerup", onPointerUp, true);
   window.addEventListener("click", onClick, true);
   window.addEventListener("dblclick", onDoubleClick, true);
 
-  const listeners = Promise.all([
-    listen<PluginChangedEvent>("plugin-state-changed", (event) => {
-      if (event.payload.id === "click-reaction") {
-        clickEnhancementEnabled = event.payload.enabled;
-      }
-    }),
-    listen<PluginStateSnapshot>("plugin-state-snapshot", (event) => {
-      receivedSnapshot = true;
-      clickEnhancementEnabled = event.payload.enabled.includes("click-reaction");
-    }),
-  ]);
-
-  let attempts = 0;
-  const requestState = () => {
-    attempts += 1;
-    void emitTo("main", "plugin-state-request");
-    if (!receivedSnapshot && attempts < 8) {
-      window.setTimeout(requestState, 500);
-    }
-  };
-
-  void listeners.then(requestState);
-
   return () => {
     window.clearTimeout(singleClickTimer);
+    window.removeEventListener("pointerdown", onPointerDown, true);
+    window.removeEventListener("pointerup", onPointerUp, true);
     window.removeEventListener("click", onClick, true);
     window.removeEventListener("dblclick", onDoubleClick, true);
-    void listeners.then((unlisteners) => unlisteners.forEach((unlisten) => unlisten()));
   };
 }
