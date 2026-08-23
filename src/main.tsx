@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { PetView } from "./PetView";
 import { bootstrapPlugins } from "./plugins";
+import { installPetDomBridge } from "./plugins/dom-bridge";
+import { PluginPanel } from "./plugins/PluginPanel";
 import "./styles.css";
 
 const params = new URLSearchParams(window.location.search);
@@ -13,6 +15,17 @@ void bootstrapPlugins().catch((error) => {
   console.error("[plugins] bootstrap failed", error);
 });
 
+if (isPetWindow) installPetDomBridge();
+
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>{isPetWindow ? <PetView /> : <App />}</StrictMode>,
+  <StrictMode>
+    {isPetWindow ? (
+      <PetView />
+    ) : (
+      <>
+        <App />
+        <PluginPanel />
+      </>
+    )}
+  </StrictMode>,
 );
