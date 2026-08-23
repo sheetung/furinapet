@@ -19,7 +19,7 @@ const MANIFEST_FILE: &str = "furinapet.plugin.json";
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct PersistedPluginState {
-    // Kept only so older plugin-system builds deserialize cleanly.
+    // Legacy renderer builds wrote this field. Keep it for backward-compatible parsing.
     #[serde(default)]
     enabled: Vec<String>,
     #[serde(default)]
@@ -191,9 +191,7 @@ fn plugins_dir(app: &AppHandle) -> Result<PathBuf, String> {
 fn validate_plugin_id(id: &str) -> Result<(), String> {
     if id.is_empty()
         || id.len() > 120
-        || !id
-            .chars()
-            .all(|value| value.is_ascii_alphanumeric() || matches!(value, '.' | '-' | '_'))
+        || !id.chars().all(|value| value.is_ascii_alphanumeric() || matches!(value, '.' | '-' | '_'))
     {
         return Err("invalid plugin id".into());
     }
@@ -210,10 +208,8 @@ fn safe_relative_path(value: &str) -> Result<PathBuf, String> {
     if path.is_absolute() || value.is_empty() {
         return Err("invalid plugin file path".into());
     }
-    for component in path.components() {
-        if !matches!(component, Component::Normal(_)) {
-            return Err("plugin file path escapes package root".into());
-        }
+    if path.components().any(|component| !matches!(component, Component::Normal(_))) {
+        return Err("plugin file path escapes package root".into());
     }
     Ok(path.to_path_buf())
 }
@@ -228,8 +224,7 @@ fn persist(app: &AppHandle, data: &PersistedPluginState) -> Result<(), String> {
 }
 
 fn load_manifest(app: &AppHandle, id: &str) -> Result<PluginManifest, String> {
-    let path = plugin_dir(app, id)?.join(MANIFEST_FILE);
-    let raw = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let raw = fs::read_to_string(plugin_dir(app, id)?.join(MANIFEST_FILE)).map_err(|error| error.to_string())?;
     serde_json::from_str(&raw).map_err(|error| format!("invalid plugin manifest: {error}"))
 }
 
@@ -249,22 +244,22 @@ fn effective_config(manifest: &PluginManifest, installed: &InstalledPlugin) -> B
 
 fn validate_config_value(field: &ConfigField, value: &Value) -> Result<(), String> {
     match field.field_type.as_str() {
-        "boolean" if !value.is_boolean() => return Err(format!("{} must be a boolean", field.label)),
+        "boolean" => {
+            if !value.is_boolean() { return Err(format!("{} must be a boolean", field.label)); }
+        }
         "number" => {
             let number = value.as_f64().ok_or_else(|| format!("{} must be a number", field.label))?;
-            if let Some(min) = field.min {
-                if number < min { return Err(format!("{} must be >= {min}", field.label)); }
+            if field.min.is_some_and(|min| number < min) {
+                return Err(format!("{} is below the minimum", field.label));
             }
-            if let Some(max) = field.max {
-                if number > max { return Err(format!("{} must be <= {max}", field.label)); }
+            if field.max.is_some_and(|max| number > max) {
+                return Err(format!("{} exceeds the maximum", field.label));
             }
         }
         "text" => {
             let text = value.as_str().ok_or_else(|| format!("{} must be text", field.label))?;
-            if let Some(max_length) = field.max_length {
-                if text.chars().count() > max_length {
-                    return Err(format!("{} is too long", field.label));
-                }
+            if field.max_length.is_some_and(|max| text.chars().count() > max) {
+                return Err(format!("{} is too long", field.label));
             }
         }
         "select" => {
@@ -272,8 +267,7 @@ fn validate_config_value(field: &ConfigField, value: &Value) -> Result<(), Strin
                 return Err(format!("{} has an invalid option", field.label));
             }
         }
-        "boolean" | "number" | "text" | "select" => {}
-        _ => return Err(format!("unsupported config field type: {}", field.field_type)),
+        other => return Err(format!("unsupported config field type: {other}")),
     }
     Ok(())
 }
@@ -282,14 +276,14 @@ fn validate_config(
     manifest: &PluginManifest,
     values: &BTreeMap<String, Value>,
 ) -> Result<BTreeMap<String, Value>, String> {
+    if values.keys().any(|key| !manifest.config_schema.contains_key(key)) {
+        return Err("plugin config contains unknown fields".into());
+    }
     let mut next = BTreeMap::new();
     for (key, field) in &manifest.config_schema {
         let value = values.get(key).cloned().unwrap_or_else(|| field.default.clone());
         validate_config_value(field, &value)?;
         next.insert(key.clone(), value);
-    }
-    if values.keys().any(|key| !manifest.config_schema.contains_key(key)) {
-        return Err("plugin config contains unknown fields".into());
     }
     Ok(next)
 }
@@ -310,8 +304,7 @@ fn version_parts(value: &str) -> Vec<u64> {
 fn is_newer(candidate: &str, current: &str) -> bool {
     let left = version_parts(candidate);
     let right = version_parts(current);
-    let count = left.len().max(right.len());
-    for index in 0..count {
+    for index in 0..left.len().max(right.len()) {
         let a = *left.get(index).unwrap_or(&0);
         let b = *right.get(index).unwrap_or(&0);
         if a != b { return a > b; }
@@ -351,26 +344,20 @@ fn snapshot_from_manifest(
     latest: Option<&CatalogPlugin>,
 ) -> PluginSnapshot {
     let latest_version = latest.map(|plugin| plugin.version.clone());
-    let update_available = latest_version
-        .as_deref()
-        .map(|version| is_newer(version, &installed.version))
-        .unwrap_or(false);
     PluginSnapshot {
         id: manifest.id.clone(),
         name: latest.map(|plugin| plugin.name.clone()).unwrap_or_else(|| manifest.name.clone()),
-        description: latest
-            .map(|plugin| plugin.description.clone())
-            .unwrap_or_else(|| manifest.description.clone()),
+        description: latest.map(|plugin| plugin.description.clone()).unwrap_or_else(|| manifest.description.clone()),
         version: latest_version.clone().unwrap_or_else(|| installed.version.clone()),
         installed_version: Some(installed.version.clone()),
-        latest_version,
+        latest_version: latest_version.clone(),
         sdk_version: manifest.sdk_version.clone(),
         min_app_version: manifest.min_app_version.clone(),
         publisher_type: latest.map(|plugin| plugin.publisher_type.clone()).unwrap_or_else(|| "local".into()),
         installed: true,
         enabled: installed.enabled,
         active: installed.enabled,
-        update_available,
+        update_available: latest_version.as_deref().is_some_and(|version| is_newer(version, &installed.version)),
         configurable: !manifest.config_schema.is_empty(),
     }
 }
@@ -395,17 +382,13 @@ fn snapshot_from_catalog(plugin: &CatalogPlugin) -> PluginSnapshot {
 }
 
 #[tauri::command]
-pub fn list_plugins(
-    app: AppHandle,
-    state: State<'_, PluginHostState>,
-) -> Result<Vec<PluginSnapshot>, String> {
+pub fn list_plugins(app: AppHandle, state: State<'_, PluginHostState>) -> Result<Vec<PluginSnapshot>, String> {
     let data = state.data.lock().map_err(|_| "plugin host lock is poisoned")?.clone();
-    let mut result = Vec::new();
-    for (id, installed) in &data.installed {
-        if let Ok(manifest) = load_manifest(&app, id) {
-            result.push(snapshot_from_manifest(&manifest, installed, None));
-        }
-    }
+    let mut result = data
+        .installed
+        .iter()
+        .filter_map(|(id, installed)| load_manifest(&app, id).ok().map(|manifest| snapshot_from_manifest(&manifest, installed, None)))
+        .collect::<Vec<_>>();
     result.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(result)
 }
@@ -420,13 +403,12 @@ pub async fn fetch_plugin_catalog(
     let mut result = Vec::new();
 
     for remote in &catalog.plugins {
-        if let Some(installed) = data.installed.get(&remote.id) {
-            match load_manifest(&app, &remote.id) {
+        match data.installed.get(&remote.id) {
+            Some(installed) => match load_manifest(&app, &remote.id) {
                 Ok(manifest) => result.push(snapshot_from_manifest(&manifest, installed, Some(remote))),
                 Err(_) => result.push(snapshot_from_catalog(remote)),
-            }
-        } else {
-            result.push(snapshot_from_catalog(remote));
+            },
+            None => result.push(snapshot_from_catalog(remote)),
         }
     }
 
@@ -436,7 +418,6 @@ pub async fn fetch_plugin_catalog(
             result.push(snapshot_from_manifest(&manifest, installed, None));
         }
     }
-
     Ok(result)
 }
 
@@ -470,7 +451,7 @@ pub async fn install_plugin(
     if stage.exists() { fs::remove_dir_all(&stage).map_err(|error| error.to_string())?; }
     fs::create_dir_all(&stage).map_err(|error| error.to_string())?;
 
-    let mut manifest: Option<PluginManifest> = None;
+    let mut manifest = None;
     for file in &plugin.files {
         let relative = safe_relative_path(&file.path)?;
         let url = format!(
@@ -483,13 +464,13 @@ pub async fn install_plugin(
             let _ = fs::remove_dir_all(&stage);
             return Err(format!("SHA-256 mismatch for {}", file.path));
         }
-        let destination = stage.join(&relative);
+        let destination = stage.join(relative);
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
         fs::write(&destination, &bytes).map_err(|error| error.to_string())?;
         if file.path == MANIFEST_FILE {
-            manifest = Some(serde_json::from_slice(&bytes).map_err(|error| format!("invalid manifest: {error}"))?);
+            manifest = Some(serde_json::from_slice::<PluginManifest>(&bytes).map_err(|error| format!("invalid manifest: {error}"))?);
         }
     }
 
@@ -507,8 +488,7 @@ pub async fn install_plugin(
         let _ = fs::remove_dir_all(&stage);
         return Err("unsupported plugin runtime".into());
     }
-    let entry = safe_relative_path(&manifest.entry)?;
-    if !stage.join(entry).is_file() {
+    if !stage.join(safe_relative_path(&manifest.entry)?).is_file() {
         let _ = fs::remove_dir_all(&stage);
         return Err("plugin entry file is missing".into());
     }
@@ -516,9 +496,7 @@ pub async fn install_plugin(
     let destination = plugin_dir(&app, &plugin.id)?;
     let backup = root.join(format!(".backup-{}", plugin.id));
     if backup.exists() { fs::remove_dir_all(&backup).map_err(|error| error.to_string())?; }
-    if destination.exists() {
-        fs::rename(&destination, &backup).map_err(|error| error.to_string())?;
-    }
+    if destination.exists() { fs::rename(&destination, &backup).map_err(|error| error.to_string())?; }
     if let Err(error) = fs::rename(&stage, &destination) {
         if backup.exists() { let _ = fs::rename(&backup, &destination); }
         return Err(error.to_string());
@@ -527,26 +505,20 @@ pub async fn install_plugin(
 
     let mut data = state.data.lock().map_err(|_| "plugin host lock is poisoned")?;
     let previous = data.installed.remove(&plugin.id).unwrap_or_default();
-    let effective = effective_config(&manifest, &previous);
+    let config = effective_config(&manifest, &previous);
     data.installed.insert(plugin.id.clone(), InstalledPlugin {
         version: plugin.version,
         enabled: previous.enabled,
-        config: effective,
+        config,
         storage: previous.storage,
     });
     persist(&app, &data)
 }
 
 #[tauri::command]
-pub fn uninstall_plugin(
-    app: AppHandle,
-    state: State<'_, PluginHostState>,
-    id: String,
-) -> Result<(), String> {
+pub fn uninstall_plugin(app: AppHandle, state: State<'_, PluginHostState>, id: String) -> Result<(), String> {
     let directory = plugin_dir(&app, &id)?;
-    if directory.exists() {
-        fs::remove_dir_all(directory).map_err(|error| error.to_string())?;
-    }
+    if directory.exists() { fs::remove_dir_all(directory).map_err(|error| error.to_string())?; }
     let mut data = state.data.lock().map_err(|_| "plugin host lock is poisoned")?;
     data.installed.remove(&id);
     persist(&app, &data)
@@ -559,10 +531,9 @@ pub fn set_plugin_enabled(
     id: String,
     enabled: bool,
 ) -> Result<(), String> {
-    let _manifest = load_manifest(&app, &id)?;
+    let _ = load_manifest(&app, &id)?;
     let mut data = state.data.lock().map_err(|_| "plugin host lock is poisoned")?;
-    let plugin = data.installed.get_mut(&id).ok_or("plugin is not installed")?;
-    plugin.enabled = enabled;
+    data.installed.get_mut(&id).ok_or("plugin is not installed")?.enabled = enabled;
     persist(&app, &data)
 }
 
@@ -593,8 +564,7 @@ pub fn set_plugin_config(
     let manifest = load_manifest(&app, &id)?;
     let values = validate_config(&manifest, &values)?;
     let mut data = state.data.lock().map_err(|_| "plugin host lock is poisoned")?;
-    let installed = data.installed.get_mut(&id).ok_or("plugin is not installed")?;
-    installed.config = values;
+    data.installed.get_mut(&id).ok_or("plugin is not installed")?.config = values;
     persist(&app, &data)
 }
 
@@ -611,14 +581,15 @@ pub fn list_runtime_plugins(
             Ok(value) if value.runtime == "javascript" => value,
             _ => continue,
         };
-        let entry = safe_relative_path(&manifest.entry)?;
-        let source = fs::read_to_string(plugin_dir(&app, &id)?.join(entry)).map_err(|error| error.to_string())?;
+        let source = fs::read_to_string(plugin_dir(&app, &id)?.join(safe_relative_path(&manifest.entry)?))
+            .map_err(|error| error.to_string())?;
+        let config = effective_config(&manifest, &installed);
         result.push(RuntimePlugin {
             id,
-            version: installed.version,
+            version: installed.version.clone(),
             source,
             permissions: manifest.permissions.clone(),
-            config: effective_config(&manifest, &installed),
+            config,
         });
     }
     Ok(result)
@@ -672,8 +643,7 @@ pub fn plugin_sdk_call(
                 return Err("storage value is too large".into());
             }
             let mut data = state.data.lock().map_err(|_| "plugin host lock is poisoned")?;
-            let installed = data.installed.get_mut(&id).ok_or("plugin is not installed")?;
-            installed.storage.insert(key.to_owned(), value);
+            data.installed.get_mut(&id).ok_or("plugin is not installed")?.storage.insert(key.to_owned(), value);
             persist(&app, &data)?;
             Ok(Value::Null)
         }
