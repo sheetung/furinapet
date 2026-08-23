@@ -17,7 +17,7 @@ export async function bootstrapPlugins(): Promise<void> {
   await pluginManager.activateEnabled();
 
   if ("__TAURI_INTERNALS__" in window) {
-    void listen<PluginChangedEvent>("plugins-changed", (event) => {
+    void listen<PluginChangedEvent>("plugin-state-changed", (event) => {
       void pluginManager.setEnabled(event.payload.id, event.payload.enabled).catch((error) => {
         console.error(`[plugin:${event.payload.id}] sync failed`, error);
       });
