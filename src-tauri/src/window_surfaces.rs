@@ -26,8 +26,9 @@ mod windows_impl {
         ffi::c_void,
         mem::{size_of, zeroed},
     };
+    use windows_sys::core::BOOL;
     use windows_sys::Win32::{
-        Foundation::{BOOL, HWND, LPARAM, POINT, RECT},
+        Foundation::{HWND, LPARAM, POINT, RECT},
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS},
             Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST},
