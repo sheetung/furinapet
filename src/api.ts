@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import type { WorkArea, WindowSurface } from "./core/wander-controller";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 const releasesUrl = "https://github.com/sheetung/furinapet/releases";
@@ -13,6 +14,8 @@ export const desktop = {
   togglePet: () => invoke<AppSettings>("toggle_pet"),
   resetPetPosition: () => invoke<void>("reset_pet_position"),
   waitForDragRelease: () => invoke<void>("wait_for_drag_release"),
+  getWorkAreaAt: (x: number, y: number) => invoke<WorkArea>("get_work_area_at", { x, y }),
+  listDockSurfaces: () => invoke<WindowSurface[]>("list_dock_surfaces"),
   react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message }),
   showControlCenter: () => invoke<void>("show_control_center"),
   quit: () => invoke<void>("quit_app"),

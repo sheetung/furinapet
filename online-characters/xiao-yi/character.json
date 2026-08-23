@@ -8,8 +8,18 @@
   "cellHeight": 208,
   "columns": 8,
   "rows": 11,
-  "packageVersion": "1.0.2",
+  "packageVersion": "1.0.3",
   "lookDirectionOrder": "counterclockwise",
+  "wanderProfile": {
+    "movementStyle": "grounded",
+    "activity": 0.78,
+    "curiosity": 0.68,
+    "preferredSpeed": 1.12,
+    "windowDockChance": 0.14,
+    "shortMoveChance": 0.5,
+    "pauseMinMs": 1800,
+    "pauseMaxMs": 6000
+  },
   "reactionMessages": {
     "idle": "今天的风，正适合出发。",
     "waving": "萧小五，今天想去哪儿？",

@@ -10,13 +10,24 @@ import {
 import { desktop } from "./api";
 import { characterRegistry, getCharacter, loadCharacterRegistry, type CharacterDefinition } from "./characters/registry";
 import { computeLookDirection, mapLookDirection, type LookCell } from "./core/look-direction";
+import {
+  advanceSpeed,
+  chooseDockPoint,
+  chooseWanderTarget,
+  effectiveWanderProbability,
+  nextDecisionDelay,
+  pauseDuration,
+  type Point,
+  type WanderBounds,
+  type WindowSurface,
+  type WorkArea,
+} from "./core/wander-controller";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
 import "./pet.css";
 
 const CELL_WIDTH = 192;
 const CELL_HEIGHT = 208;
 const BUBBLE_SPACE = 92;
-const GROUND_CLEARANCE = 72;
 const MOTION_INTERVAL_MS = 32;
 const GRAVITY_ACCELERATION = 2200;
 const MAX_FALL_SPEED = 1250;
@@ -42,8 +53,17 @@ const frameRows: Record<MotionReaction, FrameRow> = {
 };
 
 interface WanderState {
-  target: { x: number; y: number } | null;
+  mode: "idle" | "walking" | "approaching" | "docked";
+  target: Point | null;
   nextAt: number;
+  speed: number;
+  missedOpportunities: number;
+  dockSurfaceId: string | null;
+  dockRatio: number;
+  dockUntil: number;
+  dockRefreshAt: number;
+  workArea: WorkArea | null;
+  workAreaRefreshAt: number;
 }
 
 interface MotionState {
@@ -66,11 +86,13 @@ export function PetView() {
   const reactionTimer = useRef<number | null>(null);
   const reactionRef = useRef<MotionReaction>(reaction);
   const settingsRef = useRef(settings);
+  const charactersRef = useRef(characters);
   const motionRef = useRef<MotionState>({ dragging: false, falling: false, fallToken: 0 });
   const layoutQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { charactersRef.current = characters; }, [characters]);
 
   useEffect(() => {
     void loadCharacterRegistry().then(setCharacters).catch(() => {
@@ -133,6 +155,7 @@ export function PetView() {
         setMessage(payload.message ?? "");
         setBubbleEpoch((value) => value + 1);
         reactionTimer.current = window.setTimeout(() => {
+          reactionTimer.current = null;
           changeReaction("idle");
           setMessage("");
         }, payload.durationMs ?? 2600);
@@ -172,12 +195,73 @@ export function PetView() {
 
   useEffect(() => {
     const petWindow = getCurrentWindow();
-    const wander: WanderState = { target: null, nextAt: Date.now() + 6000 };
+    const wander: WanderState = {
+      mode: "idle",
+      target: null,
+      nextAt: Date.now() + 6000,
+      speed: 0,
+      missedOpportunities: 0,
+      dockSurfaceId: null,
+      dockRatio: 0.5,
+      dockUntil: 0,
+      dockRefreshAt: 0,
+      workArea: null,
+      workAreaRefreshAt: 0,
+    };
     let cancelled = false;
     let timer = 0;
     let lastLook = -1;
     let lastLookAt = 0;
     let lastTick = performance.now();
+
+    const resetWander = (nextAt = Date.now() + 1500) => {
+      wander.mode = "idle";
+      wander.target = null;
+      wander.nextAt = nextAt;
+      wander.speed = 0;
+      wander.dockSurfaceId = null;
+      wander.dockUntil = 0;
+    };
+
+    const getWorkArea = async (position: PhysicalPosition, size: PhysicalSize): Promise<WorkArea> => {
+      const now = Date.now();
+      if (wander.workArea && now < wander.workAreaRefreshAt) return wander.workArea;
+      try {
+        wander.workArea = await desktop.getWorkAreaAt(
+          Math.round(position.x + size.width / 2),
+          Math.round(position.y + size.height / 2),
+        );
+      } catch {
+        const monitor = await currentMonitor();
+        wander.workArea = monitor
+          ? { x: monitor.position.x, y: monitor.position.y, width: monitor.size.width, height: monitor.size.height }
+          : { x: position.x, y: position.y, width: size.width, height: size.height };
+      }
+      wander.workAreaRefreshAt = now + 1000;
+      return wander.workArea;
+    };
+
+    const makeBounds = (workArea: WorkArea, size: PhysicalSize): WanderBounds => {
+      const padding = 24;
+      const minX = workArea.x + padding;
+      const minY = workArea.y + padding;
+      return {
+        minX,
+        maxX: Math.max(minX, workArea.x + workArea.width - size.width - padding),
+        minY,
+        maxY: Math.max(minY, workArea.y + workArea.height - size.height - padding),
+        groundY: Math.max(workArea.y, workArea.y + workArea.height - size.height),
+      };
+    };
+
+    const refreshDockTarget = async (
+      surfaces: WindowSurface[],
+      size: PhysicalSize,
+      workArea: WorkArea,
+    ): Promise<Point | null> => {
+      const surface = surfaces.find((candidate) => candidate.id === wander.dockSurfaceId);
+      return surface ? chooseDockPoint(surface, size, workArea, () => wander.dockRatio) : null;
+    };
 
     const tick = async () => {
       const currentSettings = settingsRef.current;
@@ -187,81 +271,156 @@ export function PetView() {
         return;
       }
       const now = performance.now();
+      const wallClock = Date.now();
       const elapsed = Math.min(64, now - lastTick);
       lastTick = now;
 
       try {
         if (motionRef.current.dragging || motionRef.current.falling) {
-          wander.target = null;
+          resetWander();
           return;
         }
 
-        const isLocomotionState = reactionRef.current === "idle"
+        const userReactionActive = reactionTimer.current !== null;
+        const isLocomotionState = !userReactionActive && (reactionRef.current === "idle"
           || reactionRef.current === "run-left"
-          || reactionRef.current === "run-right";
+          || reactionRef.current === "run-right"
+          || reactionRef.current === "jumping"
+          || (wander.mode === "docked" && (reactionRef.current === "waiting" || reactionRef.current === "review")));
         let position = await petWindow.outerPosition();
         const size = await petWindow.outerSize();
+        const activeCharacter = getCharacter(currentSettings.selectedCharacterId, charactersRef.current);
+        const profile = activeCharacter.wanderProfile!;
+        const workArea = await getWorkArea(position, size);
+        const bounds = makeBounds(workArea, size);
 
         if (currentSettings.autoWander && isLocomotionState) {
-          const monitor = await currentMonitor();
-          const padding = 24;
-          const minX = monitor ? monitor.position.x + padding : position.x;
-          const maxX = monitor
-            ? Math.max(minX, monitor.position.x + monitor.size.width - size.width - padding)
-            : position.x;
-          const minY = monitor ? monitor.position.y + padding : position.y;
-          const maxY = monitor
-            ? Math.max(minY, monitor.position.y + monitor.size.height - size.height - padding)
-            : position.y;
-          const groundY = monitor
-            ? monitor.position.y + monitor.size.height - size.height - GROUND_CLEARANCE
-            : position.y;
-
-          if (wander.target && monitor) {
-            wander.target.x = Math.min(maxX, Math.max(minX, wander.target.x));
-            wander.target.y = currentSettings.gravityEnabled
-              ? groundY
-              : Math.min(maxY, Math.max(minY, wander.target.y));
-          }
-
-          if (!wander.target && Date.now() >= wander.nextAt) {
-            wander.nextAt = Date.now() + 7000 + Math.random() * 9000;
-            if (monitor && Math.random() <= currentSettings.wanderProbability) {
-              wander.target = {
-                x: Math.round(minX + Math.random() * (maxX - minX)),
-                y: currentSettings.gravityEnabled
-                  ? groundY
-                  : Math.round(minY + Math.random() * (maxY - minY)),
-              };
+          if (wander.mode === "docked") {
+            if (!currentSettings.windowDocking || wallClock >= wander.dockUntil) {
+              resetWander(wallClock + pauseDuration(profile));
+              changeReaction("idle");
+              if (currentSettings.gravityEnabled) {
+                void settleWithGravity();
+                return;
+              }
+            } else if (wallClock >= wander.dockRefreshAt) {
+              wander.dockRefreshAt = wallClock + 450;
+              const point = await refreshDockTarget(await desktop.listDockSurfaces(), size, workArea);
+              if (!point || Math.hypot(point.x - position.x, point.y - position.y) > 140) {
+                resetWander(wallClock + pauseDuration(profile));
+                changeReaction("idle");
+                if (currentSettings.gravityEnabled) {
+                  void settleWithGravity();
+                  return;
+                }
+              } else {
+                await petWindow.setPosition(new PhysicalPosition(point.x, point.y));
+                position = new PhysicalPosition(point.x, point.y);
+              }
             }
           }
 
-          if (wander.target) {
+          if (wander.mode === "idle" && wallClock >= wander.nextAt) {
+            wander.nextAt = wallClock + nextDecisionDelay(profile);
+            const probability = effectiveWanderProbability(
+              currentSettings.wanderProbability * (0.7 + profile.activity * 0.3),
+              wander.missedOpportunities,
+            );
+            if (Math.random() <= probability) {
+              wander.missedOpportunities = 0;
+              if (currentSettings.windowDocking && Math.random() <= profile.windowDockChance) {
+                const candidates = (await desktop.listDockSurfaces())
+                  .map((surface) => ({
+                    surface,
+                    ratio: 0.15 + Math.random() * 0.7,
+                  }))
+                  .map((candidate) => ({
+                    ...candidate,
+                    point: chooseDockPoint(candidate.surface, size, workArea, () => candidate.ratio),
+                  }))
+                  .filter((candidate): candidate is typeof candidate & { point: Point } => candidate.point !== null)
+                  .sort((left, right) => (
+                    Math.hypot(left.point.x - position.x, left.point.y - position.y)
+                    - Math.hypot(right.point.x - position.x, right.point.y - position.y)
+                  ));
+                const candidate = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
+                if (candidate) {
+                  wander.mode = "approaching";
+                  wander.target = candidate.point;
+                  wander.dockSurfaceId = candidate.surface.id;
+                  wander.dockRatio = candidate.ratio;
+                }
+              }
+              if (wander.mode === "idle") {
+                wander.mode = "walking";
+                wander.target = chooseWanderTarget(position, bounds, currentSettings.gravityEnabled, profile);
+              }
+            } else {
+              wander.missedOpportunities += 1;
+            }
+          }
+
+          if ((wander.mode === "walking" || wander.mode === "approaching") && wander.target) {
+            if (wander.mode === "approaching" && wallClock >= wander.dockRefreshAt) {
+              wander.dockRefreshAt = wallClock + 450;
+              const point = await refreshDockTarget(await desktop.listDockSurfaces(), size, workArea);
+              if (point) wander.target = point;
+              else resetWander(wallClock + pauseDuration(profile));
+            }
+          }
+
+          if ((wander.mode === "walking" || wander.mode === "approaching") && wander.target) {
+            wander.target.x = Math.min(bounds.maxX, Math.max(bounds.minX, wander.target.x));
+            if (wander.mode === "walking" && currentSettings.gravityEnabled) wander.target.y = bounds.groundY;
+            else wander.target.y = Math.min(bounds.maxY, Math.max(bounds.minY, wander.target.y));
             const dx = wander.target.x - position.x;
             const dy = wander.target.y - position.y;
             const distance = Math.hypot(dx, dy);
-            if (distance < 2.5) {
+            if (distance < 3) {
               await petWindow.setPosition(new PhysicalPosition(wander.target.x, wander.target.y));
-              wander.target = null;
-              wander.nextAt = Date.now() + 7000 + Math.random() * 9000;
-              changeReaction("idle");
+              if (wander.mode === "approaching") {
+                wander.mode = "docked";
+                wander.target = null;
+                wander.speed = 0;
+                wander.dockUntil = wallClock + pauseDuration(profile);
+                wander.dockRefreshAt = 0;
+                changeReaction(Math.random() < profile.curiosity ? "review" : "waiting", true);
+              } else {
+                resetWander(wallClock + pauseDuration(profile));
+                changeReaction("idle");
+              }
             } else {
-              const step = Math.min(distance, elapsed * 0.11 * currentSettings.wanderSpeed);
+              wander.speed = advanceSpeed(
+                wander.speed,
+                distance,
+                elapsed / 1000,
+                currentSettings.wanderSpeed * profile.preferredSpeed,
+              );
+              const step = Math.min(distance, wander.speed * elapsed / 1000);
               position = new PhysicalPosition(
                 Math.round(position.x + dx / distance * step),
                 Math.round(position.y + dy / distance * step),
               );
               await petWindow.setPosition(position);
               setLook(null);
-              changeReaction(dx >= 0 ? "run-right" : "run-left");
+              changeReaction(Math.abs(dy) > Math.abs(dx) * 1.25 ? "jumping" : dx >= 0 ? "run-right" : "run-left");
             }
           }
         } else {
-          wander.target = null;
-          if (reactionRef.current === "run-left" || reactionRef.current === "run-right") changeReaction("idle");
+          if (!userReactionActive) {
+            const shouldFall = wander.mode === "docked" && currentSettings.gravityEnabled;
+            resetWander();
+            if (reactionRef.current === "run-left" || reactionRef.current === "run-right" || reactionRef.current === "jumping") {
+              changeReaction("idle");
+            }
+            if (shouldFall) {
+              void settleWithGravity();
+              return;
+            }
+          }
         }
 
-        if (!wander.target && currentSettings.lookAtCursor && reactionRef.current === "idle" && now - lastLookAt >= 96) {
+        if (wander.mode === "idle" && currentSettings.lookAtCursor && reactionRef.current === "idle" && now - lastLookAt >= 96) {
           lastLookAt = now;
           const cursor = await cursorPosition();
           const petHeight = CELL_HEIGHT * currentSettings.scale * window.devicePixelRatio;
@@ -279,7 +438,7 @@ export function PetView() {
             lastLook = -1;
             setLook(null);
           }
-        } else if ((wander.target || reactionRef.current !== "idle") && lastLook !== -1) {
+        } else if ((wander.mode !== "idle" || reactionRef.current !== "idle") && lastLook !== -1) {
           lastLook = -1;
           setLook(null);
         }
@@ -314,14 +473,28 @@ export function PetView() {
 
     try {
       const petWindow = getCurrentWindow();
-      const [position, size, monitor] = await Promise.all([
+      const [position, size] = await Promise.all([
         petWindow.outerPosition(),
         petWindow.outerSize(),
-        currentMonitor(),
       ]);
-      if (!monitor) return;
+      let workArea: WorkArea;
+      try {
+        workArea = await desktop.getWorkAreaAt(
+          Math.round(position.x + size.width / 2),
+          Math.round(position.y + size.height / 2),
+        );
+      } catch {
+        const monitor = await currentMonitor();
+        if (!monitor) return;
+        workArea = {
+          x: monitor.position.x,
+          y: monitor.position.y,
+          width: monitor.size.width,
+          height: monitor.size.height,
+        };
+      }
 
-      const groundY = monitor.position.y + monitor.size.height - size.height - GROUND_CLEARANCE;
+      const groundY = workArea.y + workArea.height - size.height;
       if (position.y >= groundY - 1) {
         await petWindow.setPosition(new PhysicalPosition(position.x, groundY));
         return;
@@ -355,7 +528,10 @@ export function PetView() {
 
   async function beginDrag(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
-    if (reactionTimer.current) window.clearTimeout(reactionTimer.current);
+    if (reactionTimer.current) {
+      window.clearTimeout(reactionTimer.current);
+      reactionTimer.current = null;
+    }
     motionRef.current.fallToken += 1;
     motionRef.current.falling = false;
     motionRef.current.dragging = true;

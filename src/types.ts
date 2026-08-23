@@ -11,6 +11,7 @@ export interface AppSettings {
   wanderProbability: number;
   wanderSpeed: number;
   gravityEnabled: boolean;
+  windowDocking: boolean;
 }
 
 export type SettingsPatch = Partial<AppSettings>;

@@ -38,7 +38,13 @@ fn persist_and_apply(app: &AppHandle, state: &State<'_, AppState>, next: Setting
 #[tauri::command]
 pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<Settings, String> {
     let mut value = snapshot(&state)?;
-    if let Ok(enabled) = app.autolaunch().is_enabled() { value.launch_at_login = enabled; }
+    if let Ok(enabled) = app.autolaunch().is_enabled() {
+        if value.launch_at_login != enabled {
+            value.launch_at_login = enabled;
+            settings::save(&app, &value)?;
+            *state.settings.lock().map_err(|_| "settings lock is poisoned")? = value.clone();
+        }
+    }
     Ok(value)
 }
 
@@ -56,10 +62,24 @@ pub fn get_dashboard(app: AppHandle, state: State<'_, AppState>) -> Result<Dashb
 #[tauri::command]
 pub fn update_settings(app: AppHandle, state: State<'_, AppState>, patch: SettingsPatch) -> Result<Settings, String> {
     let mut next = snapshot(&state)?;
-    let previous_autostart = next.launch_at_login;
+    let requested_autostart = patch.launch_at_login;
     next.apply(patch)?;
-    if next.launch_at_login != previous_autostart {
-        if next.launch_at_login { app.autolaunch().enable() } else { app.autolaunch().disable() }.map_err(|error| error.to_string())?;
+    if let Some(enabled) = requested_autostart {
+        if enabled {
+            // Always rewrite the entry so a stale setting or changed install path is repaired.
+            app.autolaunch().enable().map_err(|error| error.to_string())?;
+        } else if app.autolaunch().is_enabled().map_err(|error| error.to_string())? {
+            app.autolaunch().disable().map_err(|error| error.to_string())?;
+        }
+        let actual = app.autolaunch().is_enabled().map_err(|error| error.to_string())?;
+        if actual != enabled {
+            return Err(if enabled {
+                "Windows 启动项写入后未生效，请检查系统的启动应用设置。".into()
+            } else {
+                "Windows 启动项未能关闭。".into()
+            });
+        }
+        next.launch_at_login = actual;
     }
     persist_and_apply(&app, &state, next)
 }

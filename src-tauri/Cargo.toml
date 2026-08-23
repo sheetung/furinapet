@@ -1,6 +1,6 @@
 [package]
 name = "furina-desktop-pet"
-version = "1.0.7"
+version = "1.0.8"
 description = "Lightweight Furina desktop pet"
 authors = ["sheetung"]
 license = "MIT"
@@ -26,7 +26,14 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [profile.release]
 panic = "abort"

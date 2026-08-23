@@ -1,4 +1,5 @@
 import type { Reaction } from "../types";
+import { normalizeWanderProfile, type WanderProfile } from "../core/wander-controller";
 
 export interface CharacterManifest {
   id: string;
@@ -13,6 +14,7 @@ export interface CharacterManifest {
   rows: number;
   packageVersion?: string;
   lookDirectionOrder?: "clockwise" | "counterclockwise";
+  wanderProfile?: WanderProfile;
   reactionMessages?: Partial<Record<Reaction, string>>;
 }
 
@@ -127,6 +129,7 @@ function validateManifest(value: unknown, directoryId?: string): CharacterManife
     packageVersion: source.packageVersion ?? "1.0.0",
     lookDirectionOrder: source.lookDirectionOrder
       ?? (LEGACY_COUNTERCLOCKWISE_LOOK_IDS.has(source.id) ? "counterclockwise" : "clockwise"),
+    wanderProfile: normalizeWanderProfile(source.wanderProfile),
     reactionMessages,
   };
 }

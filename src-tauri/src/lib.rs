@@ -3,6 +3,7 @@ mod pet;
 mod settings;
 mod tray;
 mod updater;
+mod window_surfaces;
 
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -46,6 +47,8 @@ pub fn run() {
             commands::toggle_pet,
             commands::reset_pet_position,
             commands::wait_for_drag_release,
+            window_surfaces::get_work_area_at,
+            window_surfaces::list_dock_surfaces,
             commands::trigger_reaction,
             commands::show_control_center,
             commands::quit_app,
