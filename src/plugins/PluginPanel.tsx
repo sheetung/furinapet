@@ -1,3 +1,4 @@
+import { emit } from "@tauri-apps/api/event";
 import { useMemo, useState } from "react";
 import { pluginManager } from "./manager";
 
@@ -12,6 +13,9 @@ export function PluginPanel() {
     setBusyId(id);
     try {
       await pluginManager.setEnabled(id, enabled);
+      if ("__TAURI_INTERNALS__" in window) {
+        await emit("plugins-changed", { id, enabled });
+      }
     } finally {
       setBusyId(null);
       setRevision((value) => value + 1);
