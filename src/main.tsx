@@ -4,7 +4,7 @@ import { App } from "./App";
 import { PetView } from "./PetView";
 import { bootstrapPlugins } from "./plugins";
 import { installPetDomBridge } from "./plugins/dom-bridge";
-import { PluginPanel } from "./plugins/PluginPanel";
+import { PluginNavigation } from "./plugins/PluginNavigation";
 import "./styles.css";
 
 const params = new URLSearchParams(window.location.search);
@@ -24,7 +24,7 @@ createRoot(document.getElementById("root")!).render(
     ) : (
       <>
         <App />
-        <PluginPanel />
+        <PluginNavigation />
       </>
     )}
   </StrictMode>,
