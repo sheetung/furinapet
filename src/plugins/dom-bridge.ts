@@ -1,7 +1,7 @@
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { desktop } from "../api";
 
-const TAP_MOVE_THRESHOLD = 6;
+const TAP_MOVE_THRESHOLD = 8;
 const DOUBLE_TAP_WINDOW_MS = 360;
 
 /**
@@ -67,7 +67,15 @@ export function installPetDomBridge(): () => void {
     if (disposed || event.button !== 0) return;
 
     const token = ++gestureToken;
-    const startPointer = { x: event.screenX, y: event.screenY };
+    const scale = Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
+      ? window.devicePixelRatio
+      : 1;
+    // MouseEvent screen coordinates are CSS/logical pixels in WebView2 while
+    // Tauri cursorPosition() returns physical pixels.
+    const startPointer = {
+      x: event.screenX * scale,
+      y: event.screenY * scale,
+    };
     const petWindow = getCurrentWindow();
 
     void (async () => {
@@ -76,7 +84,7 @@ export function installPetDomBridge(): () => void {
         const position = await petWindow.outerPosition();
         startWindow = { x: position.x, y: position.y };
       } catch {
-        // Pointer displacement alone is still enough to classify the gesture.
+        // Pointer displacement alone can still classify the gesture.
       }
 
       try {
@@ -88,8 +96,8 @@ export function installPetDomBridge(): () => void {
 
       if (disposed || token !== gestureToken) return;
 
-      let pointerDistance = Number.POSITIVE_INFINITY;
-      let windowDistance = 0;
+      let pointerDistance: number | null = null;
+      let windowDistance: number | null = null;
 
       try {
         const endPointer = await cursorPosition();
@@ -113,8 +121,14 @@ export function installPetDomBridge(): () => void {
         }
       }
 
-      const moved = Math.max(pointerDistance, windowDistance);
-      if (Number.isFinite(moved) && moved <= TAP_MOVE_THRESHOLD) {
+      const distances = [pointerDistance, windowDistance]
+        .filter((value): value is number => value !== null && Number.isFinite(value));
+      if (distances.length === 0) return;
+
+      // Prefer the pointer measurement. Window displacement is only a fallback:
+      // gravity may move a floating pet immediately after mouse release.
+      const moved = pointerDistance ?? windowDistance ?? Number.POSITIVE_INFINITY;
+      if (moved <= TAP_MOVE_THRESHOLD) {
         registerTap();
       }
     })();
