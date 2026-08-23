@@ -11,11 +11,13 @@ const params = new URLSearchParams(window.location.search);
 const isPetWindow = params.get("window") === "pet";
 if (isPetWindow) document.documentElement.classList.add("pet-window");
 
-void bootstrapPlugins().catch((error) => {
-  console.error("[plugins] bootstrap failed", error);
-});
-
-if (isPetWindow) installPetDomBridge();
+if (isPetWindow) {
+  installPetDomBridge();
+} else {
+  void bootstrapPlugins().catch((error) => {
+    console.error("[plugins] bootstrap failed", error);
+  });
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
