@@ -1,14 +1,21 @@
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { pluginEventBus } from "./event-bus";
 import { pluginManager } from "./manager";
 import { registerBuiltinPlugins } from "./registry";
 
-interface PluginChangedEvent {
-  id: string;
-  enabled: boolean;
+interface PluginPetInteraction {
+  type: "clicked" | "double-clicked";
+  x?: number;
+  y?: number;
 }
 
 let bootstrapped = false;
+
+function enabledPluginIds(): string[] {
+  return pluginManager.states()
+    .filter((state) => state.enabled)
+    .map((state) => state.id);
+}
 
 export async function bootstrapPlugins(): Promise<void> {
   if (bootstrapped) return;
@@ -17,10 +24,17 @@ export async function bootstrapPlugins(): Promise<void> {
   await pluginManager.activateEnabled();
 
   if ("__TAURI_INTERNALS__" in window) {
-    void listen<PluginChangedEvent>("plugin-state-changed", (event) => {
-      void pluginManager.setEnabled(event.payload.id, event.payload.enabled).catch((error) => {
-        console.error(`[plugin:${event.payload.id}] sync failed`, error);
-      });
+    void listen<PluginPetInteraction>("plugin-pet-interaction", (event) => {
+      const payload = event.payload;
+      if (payload.type === "clicked") {
+        pluginEventBus.emit("pet:clicked", { x: payload.x, y: payload.y });
+      } else if (payload.type === "double-clicked") {
+        pluginEventBus.emit("pet:double-clicked", { x: payload.x, y: payload.y });
+      }
+    });
+
+    void listen("plugin-state-request", () => {
+      void emit("plugin-state-snapshot", { enabled: enabledPluginIds() });
     });
   }
 
