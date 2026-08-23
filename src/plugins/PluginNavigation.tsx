@@ -122,6 +122,21 @@ export function PluginNavigation() {
     }
   }
 
+  async function testPlugin(id: string) {
+    setBusyId(`test:${id}`);
+    try {
+      if (id === "click-reaction") {
+        const handled = await desktop.publishPetEvent("pet:clicked");
+        if (!handled) throw new Error("插件 Host 未接管测试事件");
+      }
+      setError("");
+    } catch (nextError) {
+      setError(`插件测试失败：${String(nextError)}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!active || !host) return null;
 
   return createPortal(
@@ -147,12 +162,30 @@ export function PluginNavigation() {
               <p>{plugin.description}</p>
               <small style={{ opacity: .6 }}>v{plugin.version} · API v{plugin.apiVersion}{plugin.active ? " · 运行中" : ""}</small>
             </div>
-            <div className="setting-control">
+            <div className="setting-control" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {plugin.id === "click-reaction" && (
+                <button
+                  type="button"
+                  disabled={!plugin.enabled || busyId !== null}
+                  onClick={() => void testPlugin(plugin.id)}
+                  style={{
+                    border: "1px solid rgba(118, 196, 255, .24)",
+                    borderRadius: 8,
+                    background: "rgba(44, 133, 210, .10)",
+                    color: "inherit",
+                    padding: "6px 12px",
+                    cursor: plugin.enabled && busyId === null ? "pointer" : "default",
+                    opacity: plugin.enabled ? 1 : .45,
+                  }}
+                >
+                  测试
+                </button>
+              )}
               <button
                 type="button"
                 role="switch"
                 aria-checked={plugin.enabled}
-                disabled={busyId === plugin.id}
+                disabled={busyId !== null}
                 className={`switch ${plugin.enabled ? "on" : ""}`}
                 onClick={() => void toggle(plugin.id, !plugin.enabled)}
               >
