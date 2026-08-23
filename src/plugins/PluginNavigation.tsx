@@ -1,16 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { emitTo } from "@tauri-apps/api/event";
-import { pluginManager } from "./manager";
+import { desktop, type PluginSnapshot } from "../api";
 
 export function PluginNavigation() {
   const [active, setActive] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
+  const [plugins, setPlugins] = useState<PluginSnapshot[]>([]);
+  const [error, setError] = useState("");
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const navButtonRef = useRef<HTMLButtonElement | null>(null);
-  const plugins = useMemo(() => pluginManager.list(), [revision]);
-  const states = pluginManager.states();
 
   useEffect(() => {
     let disposed = false;
@@ -49,9 +47,8 @@ export function PluginNavigation() {
   }, []);
 
   useEffect(() => {
-    const button = navButtonRef.current;
-    if (!button) return;
-    button.classList.toggle("active", active);
+    navButtonRef.current?.classList.toggle("active", active);
+    if (active) void refreshPlugins();
   }, [active]);
 
   useEffect(() => {
@@ -78,16 +75,24 @@ export function PluginNavigation() {
     };
   }, [active]);
 
+  async function refreshPlugins() {
+    try {
+      setPlugins(await desktop.listPlugins());
+      setError("");
+    } catch (nextError) {
+      setError(`插件状态读取失败：${String(nextError)}`);
+    }
+  }
+
   async function toggle(id: string, enabled: boolean) {
     setBusyId(id);
     try {
-      await pluginManager.setEnabled(id, enabled);
-      if ("__TAURI_INTERNALS__" in window) {
-        await emitTo("pet", "plugin-state-changed", { id, enabled });
-      }
+      setPlugins(await desktop.setPluginEnabled(id, enabled));
+      setError("");
+    } catch (nextError) {
+      setError(`插件状态保存失败：${String(nextError)}`);
     } finally {
       setBusyId(null);
-      setRevision((value) => value + 1);
     }
   }
 
@@ -106,33 +111,30 @@ export function PluginNavigation() {
         <small>{plugins.length} 个插件</small>
       </div>
 
+      {error && <div className="card" style={{ marginBottom: 14 }}><p style={{ margin: 0 }}>{error}</p></div>}
+
       <div className="settings-list">
-        {plugins.map((plugin) => {
-          const state = states.find((item) => item.id === plugin.manifest.id);
-          const enabled = state?.enabled ?? false;
-          return (
-            <div className="setting-row" key={plugin.manifest.id}>
-              <div>
-                <strong>{plugin.manifest.name}</strong>
-                <p>{plugin.manifest.description ?? plugin.manifest.id}</p>
-                <small style={{ opacity: .6 }}>v{plugin.manifest.version} · API v{plugin.manifest.apiVersion}{state?.active ? " · 运行中" : ""}</small>
-                {state?.error && <small style={{ display: "block", marginTop: 6, color: "#d95c5c" }}>{state.error}</small>}
-              </div>
-              <div className="setting-control">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={enabled}
-                  disabled={busyId === plugin.manifest.id}
-                  className={`switch ${enabled ? "on" : ""}`}
-                  onClick={() => void toggle(plugin.manifest.id, !enabled)}
-                >
-                  <span />
-                </button>
-              </div>
+        {plugins.map((plugin) => (
+          <div className="setting-row" key={plugin.id}>
+            <div>
+              <strong>{plugin.name}</strong>
+              <p>{plugin.description}</p>
+              <small style={{ opacity: .6 }}>v{plugin.version} · API v{plugin.apiVersion}{plugin.active ? " · 运行中" : ""}</small>
             </div>
-          );
-        })}
+            <div className="setting-control">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={plugin.enabled}
+                disabled={busyId === plugin.id}
+                className={`switch ${plugin.enabled ? "on" : ""}`}
+                onClick={() => void toggle(plugin.id, !plugin.enabled)}
+              >
+                <span />
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </section>,
     host,
