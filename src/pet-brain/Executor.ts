@@ -6,7 +6,13 @@ export interface ExecutorSnapshot {
   running: boolean;
   planId: string | null;
   goal: PetActionPlan["goal"] | null;
+  score: number;
   actionIndex: number;
+}
+
+export interface RunPlanOptions {
+  force?: boolean;
+  interruptMargin?: number;
 }
 
 export class PetActionExecutor {
@@ -15,7 +21,16 @@ export class PetActionExecutor {
   private actionIndex = -1;
   private generation = 0;
 
-  async run(plan: PetActionPlan, handler: PetActionHandler) {
+  async run(plan: PetActionPlan, handler: PetActionHandler, options: RunPlanOptions = {}) {
+    const interruptMargin = Math.max(0, Math.min(0.5, options.interruptMargin ?? 0.08));
+    if (
+      this.plan
+      && !options.force
+      && plan.score + interruptMargin < this.plan.score
+    ) {
+      return false;
+    }
+
     this.interrupt();
     const generation = ++this.generation;
     const controller = new AbortController();
@@ -35,6 +50,7 @@ export class PetActionExecutor {
         this.actionIndex = -1;
       }
     }
+    return true;
   }
 
   interrupt() {
@@ -50,6 +66,7 @@ export class PetActionExecutor {
       running: this.plan !== null,
       planId: this.plan?.id ?? null,
       goal: this.plan?.goal ?? null,
+      score: this.plan?.score ?? 0,
       actionIndex: this.actionIndex,
     };
   }
