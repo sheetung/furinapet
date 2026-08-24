@@ -28,9 +28,7 @@ pub async fn request_suggestion(
     let user_context = serde_json::to_string(context)
         .map_err(|_| "failed to serialize AI behavior context".to_string())?;
     let body = json!({
-        "model": settings.model,
-        "temperature": 0.2,
-        "max_tokens": 120,
+        "model": settings.model.clone(),
         "messages": [
             { "role": "system", "content": SYSTEM_PROMPT },
             { "role": "user", "content": user_context }
