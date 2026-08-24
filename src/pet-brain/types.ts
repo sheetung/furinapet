@@ -20,6 +20,31 @@ export type BrainAgentState =
 
 export type BrainIntentSource = "system" | "user" | "agent" | "plugin" | "ai";
 
+export type PetSenseName = "pet:clicked" | "pet:doubleClicked" | "pet:dragStart" | "pet:dragEnd";
+
+export interface PetSenseEventDetail {
+  name: PetSenseName;
+  at: number;
+  handledByPlugin: boolean;
+}
+
+export interface BrainAgentStateEvent {
+  state: BrainAgentState;
+  sessionId?: string;
+  agent?: string;
+  clientName?: string;
+  project?: string;
+  at?: number;
+}
+
+export interface BrainIntentEvent {
+  source: BrainIntentSource;
+  goal: PetGoalId;
+  priority?: number;
+  ttlMs?: number;
+  id?: string;
+}
+
 export interface BrainContext {
   now: number;
   autoWander: boolean;
