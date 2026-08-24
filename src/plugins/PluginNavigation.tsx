@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import {
   desktop,
   type PluginConfigField,
@@ -9,80 +8,16 @@ import {
 import { PLUGINS_CHANGED_EVENT } from "./runtime";
 
 export function PluginNavigation() {
-  const [active, setActive] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [plugins, setPlugins] = useState<PluginSnapshot[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [config, setConfig] = useState<PluginConfigSnapshot | null>(null);
   const [configValues, setConfigValues] = useState<Record<string, unknown>>({});
-  const navButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    let disposed = false;
-    let observer: MutationObserver | null = null;
-
-    const mountNavigation = () => {
-      if (disposed || navButtonRef.current) return;
-      const nav = document.querySelector<HTMLDivElement>(".sidebar nav");
-      const settingsButton = Array.from(nav?.querySelectorAll<HTMLButtonElement>("button") ?? [])
-        .find((button) => button.textContent?.includes("设置"));
-      if (!nav || !settingsButton) return;
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.innerHTML = "<span>♧</span>插件";
-      button.addEventListener("click", () => setActive(true));
-      nav.insertBefore(button, settingsButton);
-      navButtonRef.current = button;
-
-      Array.from(nav.querySelectorAll<HTMLButtonElement>("button")).forEach((item) => {
-        if (item === button) return;
-        item.addEventListener("click", () => setActive(false));
-      });
-    };
-
-    mountNavigation();
-    observer = new MutationObserver(mountNavigation);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      disposed = true;
-      observer?.disconnect();
-      navButtonRef.current?.remove();
-      navButtonRef.current = null;
-    };
+    void refreshPlugins();
   }, []);
-
-  useEffect(() => {
-    navButtonRef.current?.classList.toggle("active", active);
-    if (active) void refreshPlugins();
-  }, [active]);
-
-  useEffect(() => {
-    const content = document.querySelector<HTMLElement>("main.content");
-    if (!active || !content) {
-      setHost(null);
-      return;
-    }
-
-    const existingChildren = Array.from(content.children) as HTMLElement[];
-    const previousDisplays = existingChildren.map((element) => element.style.display);
-    existingChildren.forEach((element) => { element.style.display = "none"; });
-
-    const pageHost = document.createElement("div");
-    pageHost.style.display = "contents";
-    content.appendChild(pageHost);
-    setHost(pageHost);
-
-    return () => {
-      pageHost.remove();
-      existingChildren.forEach((element, index) => {
-        element.style.display = previousDisplays[index];
-      });
-    };
-  }, [active]);
 
   async function refreshPlugins() {
     setLoading(true);
@@ -196,8 +131,6 @@ export function PluginNavigation() {
     setConfigValues((current) => ({ ...current, [key]: value }));
   }
 
-  if (!active || !host) return null;
-
   const installed = plugins.filter((plugin) => plugin.installed);
   const available = plugins.filter((plugin) => !plugin.installed);
 
@@ -217,7 +150,7 @@ export function PluginNavigation() {
     background: "rgba(198, 63, 63, .08)",
   };
 
-  return createPortal(
+  return (
     <section className="page">
       <div className="page-header">
         <span>Extensions</span>
@@ -345,7 +278,6 @@ export function PluginNavigation() {
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
         <button type="button" disabled={loading || busyId !== null} style={actionButtonStyle} onClick={() => void refreshPlugins()}>刷新插件目录</button>
       </div>
-    </section>,
-    host,
+    </section>
   );
 }
