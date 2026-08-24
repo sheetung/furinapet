@@ -33,7 +33,7 @@ impl Default for Settings {
             dock_weight: 0.45,
             wander_speed: 1.0,
             gravity_enabled: true,
-            window_docking: true,
+            window_docking: false,
         }
     }
 }
@@ -56,6 +56,12 @@ pub struct SettingsPatch {
 }
 
 impl Settings {
+    fn enforce_motion_mode(&mut self) {
+        if self.gravity_enabled && self.window_docking {
+            self.window_docking = false;
+        }
+    }
+
     pub fn apply(&mut self, patch: SettingsPatch) -> Result<(), String> {
         if let Some(value) = patch.selected_character_id {
             let valid = !value.is_empty()
@@ -74,8 +80,14 @@ impl Settings {
         if let Some(value) = patch.launch_at_login { self.launch_at_login = value; }
         if let Some(value) = patch.look_at_cursor { self.look_at_cursor = value; }
         if let Some(value) = patch.autonomous_movement { self.autonomous_movement = value; }
-        if let Some(value) = patch.gravity_enabled { self.gravity_enabled = value; }
-        if let Some(value) = patch.window_docking { self.window_docking = value; }
+        if let Some(value) = patch.gravity_enabled {
+            self.gravity_enabled = value;
+            if value { self.window_docking = false; }
+        }
+        if let Some(value) = patch.window_docking {
+            self.window_docking = value;
+            if value { self.gravity_enabled = false; }
+        }
         if let Some(value) = patch.scale {
             if !(0.65..=1.5).contains(&value) { return Err("scale must be between 0.65 and 1.5".into()); }
             self.scale = (value * 20.0).round() / 20.0;
@@ -92,6 +104,7 @@ impl Settings {
             if !(0.0..=1.0).contains(&value) { return Err("dockWeight must be between 0 and 1".into()); }
             self.dock_weight = (value * 20.0).round() / 20.0;
         }
+        self.enforce_motion_mode();
         Ok(())
     }
 }
@@ -110,7 +123,12 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 pub fn load(app: &AppHandle) -> Settings {
     let Ok(path) = settings_path(app) else { return Settings::default(); };
-    fs::read_to_string(path).ok().and_then(|content| serde_json::from_str(&content).ok()).unwrap_or_default()
+    let mut value = fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_default();
+    value.enforce_motion_mode();
+    value
 }
 
 pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
