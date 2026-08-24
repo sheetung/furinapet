@@ -14,7 +14,6 @@ import {
   advanceSpeed,
   chooseDockPlacement,
   chooseWanderTarget,
-  effectiveWanderProbability,
   nextDecisionDelay,
   pauseDuration,
   type DockEdge,
@@ -24,6 +23,8 @@ import {
   type WindowSurface,
   type WorkArea,
 } from "./core/wander-controller";
+import { PetBrain } from "./pet-brain";
+import { planWanderGoal } from "./pet-brain/adapters/wander";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
 import "./pet.css";
 
@@ -94,6 +95,8 @@ export function PetView() {
   const layoutQueue = useRef<Promise<void>>(Promise.resolve());
   const bubbleExpandedRef = useRef(false);
   const bubbleClampRef = useRef(0);
+  const brainRef = useRef<PetBrain | null>(null);
+  if (!brainRef.current) brainRef.current = new PetBrain();
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -253,6 +256,7 @@ export function PetView() {
     let lastLook = -1;
     let lastLookAt = 0;
     let lastTick = performance.now();
+    let lastAutonomousActionAt = Date.now();
 
     const resetWander = (nextAt = Date.now() + 1500) => {
       wander.mode = "idle";
@@ -365,13 +369,22 @@ export function PetView() {
 
           if (wander.mode === "idle" && wallClock >= wander.nextAt) {
             wander.nextAt = wallClock + nextDecisionDelay(profile);
-            const probability = effectiveWanderProbability(
-              currentSettings.wanderProbability * (0.7 + profile.activity * 0.3),
-              wander.missedOpportunities,
-            );
-            if (Math.random() <= probability) {
+            const brain = brainRef.current!;
+            const goal = planWanderGoal(brain, {
+              now: wallClock,
+              autoWander: currentSettings.autoWander,
+              canMove: isLocomotionState,
+              canDock: currentSettings.windowDocking,
+              userReactionActive,
+              idleForMs: wallClock - lastAutonomousActionAt,
+              wanderProbability: currentSettings.wanderProbability,
+              missedOpportunities: wander.missedOpportunities,
+              profile,
+            });
+
+            if (goal === "wander" || goal === "dock") {
               wander.missedOpportunities = 0;
-              if (currentSettings.windowDocking && Math.random() <= profile.windowDockChance) {
+              if (goal === "dock" && currentSettings.windowDocking) {
                 const candidates = (await desktop.listDockSurfaces())
                   .map((surface) => ({
                     surface,
@@ -396,11 +409,13 @@ export function PetView() {
                   wander.dockSurfaceId = candidate.surface.id;
                   wander.dockEdge = candidate.placement.edge;
                   wander.dockRatio = candidate.ratio;
+                  lastAutonomousActionAt = wallClock;
                 }
               }
               if (wander.mode === "idle") {
                 wander.mode = "walking";
                 wander.target = chooseWanderTarget(position, bounds, currentSettings.gravityEnabled, profile);
+                lastAutonomousActionAt = wallClock;
               }
             } else {
               wander.missedOpportunities += 1;
@@ -592,6 +607,8 @@ export function PetView() {
       window.clearTimeout(reactionTimer.current);
       reactionTimer.current = null;
     }
+    brainRef.current?.interrupt();
+    brainRef.current?.observeUserInteraction(Date.now());
     motionRef.current.fallToken += 1;
     motionRef.current.falling = false;
     motionRef.current.dragging = true;
