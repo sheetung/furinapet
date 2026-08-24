@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 pub const AGENT_PROTOCOL_VERSION: u32 = 1;
 const SESSION_TTL_MS: u64 = 15_000;
+const ACTIVITY_TTL_MS: u64 = 20_000;
 const AGENT_REACTION_TTL_MS: u64 = 12_000;
 const MAX_BRIDGE_LINE_BYTES: usize = 64 * 1024;
 const CONFIG_DIR_NAME: &str = "dev.furinapet.desktop";
@@ -38,6 +39,7 @@ struct AgentSession {
     agent: String,
     project: Option<String>,
     state: String,
+    state_updated_ms: u64,
     last_seen_ms: u64,
 }
 
@@ -211,24 +213,32 @@ fn session_start(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let host = app.state::<AgentHostState>();
     {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
-        let previous_state = sessions.get(&session_id).map(|session| session.state.clone()).unwrap_or_else(|| "idle".into());
-        sessions.insert(session_id.clone(), AgentSession { session_id: session_id.clone(), agent, project, state: previous_state, last_seen_ms: now });
+        let previous = sessions.get(&session_id).cloned();
+        let state = previous.as_ref().map(|session| session.state.clone()).unwrap_or_else(|| "idle".into());
+        let state_updated_ms = previous.as_ref().map(|session| session.state_updated_ms).unwrap_or(now);
+        sessions.insert(session_id.clone(), AgentSession {
+            session_id: session_id.clone(),
+            agent,
+            project,
+            state,
+            state_updated_ms,
+            last_seen_ms: now,
+        });
     }
-    Ok(json!({ "sessionId": session_id, "ttlMs": SESSION_TTL_MS }))
+    Ok(json!({ "sessionId": session_id, "ttlMs": SESSION_TTL_MS, "activityTtlMs": ACTIVITY_TTL_MS }))
 }
 
 fn session_heartbeat(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let session_id = required_string(params, "sessionId", 96)?;
     let host = app.state::<AgentHostState>();
-    let refreshed = {
+    {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
         let Some(session) = sessions.get_mut(&session_id) else { return Err("agent session is unavailable".into()); };
         session.last_seen_ms = now_ms();
-        session.clone()
-    };
-    let active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?.clone();
-    if active.as_deref() == Some(session_id.as_str()) { emit_session_state(app, &refreshed)?; }
-    Ok(json!({ "sessionId": session_id, "ttlMs": SESSION_TTL_MS }))
+    }
+    // A transport heartbeat only means the MCP client is connected. It must never
+    // replay or extend a working reaction such as thinking/editing/testing.
+    Ok(json!({ "sessionId": session_id, "ttlMs": SESSION_TTL_MS, "activityTtlMs": ACTIVITY_TTL_MS }))
 }
 
 fn session_state(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -240,17 +250,30 @@ fn session_state(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let session = {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
         let entry = sessions.entry(session_id.clone()).or_insert_with(|| AgentSession {
-            session_id: session_id.clone(), agent: optional_agent(params).unwrap_or_else(|| "mcp".into()), project: optional_project(params), state: "idle".into(), last_seen_ms: now,
+            session_id: session_id.clone(),
+            agent: optional_agent(params).unwrap_or_else(|| "mcp".into()),
+            project: optional_project(params),
+            state: "idle".into(),
+            state_updated_ms: now,
+            last_seen_ms: now,
         });
         if let Some(agent) = optional_agent(params) { entry.agent = agent; }
         if let Some(project) = optional_project(params) { entry.project = Some(project); }
         entry.state = state.clone();
+        entry.state_updated_ms = now;
         entry.last_seen_ms = now;
         entry.clone()
     };
     *host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")? = Some(session_id.clone());
     emit_agent_reaction(app, reaction, None, AGENT_REACTION_TTL_MS)?;
-    Ok(json!({ "sessionId": session_id, "state": state, "reaction": reaction, "agent": session.agent, "project": session.project }))
+    Ok(json!({
+        "sessionId": session_id,
+        "state": state,
+        "reaction": reaction,
+        "agent": session.agent,
+        "project": session.project,
+        "activityTtlMs": ACTIVITY_TTL_MS
+    }))
 }
 
 fn session_end(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -294,24 +317,54 @@ fn pet_say(app: &AppHandle, params: &Value) -> Result<Value, String> {
 
 fn cleanup_stale_sessions(app: &AppHandle) -> Result<(), String> {
     let host = app.state::<AgentHostState>();
-    let cutoff = now_ms().saturating_sub(SESSION_TTL_MS);
-    let mut active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?;
-    let (active_still_exists, next_active) = {
+    let now = now_ms();
+    let session_cutoff = now.saturating_sub(SESSION_TTL_MS);
+    let activity_cutoff = now.saturating_sub(ACTIVITY_TTL_MS);
+
+    let active_id = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?.clone();
+    let (active_exists, active_activity_expired, next_active) = {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
-        sessions.retain(|_, session| session.last_seen_ms >= cutoff);
-        let active_exists = active.as_ref().map(|id| sessions.contains_key(id)).unwrap_or(false);
+        sessions.retain(|_, session| session.last_seen_ms >= session_cutoff);
+
+        let mut expired_active = false;
+        for session in sessions.values_mut() {
+            if session.state != "idle" && session.state_updated_ms < activity_cutoff {
+                if active_id.as_deref() == Some(session.session_id.as_str()) {
+                    expired_active = true;
+                }
+                session.state = "idle".into();
+                session.state_updated_ms = now;
+            }
+        }
+
+        let active_exists = active_id.as_ref().map(|id| sessions.contains_key(id)).unwrap_or(false);
         let next = sessions.values().max_by_key(|session| session.last_seen_ms).cloned();
-        (active_exists, next)
+        (active_exists, expired_active, next)
     };
-    if active_still_exists { return Ok(()); }
-    *active = next_active.as_ref().map(|session| session.session_id.clone());
-    drop(active);
-    if let Some(session) = next_active { emit_session_state(app, &session)?; } else { emit_agent_reaction(app, "idle", None, 200)?; }
+
+    if active_exists {
+        if active_activity_expired {
+            emit_agent_reaction(app, "idle", None, 200)?;
+        }
+        return Ok(());
+    }
+
+    {
+        let mut active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?;
+        *active = next_active.as_ref().map(|session| session.session_id.clone());
+    }
+
+    if let Some(session) = next_active {
+        emit_session_state(app, &session)?;
+    } else {
+        emit_agent_reaction(app, "idle", None, 200)?;
+    }
     Ok(())
 }
 
 fn emit_session_state(app: &AppHandle, session: &AgentSession) -> Result<(), String> {
-    let reaction = reaction_for_agent_state(&session.state).unwrap_or("idle");
+    let state = effective_session_state(session, now_ms());
+    let reaction = reaction_for_agent_state(state).unwrap_or("idle");
     emit_agent_reaction(app, reaction, None, AGENT_REACTION_TTL_MS)
 }
 
@@ -324,7 +377,8 @@ pub fn snapshot(state: &State<'_, AgentHostState>) -> Result<AgentStatusSnapshot
     let active_id = state.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?.clone();
     let sessions = state.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
     let active = active_id.as_ref().and_then(|id| sessions.get(id));
-    let agent_state = active.map(|session| session.state.as_str()).unwrap_or("idle");
+    let now = now_ms();
+    let agent_state = active.map(|session| effective_session_state(session, now)).unwrap_or("idle");
     Ok(AgentStatusSnapshot {
         app_running: true,
         protocol_version: AGENT_PROTOCOL_VERSION,
@@ -342,7 +396,22 @@ pub fn get_agent_status(state: State<'_, AgentHostState>) -> Result<AgentStatusS
 
 pub fn reaction_for_agent_state(state: &str) -> Option<&'static str> {
     match state {
-        "idle" => Some("idle"), "thinking" => Some("review"), "editing" => Some("running"), "testing" => Some("running"), "waiting" => Some("waiting"), "success" => Some("jumping"), "error" => Some("failed"), _ => None,
+        "idle" => Some("idle"),
+        "thinking" => Some("review"),
+        "editing" => Some("running"),
+        "testing" => Some("running"),
+        "waiting" => Some("waiting"),
+        "success" => Some("jumping"),
+        "error" => Some("failed"),
+        _ => None,
+    }
+}
+
+fn effective_session_state(session: &AgentSession, now: u64) -> &str {
+    if session.state != "idle" && now.saturating_sub(session.state_updated_ms) >= ACTIVITY_TTL_MS {
+        "idle"
+    } else {
+        session.state.as_str()
     }
 }
 
