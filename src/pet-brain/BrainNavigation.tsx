@@ -321,7 +321,7 @@ export function BrainNavigation() {
         {behaviorSettings && (
           <div className="brain-fields">
             <div className="brain-field">
-              <label><strong>自主移动</strong><small>允许 Pet Brain 主动选择漫步或窗口探索。</small></label>
+              <label><strong>自主移动</strong><small>允许 Pet Brain 主动选择当前运动模式下可用的行为。</small></label>
               <button
                 className={`brain-switch ${behaviorSettings.autonomousMovement ? "on" : ""}`}
                 role="switch"
@@ -348,7 +348,7 @@ export function BrainNavigation() {
               </div>
             </div>
             <div className="brain-field">
-              <label><strong>窗口探索倾向</strong><small>{behaviorSettings.windowDocking ? "独立影响 dock Goal 的 Utility 权重。" : "宠物页的“窗口停靠”已关闭，因此当前不会参与规划。"}</small></label>
+              <label><strong>窗口探索倾向</strong><small>{behaviorSettings.gravityEnabled ? "重力落地开启时窗口停靠会自动关闭，因此该权重不参与规划。" : behaviorSettings.windowDocking ? "独立影响 dock Goal 的 Utility 权重。" : "宠物页的“窗口停靠”已关闭，因此当前不会参与规划。"}</small></label>
               <div className="brain-range-control">
                 <input
                   className="brain-range"
@@ -357,7 +357,7 @@ export function BrainNavigation() {
                   max="1"
                   step="0.05"
                   value={behaviorSettings.dockWeight}
-                  disabled={behaviorBusy || !behaviorSettings.windowDocking}
+                  disabled={behaviorBusy || behaviorSettings.gravityEnabled || !behaviorSettings.windowDocking}
                   onChange={(event) => setBehaviorSettings((current) => current ? { ...current, dockWeight: Number(event.target.value) } : current)}
                   onPointerUp={(event) => void updateBehaviorSettings({ dockWeight: Number(event.currentTarget.value) })}
                 />
@@ -366,7 +366,7 @@ export function BrainNavigation() {
             </div>
           </div>
         )}
-        <div className="brain-note">权重只改变 Planner 的行为倾向。重力落地开启时，普通漫步严格锁定在地面水平轴；窗口停靠仍可进行二维接近。</div>
+        <div className="brain-note">重力落地与窗口停靠互斥：重力模式使用 Windows 工作区底边（任务栏上沿）作为唯一地面，普通漫步只沿 X 轴；开启窗口停靠会自动关闭重力，才允许二维接近窗口。</div>
       </div>
 
       <div className="brain-card">
