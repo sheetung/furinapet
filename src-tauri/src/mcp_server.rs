@@ -83,11 +83,16 @@ impl BridgeClient {
         }
     }
 
-    fn start_session(&self, agent: &str) {
+    fn start_session(&self, agent: &str, client_name: &str, client_version: Option<&str>) {
         let mut params = json!({
             "sessionId": self.session_id.as_str(),
-            "agent": sanitize_agent_name(agent),
+            "agent": agent,
+            "clientName": sanitize_client_label(client_name),
+            "integration": "mcp",
         });
+        if let Some(version) = client_version.and_then(sanitize_client_version) {
+            params["clientVersion"] = Value::String(version);
+        }
         if let Some(project) = &self.project {
             params["project"] = Value::String(project.clone());
         }
@@ -111,7 +116,7 @@ impl BridgeClient {
 
 pub fn run() -> Result<(), String> {
     let client = BridgeClient::new();
-    client.start_session("mcp");
+    client.start_session("mcp", "MCP Client", None);
 
     let heartbeat_client = client.clone();
     let _ = thread::Builder::new()
@@ -213,17 +218,21 @@ fn handle_jsonrpc_request(request: &Value, client: &BridgeClient) -> Option<Valu
                 .get("protocolVersion")
                 .and_then(Value::as_str)
                 .unwrap_or("2025-06-18");
-            let client_name = params
-                .get("clientInfo")
+            let client_info = params.get("clientInfo");
+            let client_name = client_info
                 .and_then(|value| value.get("name"))
                 .and_then(Value::as_str)
-                .unwrap_or("mcp");
-            client.start_session(client_name);
+                .unwrap_or("MCP Client");
+            let client_version = client_info
+                .and_then(|value| value.get("version"))
+                .and_then(Value::as_str);
+            let agent = sanitize_agent_name(client_name);
+            client.start_session(&agent, client_name, client_version);
             Ok(json!({
                 "protocolVersion": requested_protocol,
                 "capabilities": { "tools": { "listChanged": false } },
                 "serverInfo": { "name": "furinapet", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": "Control the user's local FurinaPet companion. Use furinapet_status first. Agent state must be categorical only. Never send prompts, source code, logs, secrets, URLs, or file paths to pet speech."
+                "instructions": "FurinaPet is the user's local desktop companion. Use furinapet_status first. Keep lifecycle state categorical: thinking when planning, editing while modifying files, testing while running checks, waiting when user input or permission is required, success when the task finishes, and error when it fails. Do not send prompts, source code, logs, secrets, URLs, or file paths to pet speech. Connection metadata is local-only and must not be treated as user identity."
             }))
         }
         "ping" => Ok(json!({})),
@@ -247,14 +256,14 @@ fn tool_definitions() -> Vec<Value> {
         json!({
             "name": "furinapet_status",
             "title": "FurinaPet Status",
-            "description": "Check whether the local FurinaPet desktop app is reachable and inspect the active agent state.",
+            "description": "Check whether the local FurinaPet desktop app is reachable and inspect connected agent sessions and active state.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
             "annotations": { "readOnlyHint": true, "idempotentHint": true }
         }),
         json!({
             "name": "furinapet_set_state",
             "title": "FurinaPet Agent State",
-            "description": "Set a categorical coding-agent state on FurinaPet. Use only lifecycle state, never prompt or tool contents.",
+            "description": "Set a categorical coding-agent lifecycle state on FurinaPet. Use only lifecycle state, never prompt or tool contents.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -463,9 +472,42 @@ fn sanitize_agent_name(value: &str) -> String {
         "cursor".into()
     } else if normalized.contains("opencode") {
         "opencode".into()
+    } else if normalized.contains("trae") {
+        "trae".into()
+    } else if normalized.contains("codex") {
+        "codex".into()
     } else if normalized.is_empty() {
         "mcp".into()
     } else {
         normalized
+    }
+}
+
+fn sanitize_client_label(value: &str) -> String {
+    let trimmed = value.trim();
+    let safe: String = trimmed
+        .chars()
+        .filter(|ch| !matches!(ch, '\n' | '\r' | '/' | '\\'))
+        .take(80)
+        .collect();
+    if safe.is_empty() {
+        "MCP Client".into()
+    } else {
+        safe
+    }
+}
+
+fn sanitize_client_version(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.chars().count() > 40
+        || trimmed.contains('\n')
+        || trimmed.contains('\r')
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+    {
+        None
+    } else {
+        Some(trimmed.into())
     }
 }
