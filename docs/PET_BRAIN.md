@@ -27,9 +27,11 @@ Pet Brain decides **what the character should do**. Existing motion/rendering co
 - `Planner.ts` — Utility AI scoring and contextual weighted selection.
 - `Executor.ts` — interruptible action-plan execution and priority arbitration.
 - `runtime.ts` — pet-window bridge for senses, Agent state and external intents.
+- `ai-runtime.ts` — event-triggered AI suggestion bridge with server-side cooldown.
 - `adapters/wander.ts` — maps existing wander settings/profile into Brain context.
 - `adapters/reaction.ts` — maps semantic actions onto currently available animation assets.
 - `adapters/ai.ts` — validates and caps untrusted AI suggestions.
+- `src-tauri/src/ai/` — OpenAI-compatible Provider, settings, request validation and secure credentials.
 
 ## Goals
 
@@ -98,9 +100,43 @@ AI output is treated as an untrusted suggestion:
 
 `adapters/ai.ts` validates the goal, clamps TTL and caps resulting priority at `0.82`. AI does not receive a direct animation/action primitive in this layer.
 
+### AI Suggestion Service v1
+
+The first Provider implementation is OpenAI-compatible chat completions. It runs in Rust rather than the WebView.
+
+```text
+Pet Brain snapshot
+      ↓ sanitize
+Abstract behavior context
+      ↓ Tauri command
+Rust AI Suggestion Service
+      ↓ OpenAI-compatible HTTPS/local HTTP
+Provider JSON suggestion
+      ↓ validate again
+AI Brain Intent (priority <= 0.82)
+      ↓
+Utility Planner
+```
+
+The Provider only receives these abstract fields:
+
+- current semantic Goal, mood and energy;
+- up to six recent Goals;
+- categorical Agent state and whether an Agent is connected;
+- user idle duration, recent-interaction boolean and click streak;
+- whether autonomous wander and window docking are available.
+
+It does **not** receive prompts, source code, terminal output, tool output, file paths, MCP payloads or account identity.
+
+Requests are event-triggered by Agent lifecycle changes and by sustained idle checks. A Rust-side cooldown prevents burst requests even if several triggers occur close together. Provider failure does not disable or block the local planner.
+
+Provider configuration is stored separately from the normal desktop settings. On Windows, the API key is stored as a generic credential in Windows Credential Manager and is never returned to the WebView; the UI only sees `hasApiKey`.
+
+Remote HTTP endpoints are rejected; remote Providers must use HTTPS. Plain HTTP is accepted only for localhost so local OpenAI-compatible servers can run without TLS.
+
 ## Debugging
 
-The pet window publishes `furinapet:brain-snapshot` after autonomous decisions. A snapshot contains current goal, mood, energy, click streak, recent decision history, pending intents and executor state. This event is the basis for a later Control Center debug/behavior page.
+The pet window publishes `furinapet:brain-snapshot` after autonomous decisions. A snapshot contains current goal, mood, energy, click streak, recent decision history, pending intents and executor state. This event is the basis for the Control Center autonomy page and later detailed behavior diagnostics.
 
 ## Migration plan
 
@@ -109,7 +145,8 @@ The pet window publishes `furinapet:brain-snapshot` after autonomous decisions. 
 3. Priority-aware action execution — implemented for semantic reaction plans.
 4. User click senses — routed through Brain when not consumed by a legacy plugin; official click plugin migration is prepared separately.
 5. Agent lifecycle — routed into Brain; explicit MCP react/say remain direct.
-6. Brain snapshot contract — implemented; Control Center visualization remains follow-up work.
-7. AI intent adapter — implemented; no external model is enabled by default.
+6. Brain snapshot contract — implemented; richer Control Center visualization remains follow-up work.
+7. AI intent adapter — implemented.
+8. AI Suggestion Service v1 — implemented with OpenAI-compatible Provider, secure Windows key storage, event/cooldown triggering and a Control Center autonomy page.
 
-The feature branch remains isolated until Windows CI and real desktop behavior are verified.
+The feature branch remains isolated until Windows CI and real desktop AI behavior are verified.
