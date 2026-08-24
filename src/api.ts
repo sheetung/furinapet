@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { WorkArea, WindowSurface } from "./core/wander-controller";
+import type { BrainIntentSource, PetGoalId } from "./pet-brain";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
 const releasesUrl = "https://github.com/sheetung/furinapet/releases";
@@ -118,6 +119,17 @@ export const desktop = {
   getWorkAreaAt: (x: number, y: number) => invoke<WorkArea>("get_work_area_at", { x, y }),
   listDockSurfaces: () => invoke<WindowSurface[]>("list_dock_surfaces"),
   react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message }),
+  submitBrainIntent: (
+    source: BrainIntentSource,
+    goal: PetGoalId,
+    options: { priority?: number; ttlMs?: number; id?: string } = {},
+  ) => invoke<void>("submit_pet_brain_intent", {
+    source,
+    goal,
+    priority: options.priority,
+    ttlMs: options.ttlMs,
+    id: options.id,
+  }),
 
   getAgentStatus: () => invoke<AgentStatusSnapshot>("get_agent_status"),
   getMcpServerConfig: () => invoke<McpServerConfigPreview>("get_mcp_server_config"),
