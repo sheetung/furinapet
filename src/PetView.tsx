@@ -92,6 +92,8 @@ export function PetView() {
   const charactersRef = useRef(characters);
   const motionRef = useRef<MotionState>({ dragging: false, falling: false, fallToken: 0 });
   const layoutQueue = useRef<Promise<void>>(Promise.resolve());
+  const bubbleExpandedRef = useRef(false);
+  const bubbleClampRef = useRef(0);
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -124,10 +126,44 @@ export function PetView() {
       const targetWidth = Math.round(CELL_WIDTH * scale * factor);
       const targetHeight = Math.round((CELL_HEIGHT * scale + (expanded ? BUBBLE_SPACE : 0)) * factor);
       const heightDelta = targetHeight - size.height;
+      let targetY = position.y - heightDelta;
+
+      if (expanded && !bubbleExpandedRef.current) {
+        let workArea: WorkArea | null = null;
+        try {
+          workArea = await desktop.getWorkAreaAt(
+            Math.round(position.x + size.width / 2),
+            Math.round(position.y + size.height / 2),
+          );
+        } catch {
+          const monitor = await currentMonitor();
+          if (monitor) {
+            workArea = {
+              x: monitor.position.x,
+              y: monitor.position.y,
+              width: monitor.size.width,
+              height: monitor.size.height,
+            };
+          }
+        }
+
+        if (workArea) {
+          const clampedY = Math.max(workArea.y, targetY);
+          bubbleClampRef.current = clampedY - targetY;
+          targetY = clampedY;
+        } else {
+          bubbleClampRef.current = 0;
+        }
+        bubbleExpandedRef.current = true;
+      } else if (!expanded && bubbleExpandedRef.current) {
+        targetY -= bubbleClampRef.current;
+        bubbleClampRef.current = 0;
+        bubbleExpandedRef.current = false;
+      }
 
       await Promise.all([
         petWindow.setSize(new PhysicalSize(targetWidth, targetHeight)),
-        petWindow.setPosition(new PhysicalPosition(position.x, position.y - heightDelta)),
+        petWindow.setPosition(new PhysicalPosition(position.x, targetY)),
       ]);
     }).catch(() => {
       // The pet window may be hidden or closing while a reaction ends.
