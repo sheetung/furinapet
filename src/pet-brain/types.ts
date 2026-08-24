@@ -78,6 +78,12 @@ export type PetSemanticAction =
   | { type: "rest"; durationMs: number }
   | { type: "wait"; durationMs: number };
 
+export interface GoalScore {
+  goal: PetGoalId;
+  score: number;
+  reason: string;
+}
+
 export interface PetActionPlan {
   id: string;
   goal: PetGoalId;
@@ -85,12 +91,7 @@ export interface PetActionPlan {
   reason: string;
   createdAt: number;
   actions: PetSemanticAction[];
-}
-
-export interface GoalScore {
-  goal: PetGoalId;
-  score: number;
-  reason: string;
+  candidates: GoalScore[];
 }
 
 export interface BrainHistoryEntry {
@@ -98,14 +99,50 @@ export interface BrainHistoryEntry {
   at: number;
 }
 
+export interface PetDecisionTrace {
+  planId: string;
+  at: number;
+  goal: PetGoalId;
+  score: number;
+  reason: string;
+  candidates: GoalScore[];
+  actions: PetSemanticAction[];
+}
+
+export type AiSuggestionTraceStatus = "pending" | "accepted" | "rejected";
+
+export interface AiSuggestionTrace {
+  id: string;
+  at: number;
+  goal: PetGoalId;
+  confidence: number;
+  ttlMs: number;
+  expiresAt: number;
+  status: AiSuggestionTraceStatus;
+  decidedAt?: number;
+  reason: string;
+}
+
+export interface BrainExecutorSnapshot {
+  running: boolean;
+  planId: string | null;
+  goal: PetGoalId | null;
+  score: number;
+  actionIndex: number;
+}
+
 export interface PetBrainSnapshot {
   currentGoal: PetGoalId;
   mood: PetMood;
   energy: number;
+  agentState: BrainAgentState;
   clickStreak: number;
   lastUserInteractionAt: number | null;
   lastAgentActivityAt: number | null;
   lastDecisionAt: number | null;
   pendingIntentCount: number;
   history: BrainHistoryEntry[];
+  lastDecision: PetDecisionTrace | null;
+  aiSuggestions: AiSuggestionTrace[];
+  executor?: BrainExecutorSnapshot;
 }

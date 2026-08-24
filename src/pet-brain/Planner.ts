@@ -108,6 +108,7 @@ export class PetUtilityPlanner {
       reason: selected.reason,
       createdAt: context.now,
       actions,
+      candidates: scores.map((item) => ({ ...item })),
     };
   }
 

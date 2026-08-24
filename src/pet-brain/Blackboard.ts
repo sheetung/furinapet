@@ -1,13 +1,16 @@
 import type {
+  AiSuggestionTrace,
   BrainAgentState,
   BrainHistoryEntry,
   BrainIntent,
+  PetActionPlan,
   PetBrainSnapshot,
   PetGoalId,
   PetMood,
 } from "./types";
 
 const HISTORY_LIMIT = 12;
+const AI_TRACE_LIMIT = 8;
 const CLICK_STREAK_WINDOW_MS = 1800;
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
@@ -25,6 +28,8 @@ export class PetBlackboard {
   private agentState: BrainAgentState = "idle";
   private history: BrainHistoryEntry[] = [];
   private intents: BrainIntent[] = [];
+  private lastDecision: PetBrainSnapshot["lastDecision"] = null;
+  private aiSuggestions: AiSuggestionTrace[] = [];
 
   observeUserClick(now: number) {
     this.clickStreak = this.lastClickAt !== null && now - this.lastClickAt <= CLICK_STREAK_WINDOW_MS
@@ -56,12 +61,42 @@ export class PetBlackboard {
   }
 
   getActiveIntents(now: number) {
+    const expiredIds = new Set(this.intents.filter((intent) => intent.expiresAt <= now).map((intent) => intent.id));
     this.intents = this.intents.filter((intent) => intent.expiresAt > now);
+    if (expiredIds.size > 0) {
+      this.aiSuggestions = this.aiSuggestions.map((item) => (
+        item.status === "pending" && expiredIds.has(item.id)
+          ? { ...item, status: "rejected", decidedAt: now, reason: "TTL 到期前未被 Planner 选择" }
+          : item
+      ));
+    }
     return [...this.intents].sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);
   }
 
   consumeIntent(id: string) {
     this.intents = this.intents.filter((intent) => intent.id !== id);
+  }
+
+  recordAiSuggestion(id: string, goal: PetGoalId, confidence: number, ttlMs: number, now: number) {
+    const trace: AiSuggestionTrace = {
+      id,
+      at: now,
+      goal,
+      confidence: clamp01(confidence),
+      ttlMs,
+      expiresAt: now + ttlMs,
+      status: "pending",
+      reason: "等待 Utility Planner 决策",
+    };
+    this.aiSuggestions = [trace, ...this.aiSuggestions.filter((item) => item.id !== id)].slice(0, AI_TRACE_LIMIT);
+  }
+
+  markAiSuggestionAccepted(id: string, plan: PetActionPlan, now: number) {
+    this.aiSuggestions = this.aiSuggestions.map((item) => (
+      item.id === id
+        ? { ...item, status: "accepted", decidedAt: now, reason: `Planner 选择 ${plan.goal} · ${(plan.score * 100).toFixed(0)}%` }
+        : item
+    ));
   }
 
   tick(now: number, isBusy: boolean) {
@@ -79,15 +114,24 @@ export class PetBlackboard {
     this.refreshMood();
   }
 
-  recordDecision(goal: PetGoalId, now: number) {
-    this.currentGoal = goal;
-    this.lastDecisionAt = now;
-    this.history.unshift({ goal, at: now });
+  recordDecision(plan: PetActionPlan) {
+    this.currentGoal = plan.goal;
+    this.lastDecisionAt = plan.createdAt;
+    this.lastDecision = {
+      planId: plan.id,
+      at: plan.createdAt,
+      goal: plan.goal,
+      score: plan.score,
+      reason: plan.reason,
+      candidates: plan.candidates.map((item) => ({ ...item })),
+      actions: plan.actions.map((action) => ({ ...action })),
+    };
+    this.history.unshift({ goal: plan.goal, at: plan.createdAt });
     if (this.history.length > HISTORY_LIMIT) this.history.length = HISTORY_LIMIT;
 
-    if (goal === "wander" || goal === "dock") this.energy = clamp01(this.energy - 0.02);
-    if (goal === "celebrate") this.energy = clamp01(this.energy - 0.035);
-    if (goal === "rest") this.energy = clamp01(this.energy + 0.05);
+    if (plan.goal === "wander" || plan.goal === "dock") this.energy = clamp01(this.energy - 0.02);
+    if (plan.goal === "celebrate") this.energy = clamp01(this.energy - 0.035);
+    if (plan.goal === "rest") this.energy = clamp01(this.energy + 0.05);
     this.refreshMood();
   }
 
@@ -131,12 +175,19 @@ export class PetBlackboard {
       currentGoal: this.currentGoal,
       mood: this.mood,
       energy: this.energy,
+      agentState: this.agentState,
       clickStreak: this.clickStreak,
       lastUserInteractionAt: this.lastUserInteractionAt,
       lastAgentActivityAt: this.lastAgentActivityAt,
       lastDecisionAt: this.lastDecisionAt,
       pendingIntentCount: this.intents.length,
       history: [...this.history],
+      lastDecision: this.lastDecision ? {
+        ...this.lastDecision,
+        candidates: this.lastDecision.candidates.map((item) => ({ ...item })),
+        actions: this.lastDecision.actions.map((action) => ({ ...action })),
+      } : null,
+      aiSuggestions: this.aiSuggestions.map((item) => ({ ...item })),
     };
   }
 

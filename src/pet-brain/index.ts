@@ -66,6 +66,10 @@ export class PetBrain {
     this.blackboard.observeAgentState(state, now);
   }
 
+  recordAiSuggestion(id: string, goal: PetGoalId, confidence: number, ttlMs: number, now = Date.now()) {
+    this.blackboard.recordAiSuggestion(id, goal, confidence, ttlMs, now);
+  }
+
   submitIntent(
     source: BrainIntentSource,
     goal: PetGoalId,
@@ -90,9 +94,16 @@ export class PetBrain {
     this.blackboard.tick(context.now, context.userReactionActive || !context.canMove);
     const activeIntents = this.blackboard.getActiveIntents(context.now);
     const plan = this.planner.plan(context, this.blackboard);
-    const consumed = activeIntents.find((intent) => intent.goal === plan.goal);
-    if (consumed) this.blackboard.consumeIntent(consumed.id);
-    this.blackboard.recordDecision(plan.goal, context.now);
+
+    const matchingIntents = activeIntents.filter((intent) => intent.goal === plan.goal);
+    for (const intent of matchingIntents) {
+      this.blackboard.consumeIntent(intent.id);
+      if (intent.source === "ai") {
+        this.blackboard.markAiSuggestionAccepted(intent.id, plan, context.now);
+      }
+    }
+
+    this.blackboard.recordDecision(plan);
     return plan;
   }
 
@@ -104,7 +115,7 @@ export class PetBrain {
     this.executor.interrupt();
   }
 
-  snapshot(now = Date.now()): PetBrainSnapshot & { executor: ReturnType<PetActionExecutor["snapshot"]> } {
+  snapshot(now = Date.now()): PetBrainSnapshot {
     return {
       ...this.blackboard.snapshot(now),
       executor: this.executor.snapshot(),

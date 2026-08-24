@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { desktop } from "../api";
 import { PET_SENSE_EVENT } from "../plugins/dom-bridge";
 import { reactionForSemanticAction } from "./adapters/reaction";
@@ -15,6 +15,7 @@ import type {
 export const PET_BRAIN_AGENT_STATE_EVENT = "pet-brain-agent-state";
 export const PET_BRAIN_INTENT_EVENT = "pet-brain-intent";
 export const PET_BRAIN_SNAPSHOT_EVENT = "furinapet:brain-snapshot";
+export const PET_BRAIN_SNAPSHOT_REQUEST_EVENT = "furinapet:brain-snapshot-request";
 
 let bootstrapped = false;
 
@@ -36,16 +37,20 @@ function immediateContext(now: number, agentState: BrainAgentState): BrainContex
   };
 }
 
-function publishSnapshot() {
-  window.dispatchEvent(new CustomEvent(PET_BRAIN_SNAPSHOT_EVENT, {
-    detail: getPetBrain().snapshot(),
-  }));
+export function publishPetBrainSnapshot() {
+  const snapshot = getPetBrain().snapshot();
+  window.dispatchEvent(new CustomEvent(PET_BRAIN_SNAPSHOT_EVENT, { detail: snapshot }));
+  void emit(PET_BRAIN_SNAPSHOT_EVENT, snapshot).catch((error) => {
+    console.warn("[pet-brain] snapshot publish failed", error);
+  });
 }
 
 async function executeReactionPlan(plan: PetActionPlan, force = false) {
   const brain = getPetBrain();
   const agentState = brain.blackboard.getAgentState();
+  publishPetBrainSnapshot();
   await brain.execute(plan, async (action, signal) => {
+    publishPetBrainSnapshot();
     if (action.type === "wait") {
       await waitForAction(action.durationMs, signal);
       return;
@@ -57,7 +62,7 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
     await desktop.react(directive.reaction);
     await waitForAction(directive.durationMs, signal);
   }, { force });
-  publishSnapshot();
+  publishPetBrainSnapshot();
 }
 
 function handlePetSense(detail: PetSenseEventDetail) {
@@ -69,7 +74,7 @@ function handlePetSense(detail: PetSenseEventDetail) {
   }
 
   if (detail.handledByPlugin) {
-    publishSnapshot();
+    publishPetBrainSnapshot();
     return;
   }
 
@@ -108,7 +113,7 @@ function handleExternalIntent(payload: BrainIntentEvent) {
   // Locomotion is executed by PetView's movement loop. Keeping the intent on
   // the shared blackboard lets the next movement decision consume it safely.
   if (payload.goal === "wander" || payload.goal === "dock") {
-    publishSnapshot();
+    publishPetBrainSnapshot();
     return;
   }
 
@@ -134,5 +139,9 @@ export function bootstrapPetBrainRuntime() {
     handleExternalIntent(event.payload);
   }).catch((error) => console.error("[pet-brain] intent bridge failed", error));
 
-  publishSnapshot();
+  void listen(PET_BRAIN_SNAPSHOT_REQUEST_EVENT, () => {
+    publishPetBrainSnapshot();
+  }).catch((error) => console.error("[pet-brain] snapshot request bridge failed", error));
+
+  publishPetBrainSnapshot();
 }

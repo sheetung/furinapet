@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { desktop, type AiBehaviorContext } from "../api";
 import { normalizeAiBehaviorSuggestion } from "./adapters/ai";
 import { getPetBrain } from "./index";
-import { PET_BRAIN_AGENT_STATE_EVENT } from "./runtime";
+import { PET_BRAIN_AGENT_STATE_EVENT, publishPetBrainSnapshot } from "./runtime";
 import type { BrainAgentStateEvent } from "./types";
 
 const IDLE_CHECK_MS = 30_000;
@@ -60,10 +60,23 @@ async function requestSuggestion(reason: string) {
       console.warn("[pet-brain:ai] rejected provider suggestion");
       return;
     }
+
+    const now = Date.now();
+    const intentId = intent.id ?? `ai-${reason}-${now}`;
+    const ttlMs = intent.ttlMs ?? result.suggestion.ttlMs;
+    getPetBrain().recordAiSuggestion(
+      intentId,
+      intent.goal,
+      result.suggestion.confidence,
+      ttlMs,
+      now,
+    );
+    publishPetBrainSnapshot();
+
     await desktop.submitBrainIntent(intent.source, intent.goal, {
       priority: intent.priority,
-      ttlMs: intent.ttlMs,
-      id: intent.id ?? `ai-${reason}-${Date.now()}`,
+      ttlMs,
+      id: intentId,
     });
   } catch (error) {
     console.warn("[pet-brain:ai] suggestion failed", error);

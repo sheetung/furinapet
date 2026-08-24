@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { emit, listen } from "@tauri-apps/api/event";
 import { createPortal } from "react-dom";
 import { desktop, type AiBehaviorSuggestion, type AiSettingsSnapshot } from "../api";
 import type { AppSettings, SettingsPatch } from "../types";
+import {
+  PET_BRAIN_SNAPSHOT_EVENT,
+  PET_BRAIN_SNAPSHOT_REQUEST_EVENT,
+} from "./runtime";
+import type { AiSuggestionTrace, PetBrainSnapshot, PetSemanticAction } from "./types";
 
 type FormState = {
   enabled: boolean;
@@ -26,6 +32,7 @@ export function BrainNavigation() {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettingsSnapshot | null>(null);
   const [behaviorSettings, setBehaviorSettings] = useState<AppSettings | null>(null);
+  const [brainSnapshot, setBrainSnapshot] = useState<PetBrainSnapshot | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [busy, setBusy] = useState(false);
   const [behaviorBusy, setBehaviorBusy] = useState(false);
@@ -87,6 +94,33 @@ export function BrainNavigation() {
     navButtonRef.current?.classList.toggle("active", active);
     if (!active) return;
     void refresh();
+  }, [active]);
+
+  useEffect(() => {
+    if (!active || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let stopListening: (() => void) | null = null;
+
+    void listen<PetBrainSnapshot>(PET_BRAIN_SNAPSHOT_EVENT, (event) => {
+      if (!disposed) setBrainSnapshot(event.payload);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else stopListening = unlisten;
+    }).catch((error) => console.warn("[brain-inspector] snapshot listener failed", error));
+
+    const requestSnapshot = () => {
+      void emit(PET_BRAIN_SNAPSHOT_REQUEST_EVENT).catch((error) => {
+        console.warn("[brain-inspector] snapshot request failed", error);
+      });
+    };
+    requestSnapshot();
+    const timer = window.setInterval(requestSnapshot, 1000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      stopListening?.();
+    };
   }, [active]);
 
   useEffect(() => {
@@ -193,6 +227,10 @@ export function BrainNavigation() {
 
   if (!active || !host) return null;
 
+  const decision = brainSnapshot?.lastDecision ?? null;
+  const executor = brainSnapshot?.executor;
+  const topScore = decision?.candidates[0]?.score ?? 1;
+
   return createPortal(
     <section className="page brain-page">
       <style>{`
@@ -207,6 +245,7 @@ export function BrainNavigation() {
         .brain-kicker { color:#66d7e8; font-size:9px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
         .brain-badge { display:inline-flex; align-items:center; min-height:24px; padding:0 9px; border:1px solid #3b4960; border-radius:999px; color:#aebdd1; background:#273247; font-size:10px; font-weight:700; }
         .brain-badge.live { border-color:rgba(85,214,138,.28); background:rgba(49,153,101,.10); color:#80d9aa; }
+        .brain-badge.warn { border-color:rgba(255,196,104,.28); background:rgba(181,121,40,.10); color:#f2c879; }
         .brain-fields { display:grid; gap:10px; padding:16px 18px; }
         .brain-field { display:grid; grid-template-columns:190px minmax(0,1fr); align-items:center; gap:20px; min-height:48px; }
         .brain-field label strong { display:block; font-size:12px; }
@@ -228,7 +267,40 @@ export function BrainNavigation() {
         .brain-note { padding:13px 15px; margin:0 18px 18px; border:1px solid rgba(102,215,232,.16); border-radius:11px; background:rgba(47,105,126,.08); color:#91a7ba; font-size:11px; line-height:1.65; }
         .brain-result { padding:13px 15px; margin:0 18px 18px; border:1px solid rgba(85,214,138,.18); border-radius:11px; background:rgba(49,153,101,.08); color:#9bd9b8; font-size:11px; }
         .brain-danger { border-color:rgba(255,113,113,.24)!important; color:#ffb2b2!important; background:rgba(198,63,63,.06)!important; }
-        @media (max-width:820px) { .brain-field { grid-template-columns:1fr; gap:7px; } .brain-actions { align-items:flex-start; flex-direction:column; } }
+        .brain-inspector { padding:16px 18px 18px; }
+        .brain-live-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
+        .brain-live-stat { min-width:0; padding:11px; border:1px solid rgba(164,190,228,.10); border-radius:11px; background:rgba(15,22,36,.38); }
+        .brain-live-stat small { display:block; margin-bottom:5px; color:#71829a; font-size:9px; }
+        .brain-live-stat strong { display:block; overflow:hidden; color:#dcecff; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+        .brain-energy-track { height:5px; margin-top:7px; overflow:hidden; border-radius:99px; background:#283248; }
+        .brain-energy-track i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#65c2f2,#83e3c0); }
+        .brain-inspector-grid { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(250px,.9fr); gap:12px; margin-top:12px; }
+        .brain-panel { padding:13px; border:1px solid rgba(164,190,228,.10); border-radius:12px; background:rgba(15,22,36,.30); }
+        .brain-panel-title { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+        .brain-panel-title strong { font-size:11px; }
+        .brain-panel-title small { color:#71829a; font-size:9px; }
+        .brain-score-list { display:grid; gap:8px; }
+        .brain-score-row { display:grid; grid-template-columns:108px minmax(0,1fr) 40px; align-items:center; gap:8px; }
+        .brain-score-name { overflow:hidden; color:#9fb0c7; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+        .brain-score-name.winner { color:#91e1ff; font-weight:800; }
+        .brain-score-track { height:7px; overflow:hidden; border-radius:99px; background:#273146; }
+        .brain-score-track i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#598edd,#72d4e8); }
+        .brain-score-value { color:#9bc8ff; font-size:9px; font-variant-numeric:tabular-nums; text-align:right; }
+        .brain-decision-reason { margin:10px 0 0; color:#8294ad; font-size:10px; line-height:1.55; }
+        .brain-action-flow { display:flex; gap:6px; flex-wrap:wrap; }
+        .brain-action-chip { padding:5px 7px; border:1px solid rgba(102,215,232,.16); border-radius:8px; color:#a8c7d6; background:rgba(63,134,153,.08); font-size:9px; }
+        .brain-ai-traces { display:grid; gap:7px; margin-top:12px; }
+        .brain-ai-trace { display:grid; grid-template-columns:68px minmax(0,1fr) auto; align-items:center; gap:9px; padding:9px 10px; border:1px solid rgba(164,190,228,.09); border-radius:10px; background:rgba(15,22,36,.26); }
+        .brain-ai-trace time { color:#687991; font-size:9px; }
+        .brain-ai-trace div strong { display:block; font-size:10px; }
+        .brain-ai-trace div small { display:block; margin-top:3px; overflow:hidden; color:#7e8ea5; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+        .brain-ai-status { font-size:9px; font-weight:800; }
+        .brain-ai-status.accepted { color:#83dbab; }
+        .brain-ai-status.pending { color:#f0c878; }
+        .brain-ai-status.rejected { color:#a1adbf; }
+        .brain-empty { padding:18px 0; color:#71829a; font-size:10px; text-align:center; }
+        @media (max-width:980px) { .brain-live-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .brain-inspector-grid { grid-template-columns:1fr; } }
+        @media (max-width:820px) { .brain-field { grid-template-columns:1fr; gap:7px; } .brain-actions { align-items:flex-start; flex-direction:column; } .brain-live-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
       `}</style>
 
       <div className="brain-header">
@@ -294,7 +366,69 @@ export function BrainNavigation() {
             </div>
           </div>
         )}
-        <div className="brain-note">权重只改变 Planner 的行为倾向。即使漫步倾向设为 100%，用户互动、Agent 状态、能量、冷却和更高优先级 Intent 仍可让其他 Goal 胜出。</div>
+        <div className="brain-note">权重只改变 Planner 的行为倾向。重力落地开启时，普通漫步严格锁定在地面水平轴；窗口停靠仍可进行二维接近。</div>
+      </div>
+
+      <div className="brain-card">
+        <div className="brain-card-head">
+          <div>
+            <span className="brain-kicker">Decision Inspector</span>
+            <h3>自主决策实时面板</h3>
+            <p>直接读取宠物 WebView 中正在运行的 Pet Brain，而不是控制中心的副本。</p>
+          </div>
+          <span className={`brain-badge ${brainSnapshot ? "live" : "warn"}`}>{brainSnapshot ? "实时" : "等待桌宠"}</span>
+        </div>
+        <div className="brain-inspector">
+          {brainSnapshot ? (
+            <>
+              <div className="brain-live-grid">
+                <LiveStat label="当前 Goal" value={goalLabel(brainSnapshot.currentGoal)} />
+                <LiveStat label="Mood" value={moodLabel(brainSnapshot.mood)} />
+                <div className="brain-live-stat"><small>Energy</small><strong>{Math.round(brainSnapshot.energy * 100)}%</strong><div className="brain-energy-track"><i style={{ width: `${Math.round(brainSnapshot.energy * 100)}%` }} /></div></div>
+                <LiveStat label="Agent" value={agentStateLabel(brainSnapshot.agentState)} />
+                <LiveStat label="Executor" value={executor?.running ? `${goalLabel(executor.goal ?? "idle")} · #${executor.actionIndex + 1}` : "空闲"} />
+                <LiveStat label="Pending Intent" value={String(brainSnapshot.pendingIntentCount)} />
+              </div>
+
+              <div className="brain-inspector-grid">
+                <div className="brain-panel">
+                  <div className="brain-panel-title"><strong>Planner 评分</strong><small>{decision ? `${relativeTime(decision.at)}更新` : "暂无决策"}</small></div>
+                  {decision?.candidates.length ? (
+                    <div className="brain-score-list">
+                      {decision.candidates.map((candidate) => (
+                        <div className="brain-score-row" key={candidate.goal} title={candidate.reason}>
+                          <span className={`brain-score-name ${candidate.goal === decision.goal ? "winner" : ""}`}>{candidate.goal === decision.goal ? "● " : ""}{goalLabel(candidate.goal)}</span>
+                          <span className="brain-score-track"><i style={{ width: `${Math.round((candidate.score / Math.max(0.01, topScore)) * 100)}%` }} /></span>
+                          <span className="brain-score-value">{candidate.score.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className="brain-empty">等待下一次 Planner 决策…</div>}
+                  {decision && <p className="brain-decision-reason"><strong>胜出原因：</strong>{reasonLabel(decision.reason)}</p>}
+                </div>
+
+                <div className="brain-panel">
+                  <div className="brain-panel-title"><strong>当前动作计划</strong><small>{decision ? `${Math.round(decision.score * 100)}%` : "—"}</small></div>
+                  {decision?.actions.length ? (
+                    <div className="brain-action-flow">
+                      {decision.actions.map((action, index) => <span className="brain-action-chip" key={`${action.type}-${index}`}>{actionLabel(action)}</span>)}
+                    </div>
+                  ) : <div className="brain-empty">暂无动作计划</div>}
+                  {brainSnapshot.history.length > 0 && <p className="brain-decision-reason"><strong>最近 Goal：</strong>{brainSnapshot.history.slice(0, 5).map((item) => goalLabel(item.goal)).join(" → ")}</p>}
+                </div>
+              </div>
+
+              <div className="brain-panel" style={{ marginTop: 12 }}>
+                <div className="brain-panel-title"><strong>最近 AI 建议</strong><small>最多保留 8 条</small></div>
+                {brainSnapshot.aiSuggestions.length ? (
+                  <div className="brain-ai-traces">
+                    {brainSnapshot.aiSuggestions.map((trace) => <AiTraceRow key={trace.id} trace={trace} />)}
+                  </div>
+                ) : <div className="brain-empty">运行中的 AI Adviser 还没有产生建议。</div>}
+              </div>
+            </>
+          ) : <div className="brain-empty">正在请求宠物窗口的 Brain Snapshot…</div>}
+        </div>
       </div>
 
       <div className="brain-card">
@@ -361,6 +495,33 @@ export function BrainNavigation() {
   );
 }
 
+function LiveStat({ label, value }: { label: string; value: string }) {
+  return <div className="brain-live-stat"><small>{label}</small><strong title={value}>{value}</strong></div>;
+}
+
+function AiTraceRow({ trace }: { trace: AiSuggestionTrace }) {
+  return (
+    <div className="brain-ai-trace">
+      <time>{relativeTime(trace.at)}</time>
+      <div><strong>AI → {goalLabel(trace.goal)} · {Math.round(trace.confidence * 100)}%</strong><small title={trace.reason}>{trace.reason}</small></div>
+      <span className={`brain-ai-status ${trace.status}`}>{traceStatusLabel(trace.status)}</span>
+    </div>
+  );
+}
+
+function actionLabel(action: PetSemanticAction) {
+  switch (action.type) {
+    case "idle": return `idle${action.durationMs ? ` · ${action.durationMs}ms` : ""}`;
+    case "wander": return "wander";
+    case "dock": return "dock";
+    case "observe": return `observe · ${action.durationMs}ms`;
+    case "respond": return `respond · ${action.intensity}`;
+    case "celebrate": return `celebrate · ${action.intensity}`;
+    case "rest": return `rest · ${action.durationMs}ms`;
+    case "wait": return `wait · ${action.durationMs}ms`;
+  }
+}
+
 function goalLabel(goal: string) {
   switch (goal) {
     case "idle": return "空闲";
@@ -372,4 +533,61 @@ function goalLabel(goal: string) {
     case "rest": return "休息";
     default: return goal;
   }
+}
+
+function moodLabel(mood: string) {
+  switch (mood) {
+    case "happy": return "开心";
+    case "focused": return "专注";
+    case "tired": return "疲惫";
+    default: return "平常";
+  }
+}
+
+function agentStateLabel(state: string) {
+  switch (state) {
+    case "thinking": return "思考中";
+    case "editing": return "编辑中";
+    case "testing": return "测试中";
+    case "waiting": return "等待中";
+    case "success": return "成功";
+    case "error": return "错误";
+    default: return "空闲";
+  }
+}
+
+function traceStatusLabel(status: AiSuggestionTrace["status"]) {
+  switch (status) {
+    case "accepted": return "已采纳";
+    case "rejected": return "未采纳";
+    default: return "等待决策";
+  }
+}
+
+function reasonLabel(reason: string) {
+  return reason
+    .replace("baseline calm state", "基础平静状态")
+    .replace("recent user interaction", "最近有用户互动")
+    .replace("repeated user interaction", "连续用户互动")
+    .replace("agent error needs attention", "Agent 出错，需要关注")
+    .replace("agent inactive", "Agent 当前未工作")
+    .replace("agent completed work", "Agent 已完成任务")
+    .replace("high user engagement", "用户互动强度较高")
+    .replace("energy recovery", "恢复能量")
+    .replace("autonomous exploration tendency", "自主漫步倾向")
+    .replace("window exploration tendency", "窗口探索倾向")
+    .replace("system intent", "系统 Intent")
+    .replace("user intent", "用户 Intent")
+    .replace("agent intent", "Agent Intent")
+    .replace("plugin intent", "插件 Intent")
+    .replace("ai intent", "AI 建议 Intent");
+}
+
+function relativeTime(timestamp: number) {
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 2) return "刚刚";
+  if (seconds < 60) return `${seconds} 秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
