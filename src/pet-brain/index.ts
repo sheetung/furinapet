@@ -18,6 +18,28 @@ export { PetUtilityPlanner } from "./Planner";
 
 export interface PetBrainOptions {
   random?: () => number;
+  isolated?: boolean;
+}
+
+interface PetBrainCore {
+  blackboard: PetBlackboard;
+  planner: PetUtilityPlanner;
+  executor: PetActionExecutor;
+}
+
+let sharedCore: PetBrainCore | null = null;
+
+function createCore(random?: () => number): PetBrainCore {
+  return {
+    blackboard: new PetBlackboard(),
+    planner: new PetUtilityPlanner(random),
+    executor: new PetActionExecutor(),
+  };
+}
+
+function getSharedCore(random?: () => number) {
+  if (!sharedCore) sharedCore = createCore(random);
+  return sharedCore;
 }
 
 export class PetBrain {
@@ -26,9 +48,10 @@ export class PetBrain {
   readonly executor: PetActionExecutor;
 
   constructor(options: PetBrainOptions = {}) {
-    this.blackboard = new PetBlackboard();
-    this.planner = new PetUtilityPlanner(options.random);
-    this.executor = new PetActionExecutor();
+    const core = options.isolated ? createCore(options.random) : getSharedCore(options.random);
+    this.blackboard = core.blackboard;
+    this.planner = core.planner;
+    this.executor = core.executor;
   }
 
   observeUserClick(now = Date.now()) {
@@ -88,4 +111,8 @@ export class PetBrain {
       executor: this.executor.snapshot(),
     };
   }
+}
+
+export function getPetBrain() {
+  return new PetBrain();
 }
