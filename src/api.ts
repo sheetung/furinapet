@@ -57,15 +57,36 @@ export type PetPluginEventName = "pet:clicked" | "pet:doubleClicked" | "pet:drag
 
 export type AgentState = "idle" | "thinking" | "editing" | "testing" | "waiting" | "success" | "error";
 
+export interface AgentConnectionSnapshot {
+  sessionId: string;
+  agent: string;
+  clientName: string;
+  clientVersion?: string;
+  integration: "mcp" | "hooks" | "mcp+hooks" | "manual" | string;
+  project?: string;
+  state: AgentState;
+  working: boolean;
+  active: boolean;
+  connectedAtMs: number;
+  lastActivityMs: number;
+  lastSeenMs: number;
+}
+
 export interface AgentStatusSnapshot {
   appRunning: boolean;
   protocolVersion: number;
   state: AgentState;
   reaction: Reaction;
   agent?: string;
+  clientName?: string;
+  clientVersion?: string;
+  integration?: string;
   project?: string;
   sessionId?: string;
   sessionCount: number;
+  connectedCount: number;
+  workingCount: number;
+  sessions: AgentConnectionSnapshot[];
 }
 
 export type IntegrationStatus = "installed" | "not_installed" | "needs_update" | "error" | "unavailable";
