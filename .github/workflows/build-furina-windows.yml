@@ -109,6 +109,23 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Smoke test built-in MCP server
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "src-tauri/target/release/furina-desktop-pet.exe"
+          $initialize = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"furinapet-ci","version":"1"}}}'
+          $listTools = '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+          $responses = @($initialize, $listTools) | & $exe mcp
+          if ($LASTEXITCODE -ne 0) { throw "Built-in MCP process exited with $LASTEXITCODE." }
+          $parsed = @($responses | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
+          $init = @($parsed | Where-Object { $_.id -eq 1 })[0]
+          $tools = @($parsed | Where-Object { $_.id -eq 2 })[0]
+          if (-not $init.result.serverInfo -or $init.result.serverInfo.name -ne "furinapet") { throw "MCP initialize response is invalid." }
+          $names = @($tools.result.tools | ForEach-Object { $_.name })
+          foreach ($required in @("furinapet_status", "furinapet_set_state", "furinapet_react", "furinapet_say")) {
+            if ($required -notin $names) { throw "MCP tool missing: $required" }
+          }
+
       - name: Upload failed build log
         if: failure()
         uses: actions/upload-artifact@v4
