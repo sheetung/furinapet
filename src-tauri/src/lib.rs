@@ -1,3 +1,4 @@
+mod agent_commands;
 mod agent_host;
 mod claude_integration;
 mod commands;
@@ -70,6 +71,7 @@ pub fn run() {
             commands::show_control_center,
             commands::quit_app,
             agent_host::get_agent_status,
+            agent_commands::get_mcp_server_config,
             claude_integration::get_claude_integration_status,
             claude_integration::install_claude_integration,
             claude_integration::uninstall_claude_integration,
