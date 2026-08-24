@@ -57,6 +57,14 @@ impl Default for AgentHostState {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct AgentReactionPayload {
+    reaction: String,
+    message: Option<String>,
+    duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentStatusSnapshot {
     pub app_running: bool,
     pub protocol_version: u32,
@@ -66,14 +74,6 @@ pub struct AgentStatusSnapshot {
     pub project: Option<String>,
     pub session_id: Option<String>,
     pub session_count: usize,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AgentReactionPayload {
-    reaction: String,
-    message: Option<String>,
-    duration_ms: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,32 +167,15 @@ fn handle_connection(app: &AppHandle, mut stream: TcpStream, expected_token: &st
         return Ok(());
     }
     if line.len() > MAX_BRIDGE_LINE_BYTES {
-        return write_bridge_response(&mut stream, BridgeResponse {
-            ok: false,
-            result: None,
-            error: Some("request is too large".into()),
-        });
+        return write_bridge_response(&mut stream, BridgeResponse { ok: false, result: None, error: Some("request is too large".into()) });
     }
-
     let request: BridgeRequest = match serde_json::from_str(&line) {
         Ok(value) => value,
-        Err(_) => {
-            return write_bridge_response(&mut stream, BridgeResponse {
-                ok: false,
-                result: None,
-                error: Some("invalid request".into()),
-            });
-        }
+        Err(_) => return write_bridge_response(&mut stream, BridgeResponse { ok: false, result: None, error: Some("invalid request".into()) }),
     };
-
     if request.token != expected_token {
-        return write_bridge_response(&mut stream, BridgeResponse {
-            ok: false,
-            result: None,
-            error: Some("unauthorized".into()),
-        });
+        return write_bridge_response(&mut stream, BridgeResponse { ok: false, result: None, error: Some("unauthorized".into()) });
     }
-
     let response = match dispatch_bridge_request(app, &request.method, &request.params) {
         Ok(result) => BridgeResponse { ok: true, result: Some(result), error: None },
         Err(error) => BridgeResponse { ok: false, result: None, error: Some(sanitize_bridge_error(error)) },
@@ -229,13 +212,7 @@ fn session_start(app: &AppHandle, params: &Value) -> Result<Value, String> {
     {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
         let previous_state = sessions.get(&session_id).map(|session| session.state.clone()).unwrap_or_else(|| "idle".into());
-        sessions.insert(session_id.clone(), AgentSession {
-            session_id: session_id.clone(),
-            agent,
-            project,
-            state: previous_state,
-            last_seen_ms: now,
-        });
+        sessions.insert(session_id.clone(), AgentSession { session_id: session_id.clone(), agent, project, state: previous_state, last_seen_ms: now });
     }
     Ok(json!({ "sessionId": session_id, "ttlMs": SESSION_TTL_MS }))
 }
@@ -245,16 +222,12 @@ fn session_heartbeat(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let host = app.state::<AgentHostState>();
     let refreshed = {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
-        let Some(session) = sessions.get_mut(&session_id) else {
-            return Err("agent session is unavailable".into());
-        };
+        let Some(session) = sessions.get_mut(&session_id) else { return Err("agent session is unavailable".into()); };
         session.last_seen_ms = now_ms();
         session.clone()
     };
     let active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?.clone();
-    if active.as_deref() == Some(session_id.as_str()) {
-        emit_session_state(app, &refreshed)?;
-    }
+    if active.as_deref() == Some(session_id.as_str()) { emit_session_state(app, &refreshed)?; }
     Ok(json!({ "sessionId": session_id, "ttlMs": SESSION_TTL_MS }))
 }
 
@@ -267,31 +240,17 @@ fn session_state(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let session = {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
         let entry = sessions.entry(session_id.clone()).or_insert_with(|| AgentSession {
-            session_id: session_id.clone(),
-            agent: optional_agent(params).unwrap_or_else(|| "mcp".into()),
-            project: optional_project(params),
-            state: "idle".into(),
-            last_seen_ms: now,
+            session_id: session_id.clone(), agent: optional_agent(params).unwrap_or_else(|| "mcp".into()), project: optional_project(params), state: "idle".into(), last_seen_ms: now,
         });
-        if let Some(agent) = optional_agent(params) {
-            entry.agent = agent;
-        }
-        if let Some(project) = optional_project(params) {
-            entry.project = Some(project);
-        }
+        if let Some(agent) = optional_agent(params) { entry.agent = agent; }
+        if let Some(project) = optional_project(params) { entry.project = Some(project); }
         entry.state = state.clone();
         entry.last_seen_ms = now;
         entry.clone()
     };
     *host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")? = Some(session_id.clone());
     emit_agent_reaction(app, reaction, None, AGENT_REACTION_TTL_MS)?;
-    Ok(json!({
-        "sessionId": session_id,
-        "state": state,
-        "reaction": reaction,
-        "agent": session.agent,
-        "project": session.project,
-    }))
+    Ok(json!({ "sessionId": session_id, "state": state, "reaction": reaction, "agent": session.agent, "project": session.project }))
 }
 
 fn session_end(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -304,25 +263,17 @@ fn session_end(app: &AppHandle, params: &Value) -> Result<Value, String> {
     };
     let mut active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?;
     let was_active = active.as_deref() == Some(session_id.as_str());
-    if was_active {
-        *active = next_active.as_ref().map(|session| session.session_id.clone());
-    }
+    if was_active { *active = next_active.as_ref().map(|session| session.session_id.clone()); }
     drop(active);
     if was_active {
-        if let Some(session) = next_active {
-            emit_session_state(app, &session)?;
-        } else {
-            emit_agent_reaction(app, "idle", None, 200)?;
-        }
+        if let Some(session) = next_active { emit_session_state(app, &session)?; } else { emit_agent_reaction(app, "idle", None, 200)?; }
     }
     Ok(json!({ "sessionId": session_id, "ended": true }))
 }
 
 fn pet_react(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let reaction = required_string(params, "reaction", 24)?;
-    if !is_allowed_reaction(&reaction) {
-        return Err("unsupported reaction".into());
-    }
+    if !is_allowed_reaction(&reaction) { return Err("unsupported reaction".into()); }
     commands::trigger_reaction_inner(app, reaction.clone(), None)?;
     Ok(json!({ "reaction": reaction }))
 }
@@ -332,9 +283,7 @@ fn pet_say(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let message = validate_safe_message(&message)?;
     let requested_reaction = params.get("reaction").and_then(Value::as_str).map(str::to_owned);
     let reaction = if let Some(value) = requested_reaction {
-        if !is_allowed_reaction(&value) {
-            return Err("unsupported reaction".into());
-        }
+        if !is_allowed_reaction(&value) { return Err("unsupported reaction".into()); }
         value
     } else {
         snapshot(&app.state::<AgentHostState>())?.reaction
@@ -346,8 +295,6 @@ fn pet_say(app: &AppHandle, params: &Value) -> Result<Value, String> {
 fn cleanup_stale_sessions(app: &AppHandle) -> Result<(), String> {
     let host = app.state::<AgentHostState>();
     let cutoff = now_ms().saturating_sub(SESSION_TTL_MS);
-    // Active is always acquired before sessions whenever both locks are held.
-    // Other hot paths never hold both at the same time.
     let mut active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?;
     let (active_still_exists, next_active) = {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
@@ -356,16 +303,10 @@ fn cleanup_stale_sessions(app: &AppHandle) -> Result<(), String> {
         let next = sessions.values().max_by_key(|session| session.last_seen_ms).cloned();
         (active_exists, next)
     };
-    if active_still_exists {
-        return Ok(());
-    }
+    if active_still_exists { return Ok(()); }
     *active = next_active.as_ref().map(|session| session.session_id.clone());
     drop(active);
-    if let Some(session) = next_active {
-        emit_session_state(app, &session)?;
-    } else {
-        emit_agent_reaction(app, "idle", None, 200)?;
-    }
+    if let Some(session) = next_active { emit_session_state(app, &session)?; } else { emit_agent_reaction(app, "idle", None, 200)?; }
     Ok(())
 }
 
@@ -375,11 +316,7 @@ fn emit_session_state(app: &AppHandle, session: &AgentSession) -> Result<(), Str
 }
 
 fn emit_agent_reaction(app: &AppHandle, reaction: &str, message: Option<String>, duration_ms: u64) -> Result<(), String> {
-    let payload = AgentReactionPayload {
-        reaction: reaction.into(),
-        message,
-        duration_ms,
-    };
+    let payload = AgentReactionPayload { reaction: reaction.into(), message, duration_ms };
     app.emit_to("pet", "pet-reaction", payload).map_err(|error| error.to_string())
 }
 
@@ -401,20 +338,11 @@ pub fn snapshot(state: &State<'_, AgentHostState>) -> Result<AgentStatusSnapshot
 }
 
 #[tauri::command]
-pub fn get_agent_status(state: State<'_, AgentHostState>) -> Result<AgentStatusSnapshot, String> {
-    snapshot(&state)
-}
+pub fn get_agent_status(state: State<'_, AgentHostState>) -> Result<AgentStatusSnapshot, String> { snapshot(&state) }
 
 pub fn reaction_for_agent_state(state: &str) -> Option<&'static str> {
     match state {
-        "idle" => Some("idle"),
-        "thinking" => Some("review"),
-        "editing" => Some("running"),
-        "testing" => Some("running"),
-        "waiting" => Some("waiting"),
-        "success" => Some("jumping"),
-        "error" => Some("failed"),
-        _ => None,
+        "idle" => Some("idle"), "thinking" => Some("review"), "editing" => Some("running"), "testing" => Some("running"), "waiting" => Some("waiting"), "success" => Some("jumping"), "error" => Some("failed"), _ => None,
     }
 }
 
@@ -425,56 +353,35 @@ fn is_allowed_reaction(reaction: &str) -> bool {
 fn validate_safe_message(value: &str) -> Result<String, String> {
     let message = value.trim();
     let length = message.chars().count();
-    if length == 0 || length > 140 || message.contains('\n') || message.contains('\r') {
-        return Err("message must be a single line of 1 to 140 characters".into());
-    }
+    if length == 0 || length > 140 || message.contains('\n') || message.contains('\r') { return Err("message must be a single line of 1 to 140 characters".into()); }
     let lower = message.to_ascii_lowercase();
-    let unsafe_fragments = [
-        "```", "<script", "=>", "function ", "http://", "https://", "www.",
-        "api_key", "apikey", "password", "passwd", "private key", " secret", "token=",
-        ":\\", ":/", "\\\\", "/home/", "/users/",
-    ];
-    if unsafe_fragments.iter().any(|fragment| lower.contains(fragment)) {
-        return Err("message contains code, a URL, a path, or secret-like content".into());
-    }
+    let unsafe_fragments = ["```", "<script", "=>", "function ", "http://", "https://", "www.", "api_key", "apikey", "password", "passwd", "private key", " secret", "token=", ":\\", ":/", "\\\\", "/home/", "/users/"];
+    if unsafe_fragments.iter().any(|fragment| lower.contains(fragment)) { return Err("message contains code, a URL, a path, or secret-like content".into()); }
     Ok(message.into())
 }
 
 fn required_string(params: &Value, key: &str, max_chars: usize) -> Result<String, String> {
     let value = params.get(key).and_then(Value::as_str).ok_or_else(|| format!("{key} is required"))?.trim();
-    if value.is_empty() || value.chars().count() > max_chars {
-        return Err(format!("{key} is invalid"));
-    }
+    if value.is_empty() || value.chars().count() > max_chars { return Err(format!("{key} is invalid")); }
     Ok(value.into())
 }
 
 fn optional_agent(params: &Value) -> Option<String> {
     let value = params.get("agent")?.as_str()?.trim().to_ascii_lowercase();
-    if value.is_empty() || value.len() > 40 || !value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')) {
-        return None;
-    }
+    if value.is_empty() || value.len() > 40 || !value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')) { return None; }
     Some(value)
 }
 
 fn optional_project(params: &Value) -> Option<String> {
     let value = params.get("project")?.as_str()?.trim();
-    if value.is_empty() || value.chars().count() > 80 || value.contains('/') || value.contains('\\') || value.contains(':') {
-        return None;
-    }
+    if value.is_empty() || value.chars().count() > 80 || value.contains('/') || value.contains('\\') || value.contains(':') { return None; }
     Some(value.into())
 }
 
 fn sanitize_bridge_error(error: String) -> String {
-    if error.contains('/') || error.contains('\\') || error.to_ascii_lowercase().contains("token") {
-        "FurinaPet Agent Bridge rejected the request".into()
-    } else {
-        error.chars().take(160).collect()
-    }
+    if error.contains('/') || error.contains('\\') || error.to_ascii_lowercase().contains("token") { "FurinaPet Agent Bridge rejected the request".into() } else { error.chars().take(160).collect() }
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|duration| duration.as_millis() as u64).unwrap_or(0)
 }
