@@ -119,7 +119,7 @@ pub fn run() -> Result<(), String> {
         if line.len() > MAX_MCP_LINE_BYTES {
             continue;
         }
-        let request: Value = match serde_json::from_str(&line) {
+        let request: Value = match serde_json::from_str::<Value>(&line) {
             Ok(value) if value.is_object() => value,
             _ => continue,
         };
@@ -141,9 +141,6 @@ fn handle_jsonrpc_request(request: &Value, client: &BridgeClient) -> Option<Valu
     let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
 
     if id.is_none() {
-        if method == "notifications/initialized" {
-            return None;
-        }
         return None;
     }
     let id = id.unwrap_or(Value::Null);
@@ -159,13 +156,8 @@ fn handle_jsonrpc_request(request: &Value, client: &BridgeClient) -> Option<Valu
             client.start_session(client_name);
             Ok(json!({
                 "protocolVersion": requested_protocol,
-                "capabilities": {
-                    "tools": { "listChanged": false }
-                },
-                "serverInfo": {
-                    "name": "furinapet",
-                    "version": env!("CARGO_PKG_VERSION")
-                },
+                "capabilities": { "tools": { "listChanged": false } },
+                "serverInfo": { "name": "furinapet", "version": env!("CARGO_PKG_VERSION") },
                 "instructions": "Control the user's local FurinaPet companion. Use furinapet_status first. Agent state must be categorical only. Never send prompts, source code, logs, secrets, URLs, or file paths to pet speech."
             }))
         }
@@ -177,11 +169,7 @@ fn handle_jsonrpc_request(request: &Value, client: &BridgeClient) -> Option<Valu
 
     Some(match result {
         Ok(value) => json!({ "jsonrpc": "2.0", "id": id, "result": value }),
-        Err((code, message)) => json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": { "code": code, "message": message }
-        }),
+        Err((code, message)) => json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }),
     })
 }
 
@@ -200,12 +188,7 @@ fn tool_definitions() -> Vec<Value> {
             "description": "Set a categorical coding-agent state on FurinaPet. Use only lifecycle state, never prompt or tool contents.",
             "inputSchema": {
                 "type": "object",
-                "properties": {
-                    "state": {
-                        "type": "string",
-                        "enum": ["idle", "thinking", "editing", "testing", "waiting", "success", "error"]
-                    }
-                },
+                "properties": { "state": { "type": "string", "enum": ["idle", "thinking", "editing", "testing", "waiting", "success", "error"] } },
                 "required": ["state"],
                 "additionalProperties": false
             },
@@ -217,12 +200,7 @@ fn tool_definitions() -> Vec<Value> {
             "description": "Trigger a short local FurinaPet reaction.",
             "inputSchema": {
                 "type": "object",
-                "properties": {
-                    "reaction": {
-                        "type": "string",
-                        "enum": ["idle", "waving", "jumping", "failed", "waiting", "running", "review"]
-                    }
-                },
+                "properties": { "reaction": { "type": "string", "enum": ["idle", "waving", "jumping", "failed", "waiting", "running", "review"] } },
                 "required": ["reaction"],
                 "additionalProperties": false
             },
@@ -236,10 +214,7 @@ fn tool_definitions() -> Vec<Value> {
                 "type": "object",
                 "properties": {
                     "message": { "type": "string", "minLength": 1, "maxLength": 140 },
-                    "reaction": {
-                        "type": "string",
-                        "enum": ["idle", "waving", "jumping", "failed", "waiting", "running", "review"]
-                    }
+                    "reaction": { "type": "string", "enum": ["idle", "waving", "jumping", "failed", "waiting", "running", "review"] }
                 },
                 "required": ["message"],
                 "additionalProperties": false
@@ -250,61 +225,37 @@ fn tool_definitions() -> Vec<Value> {
 }
 
 fn handle_tool_call(params: &Value, client: &BridgeClient) -> Value {
-    let Some(name) = params.get("name").and_then(Value::as_str) else {
-        return tool_error("Tool name is required.");
-    };
+    let Some(name) = params.get("name").and_then(Value::as_str) else { return tool_error("Tool name is required."); };
     let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
     match name {
         "furinapet_status" => match client.call("status", json!({})) {
             Ok(status) => tool_success("FurinaPet is running.", status),
-            Err(_) => tool_success(
-                "FurinaPet desktop app is not running or its local Agent Bridge is unavailable.",
-                json!({
-                    "ok": false,
-                    "appRunning": false,
-                    "unavailableReason": "Open FurinaPet and try again."
-                }),
-            ),
+            Err(_) => tool_success("FurinaPet desktop app is not running or its local Agent Bridge is unavailable.", json!({ "ok": false, "appRunning": false, "unavailableReason": "Open FurinaPet and try again." })),
         },
         "furinapet_set_state" => {
-            let Some(state) = arguments.get("state").and_then(Value::as_str) else {
-                return tool_error("Invalid state.");
-            };
+            let Some(state) = arguments.get("state").and_then(Value::as_str) else { return tool_error("Invalid state."); };
             if agent_host::reaction_for_agent_state(state).is_none() {
                 return tool_error("Invalid state. Use idle, thinking, editing, testing, waiting, success, or error.");
             }
-            match client.call("session.state", json!({
-                "sessionId": client.session_id.as_str(),
-                "state": state,
-            })) {
+            match client.call("session.state", json!({ "sessionId": client.session_id.as_str(), "state": state })) {
                 Ok(result) => tool_success(&format!("FurinaPet agent state set to {state}."), result),
                 Err(_) => tool_error("FurinaPet desktop app is unavailable. Open FurinaPet and try again."),
             }
         }
         "furinapet_react" => {
-            let Some(reaction) = arguments.get("reaction").and_then(Value::as_str) else {
-                return tool_error("Invalid reaction.");
-            };
-            if !matches!(reaction, "idle" | "waving" | "jumping" | "failed" | "waiting" | "running" | "review") {
-                return tool_error("Invalid reaction.");
-            }
+            let Some(reaction) = arguments.get("reaction").and_then(Value::as_str) else { return tool_error("Invalid reaction."); };
+            if !matches!(reaction, "idle" | "waving" | "jumping" | "failed" | "waiting" | "running" | "review") { return tool_error("Invalid reaction."); }
             match client.call("pet.react", json!({ "reaction": reaction })) {
                 Ok(result) => tool_success(&format!("FurinaPet reaction sent: {reaction}."), result),
                 Err(_) => tool_error("FurinaPet desktop app is unavailable. Open FurinaPet and try again."),
             }
         }
         "furinapet_say" => {
-            let Some(message) = arguments.get("message").and_then(Value::as_str) else {
-                return tool_error("Message is required.");
-            };
-            if message.chars().count() > 140 || message.contains('\n') || message.contains('\r') {
-                return tool_error("Keep the message short and single-line.");
-            }
+            let Some(message) = arguments.get("message").and_then(Value::as_str) else { return tool_error("Message is required."); };
+            if message.chars().count() > 140 || message.contains('\n') || message.contains('\r') { return tool_error("Keep the message short and single-line."); }
             let reaction = arguments.get("reaction").and_then(Value::as_str);
             let mut bridge_params = json!({ "message": message });
-            if let Some(reaction) = reaction {
-                bridge_params["reaction"] = Value::String(reaction.into());
-            }
+            if let Some(reaction) = reaction { bridge_params["reaction"] = Value::String(reaction.into()); }
             match client.call("pet.say", bridge_params) {
                 Ok(result) => tool_success("FurinaPet message sent.", result),
                 Err(error) if error.contains("message") => tool_error("Message was rejected. Avoid code, secrets, URLs, and file paths."),
@@ -316,18 +267,11 @@ fn handle_tool_call(params: &Value, client: &BridgeClient) -> Value {
 }
 
 fn tool_success(text: &str, structured: Value) -> Value {
-    json!({
-        "content": [{ "type": "text", "text": text }],
-        "structuredContent": structured,
-        "isError": false
-    })
+    json!({ "content": [{ "type": "text", "text": text }], "structuredContent": structured, "isError": false })
 }
 
 fn tool_error(text: &str) -> Value {
-    json!({
-        "content": [{ "type": "text", "text": text }],
-        "isError": true
-    })
+    json!({ "content": [{ "type": "text", "text": text }], "isError": true })
 }
 
 fn load_discovery() -> Result<AgentDiscovery, String> {
@@ -338,11 +282,7 @@ fn load_discovery() -> Result<AgentDiscovery, String> {
 
 fn current_project_name() -> Option<String> {
     let name = env::current_dir().ok()?.file_name()?.to_string_lossy().trim().to_string();
-    if name.is_empty() || name.chars().count() > 80 || name.contains('/') || name.contains('\\') || name.contains(':') {
-        None
-    } else {
-        Some(name)
-    }
+    if name.is_empty() || name.chars().count() > 80 || name.contains('/') || name.contains('\\') || name.contains(':') { None } else { Some(name) }
 }
 
 fn sanitize_agent_name(value: &str) -> String {
