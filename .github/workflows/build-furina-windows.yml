@@ -160,6 +160,15 @@ jobs:
             if ($required -notin $names) { throw "MCP tool missing: $required" }
           }
 
+      - name: Upload PR test installer
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: furinapet-agent-mcp-windows-${{ github.run_number }}
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload failed build log
         if: failure()
         uses: actions/upload-artifact@v4
