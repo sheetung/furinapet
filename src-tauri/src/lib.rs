@@ -1,4 +1,5 @@
 mod agent_host;
+mod claude_integration;
 mod commands;
 mod mcp_server;
 mod pet;
@@ -13,6 +14,10 @@ use tauri_plugin_autostart::MacosLauncher;
 
 pub fn run_mcp_stdio() -> Result<(), String> {
     mcp_server::run()
+}
+
+pub fn run_claude_hook_stdio() -> Result<(), String> {
+    claude_integration::run_hook_from_stdin()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -65,6 +70,10 @@ pub fn run() {
             commands::show_control_center,
             commands::quit_app,
             agent_host::get_agent_status,
+            claude_integration::get_claude_integration_status,
+            claude_integration::install_claude_integration,
+            claude_integration::uninstall_claude_integration,
+            claude_integration::test_agent_integration,
             plugin_host::list_plugins,
             plugin_host::fetch_plugin_catalog,
             plugin_host::install_plugin,
