@@ -40,13 +40,15 @@ export class PetUtilityPlanner {
     add("respond-user", respondScore, clickStreak >= 2 ? "repeated user interaction" : "recent user interaction");
 
     const agentActive = ACTIVE_AGENT_STATES.has(context.agentState);
-    const observeScore = agentActive
-      ? 0.58 + context.curiosity * 0.2 + (context.agentState === "waiting" ? 0.08 : 0)
-      : context.agentState === "error" ? 0.32 : 0.05;
+    const observeScore = context.agentState === "error"
+      ? 0.82
+      : agentActive
+        ? 0.58 + context.curiosity * 0.2 + (context.agentState === "waiting" ? 0.08 : 0)
+        : 0.05;
     add(
       "observe-agent",
       observeScore - repeatPenalty("observe-agent", 0.08) - cooldownPenalty("observe-agent", 4500, 0.12),
-      agentActive ? `agent ${context.agentState}` : "agent inactive",
+      context.agentState === "error" ? "agent error needs attention" : agentActive ? `agent ${context.agentState}` : "agent inactive",
     );
 
     const celebrateScore = context.agentState === "success"
