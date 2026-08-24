@@ -346,17 +346,15 @@ fn pet_say(app: &AppHandle, params: &Value) -> Result<Value, String> {
 fn cleanup_stale_sessions(app: &AppHandle) -> Result<(), String> {
     let host = app.state::<AgentHostState>();
     let cutoff = now_ms().saturating_sub(SESSION_TTL_MS);
-    let next_active = {
+    // Active is always acquired before sessions whenever both locks are held.
+    // Other hot paths never hold both at the same time.
+    let mut active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?;
+    let (active_still_exists, next_active) = {
         let mut sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
         sessions.retain(|_, session| session.last_seen_ms >= cutoff);
-        sessions.values().max_by_key(|session| session.last_seen_ms).cloned()
-    };
-    let mut active = host.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?;
-    let active_still_exists = if let Some(id) = active.as_ref() {
-        let sessions = host.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
-        sessions.contains_key(id)
-    } else {
-        false
+        let active_exists = active.as_ref().map(|id| sessions.contains_key(id)).unwrap_or(false);
+        let next = sessions.values().max_by_key(|session| session.last_seen_ms).cloned();
+        (active_exists, next)
     };
     if active_still_exists {
         return Ok(());
@@ -386,8 +384,8 @@ fn emit_agent_reaction(app: &AppHandle, reaction: &str, message: Option<String>,
 }
 
 pub fn snapshot(state: &State<'_, AgentHostState>) -> Result<AgentStatusSnapshot, String> {
-    let sessions = state.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
     let active_id = state.active_session_id.lock().map_err(|_| "active agent lock is poisoned")?.clone();
+    let sessions = state.sessions.lock().map_err(|_| "agent sessions lock is poisoned")?;
     let active = active_id.as_ref().and_then(|id| sessions.get(id));
     let agent_state = active.map(|session| session.state.as_str()).unwrap_or("idle");
     Ok(AgentStatusSnapshot {
