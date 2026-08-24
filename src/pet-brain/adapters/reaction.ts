@@ -20,6 +20,7 @@ export function reactionForSemanticAction(
           ? { reaction: "review", durationMs: 1900 }
           : { reaction: "waving", durationMs: 1700 };
     case "observe":
+      if (agentState === "error") return { reaction: "failed", durationMs: action.durationMs };
       if (agentState === "waiting") return { reaction: "waiting", durationMs: action.durationMs };
       if (agentState === "editing" || agentState === "testing") {
         return { reaction: "running", durationMs: action.durationMs };
