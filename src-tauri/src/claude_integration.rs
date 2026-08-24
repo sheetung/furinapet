@@ -50,21 +50,22 @@ pub fn run_hook_from_stdin() -> Result<(), String> {
         .take(MAX_HOOK_STDIN_BYTES + 1)
         .read_to_string(&mut raw)
         .map_err(|_| "hook stdin is unavailable".to_string())?;
-    if raw.as_bytes().len() as u64 > MAX_HOOK_STDIN_BYTES {
+    if raw.len() as u64 > MAX_HOOK_STDIN_BYTES {
         return Ok(());
     }
+
     let Ok(payload) = serde_json::from_str::<Value>(&raw) else {
         return Ok(());
     };
     let Some(event_name) = payload.get("hook_event_name").and_then(Value::as_str) else {
         return Ok(());
     };
+
     let session_id = hook_session_id(&payload);
     let project = hook_project_name(&payload);
-
     let mut start_params = json!({
         "sessionId": session_id,
-        "agent": "claude-code",
+        "agent": "claude-code"
     });
     if let Some(project) = &project {
         start_params["project"] = Value::String(project.clone());
@@ -106,27 +107,40 @@ pub fn get_claude_integration_status() -> Result<ClaudeIntegrationStatus, String
 
 #[tauri::command]
 pub fn install_claude_integration() -> Result<ClaudeIntegrationStatus, String> {
-    let claude = find_claude_command().ok_or("未检测到 Claude Code，请先安装 Claude Code 并确保 claude 命令位于 PATH。")?;
+    let claude = find_claude_command().ok_or(
+        "未检测到 Claude Code，请先安装 Claude Code 并确保 claude 命令位于 PATH。",
+    )?;
     let executable = current_executable()?;
 
-    let _ = run_claude(&claude, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME]);
-    let executable_text = executable.to_string_lossy().into_owned();
-    let add = run_claude_owned(&claude, vec![
-        "mcp".into(),
-        "add".into(),
-        "--scope".into(),
-        "user".into(),
-        MCP_SERVER_NAME.into(),
-        "--".into(),
-        executable_text,
-        "mcp".into(),
-    ])?;
+    let _ = run_claude(
+        &claude,
+        ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME],
+    );
+    let add = run_claude_owned(
+        &claude,
+        vec![
+            "mcp".into(),
+            "add".into(),
+            "--scope".into(),
+            "user".into(),
+            MCP_SERVER_NAME.into(),
+            "--".into(),
+            executable.to_string_lossy().into_owned(),
+            "mcp".into(),
+        ],
+    )?;
     if !add.status.success() {
-        return Err("Claude Code MCP 配置写入失败。请运行 `claude mcp list` 检查 Claude Code 状态。".into());
+        return Err(
+            "Claude Code MCP 配置写入失败。请运行 `claude mcp list` 检查 Claude Code 状态。"
+                .into(),
+        );
     }
 
     if let Err(error) = install_hooks(&executable) {
-        let _ = run_claude(&claude, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME]);
+        let _ = run_claude(
+            &claude,
+            ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME],
+        );
         return Err(error);
     }
     Ok(integration_status())
@@ -136,7 +150,10 @@ pub fn install_claude_integration() -> Result<ClaudeIntegrationStatus, String> {
 pub fn uninstall_claude_integration() -> Result<ClaudeIntegrationStatus, String> {
     uninstall_hooks()?;
     if let Some(claude) = find_claude_command() {
-        let _ = run_claude(&claude, ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME]);
+        let _ = run_claude(
+            &claude,
+            ["mcp", "remove", "--scope", "user", MCP_SERVER_NAME],
+        );
     }
     Ok(integration_status())
 }
@@ -153,7 +170,7 @@ pub fn test_agent_integration(app: AppHandle) -> Result<(), String> {
 fn integration_status() -> ClaudeIntegrationStatus {
     let claude = find_claude_command();
     let claude_available = claude.is_some();
-    let hooks_status = match current_executable().and_then(|executable| inspect_hooks(&executable)) {
+    let hooks_status = match current_executable().and_then(|exe| inspect_hooks(&exe)) {
         Ok(value) => value,
         Err(_) => "error".into(),
     };
@@ -167,6 +184,7 @@ fn integration_status() -> ClaudeIntegrationStatus {
         "unavailable"
     }
     .to_string();
+
     let overall_status = if hooks_status == "installed" && mcp_status == "installed" {
         "installed"
     } else if !claude_available {
@@ -185,6 +203,7 @@ fn integration_status() -> ClaudeIntegrationStatus {
         "error" => "Claude Code 配置无法读取或状态检查失败。",
         _ => "Claude Code 尚未接入 FurinaPet。",
     };
+
     ClaudeIntegrationStatus {
         claude_available,
         hooks_status,
@@ -199,14 +218,20 @@ fn install_hooks(executable: &Path) -> Result<(), String> {
     let mut settings = read_json_object(&path)?;
     remove_managed_hooks(&mut settings)?;
     let command = hook_command(executable)?;
+
     let hooks = settings
-        .entry("hooks".into())
+        .entry("hooks")
         .or_insert_with(|| Value::Object(Map::new()))
         .as_object_mut()
         .ok_or("Claude settings 的 hooks 字段不是对象，无法安全修改。")?;
+
     for event in CLAUDE_HOOK_EVENTS {
-        let entries = hooks.entry(event.into()).or_insert_with(|| Value::Array(Vec::new()));
-        let array = entries.as_array_mut().ok_or("Claude hook 事件配置不是数组，无法安全修改。")?;
+        let entries = hooks
+            .entry(event)
+            .or_insert_with(|| Value::Array(Vec::new()));
+        let array = entries
+            .as_array_mut()
+            .ok_or("Claude hook 事件配置不是数组，无法安全修改。")?;
         array.push(json!({
             "hooks": [{
                 "type": "command",
@@ -216,6 +241,7 @@ fn install_hooks(executable: &Path) -> Result<(), String> {
             }]
         }));
     }
+
     backup_and_write_json(&path, &Value::Object(settings))
 }
 
@@ -239,10 +265,16 @@ fn inspect_hooks(executable: &Path) -> Result<String, String> {
     let Some(hooks) = settings.get("hooks").and_then(Value::as_object) else {
         return Ok("not_installed".into());
     };
+
     let mut found_managed = false;
     for event in CLAUDE_HOOK_EVENTS {
         let Some(entries) = hooks.get(event).and_then(Value::as_array) else {
-            return Ok(if found_managed { "needs_update" } else { "not_installed" }.into());
+            return Ok(if found_managed {
+                "needs_update"
+            } else {
+                "not_installed"
+            }
+            .into());
         };
         let mut current = false;
         for entry in entries {
@@ -254,7 +286,12 @@ fn inspect_hooks(executable: &Path) -> Result<String, String> {
             }
         }
         if !current {
-            return Ok(if found_managed { "needs_update" } else { "not_installed" }.into());
+            return Ok(if found_managed {
+                "needs_update"
+            } else {
+                "not_installed"
+            }
+            .into());
         }
     }
     Ok("installed".into())
@@ -264,24 +301,22 @@ fn remove_managed_hooks(settings: &mut Map<String, Value>) -> Result<(), String>
     let Some(hooks_value) = settings.get_mut("hooks") else {
         return Ok(());
     };
-    let hooks = hooks_value.as_object_mut().ok_or("Claude settings 的 hooks 字段不是对象，无法安全修改。")?;
-    let events: Vec<String> = hooks.keys().cloned().collect();
-    for event in events {
-        let Some(entries) = hooks.get_mut(&event).and_then(Value::as_array_mut) else {
+    let hooks = hooks_value
+        .as_object_mut()
+        .ok_or("Claude settings 的 hooks 字段不是对象，无法安全修改。")?;
+
+    let event_names: Vec<String> = hooks.keys().cloned().collect();
+    for event_name in event_names {
+        let Some(entries) = hooks.get_mut(&event_name).and_then(Value::as_array_mut) else {
             continue;
         };
-        let mut cleaned = Vec::new();
-        for entry in entries.drain(..) {
-            if let Some(value) = strip_managed_hooks(entry) {
-                cleaned.push(value);
-            }
-        }
-        if cleaned.is_empty() {
-            hooks.remove(&event);
-        } else {
-            *hooks.get_mut(&event).expect("event exists") = Value::Array(cleaned);
-        }
+        let previous = std::mem::take(entries);
+        *entries = previous
+            .into_iter()
+            .filter_map(strip_managed_hooks)
+            .collect();
     }
+    hooks.retain(|_, value| !matches!(value, Value::Array(items) if items.is_empty()));
     if hooks.is_empty() {
         settings.remove("hooks");
     }
@@ -289,17 +324,17 @@ fn remove_managed_hooks(settings: &mut Map<String, Value>) -> Result<(), String>
 }
 
 fn strip_managed_hooks(mut value: Value) -> Option<Value> {
-    let Some(object) = value.as_object_mut() else {
-        return if contains_managed_hook(&value) { None } else { Some(value) };
-    };
-    if let Some(hook_list) = object.get_mut("hooks").and_then(Value::as_array_mut) {
-        hook_list.retain(|hook| !contains_managed_hook(hook));
-        if hook_list.is_empty() {
-            return None;
+    if let Some(object) = value.as_object_mut() {
+        if let Some(hook_list) = object.get_mut("hooks").and_then(Value::as_array_mut) {
+            hook_list.retain(|hook| !contains_managed_hook(hook));
+            return if hook_list.is_empty() { None } else { Some(value) };
         }
-        return Some(value);
     }
-    if contains_managed_hook(&value) { None } else { Some(value) }
+    if contains_managed_hook(&value) {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn contains_managed_hook(value: &Value) -> bool {
@@ -312,7 +347,9 @@ fn contains_managed_hook(value: &Value) -> bool {
 }
 
 fn contains_exact_hook(value: &Value, expected_command: &str) -> bool {
-    let Some(object) = value.as_object() else { return false; };
+    let Some(object) = value.as_object() else {
+        return false;
+    };
     if object.get("type").and_then(Value::as_str) == Some("command")
         && object.get("command").and_then(Value::as_str) == Some(expected_command)
         && object.get("async").and_then(Value::as_bool) == Some(true)
@@ -320,7 +357,9 @@ fn contains_exact_hook(value: &Value, expected_command: &str) -> bool {
         return true;
     }
     object.values().any(|child| match child {
-        Value::Array(items) => items.iter().any(|item| contains_exact_hook(item, expected_command)),
+        Value::Array(items) => items
+            .iter()
+            .any(|item| contains_exact_hook(item, expected_command)),
         Value::Object(_) => contains_exact_hook(child, expected_command),
         _ => false,
     })
@@ -336,13 +375,21 @@ fn read_json_object(path: &Path) -> Result<Map<String, Value>, String> {
     if !path.exists() {
         return Ok(Map::new());
     }
-    let metadata = fs::symlink_metadata(path).map_err(|_| "无法读取 Claude settings 元数据。".to_string())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_SETTINGS_BYTES {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| "无法读取 Claude settings 元数据。".to_string())?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > MAX_SETTINGS_BYTES
+    {
         return Err("Claude settings 文件类型或大小不符合安全要求。".into());
     }
     let content = fs::read_to_string(path).map_err(|_| "无法读取 Claude settings。".to_string())?;
-    let value: Value = serde_json::from_str(&content).map_err(|_| "Claude settings 不是有效 JSON。".to_string())?;
-    value.as_object().cloned().ok_or_else(|| "Claude settings 顶层必须是 JSON 对象。".into())
+    let value: Value = serde_json::from_str(&content)
+        .map_err(|_| "Claude settings 不是有效 JSON。".to_string())?;
+    value
+        .as_object()
+        .cloned()
+        .ok_or_else(|| "Claude settings 顶层必须是 JSON 对象。".into())
 }
 
 fn backup_and_write_json(path: &Path, value: &Value) -> Result<(), String> {
@@ -353,9 +400,11 @@ fn backup_and_write_json(path: &Path, value: &Value) -> Result<(), String> {
         let backup = path.with_extension("json.furinapet.bak");
         fs::copy(path, backup).map_err(|_| "无法备份 Claude settings。".to_string())?;
     }
-    let content = serde_json::to_vec_pretty(value).map_err(|_| "无法序列化 Claude settings。".to_string())?;
+    let content = serde_json::to_vec_pretty(value)
+        .map_err(|_| "无法序列化 Claude settings。".to_string())?;
     let temporary = path.with_extension("json.furinapet.tmp");
-    fs::write(&temporary, content).map_err(|_| "无法写入 Claude settings 临时文件。".to_string())?;
+    fs::write(&temporary, content)
+        .map_err(|_| "无法写入 Claude settings 临时文件。".to_string())?;
     if path.exists() {
         fs::remove_file(path).map_err(|_| "无法替换 Claude settings。".to_string())?;
     }
@@ -383,20 +432,41 @@ fn hook_command(executable: &Path) -> Result<String, String> {
 }
 
 fn find_claude_command() -> Option<PathBuf> {
-    let path = env::var_os("PATH")?;
+    let mut candidates = Vec::new();
+
     #[cfg(target_os = "windows")]
-    let names = ["claude.exe", "claude.cmd", "claude.bat", "claude"];
-    #[cfg(not(target_os = "windows"))]
-    let names = ["claude", "claude", "claude", "claude"];
-    for directory in env::split_paths(&path) {
-        for name in names {
-            let candidate = directory.join(name);
-            if candidate.is_file() {
-                return Some(candidate);
+    {
+        if let Some(appdata) = env::var_os("APPDATA") {
+            candidates.push(PathBuf::from(appdata).join("npm").join("claude.cmd"));
+        }
+        if let Some(home) = dirs::home_dir() {
+            candidates.push(home.join(".local").join("bin").join("claude.exe"));
+            candidates.push(home.join("scoop").join("shims").join("claude.exe"));
+            candidates.push(home.join("scoop").join("shims").join("claude.cmd"));
+        }
+        if let Some(program_data) = env::var_os("ProgramData") {
+            candidates.push(
+                PathBuf::from(program_data)
+                    .join("scoop")
+                    .join("shims")
+                    .join("claude.exe"),
+            );
+        }
+    }
+
+    if let Some(path) = env::var_os("PATH") {
+        #[cfg(target_os = "windows")]
+        let names = ["claude.exe", "claude.cmd", "claude.bat", "claude"];
+        #[cfg(not(target_os = "windows"))]
+        let names = ["claude", "claude", "claude", "claude"];
+        for directory in env::split_paths(&path) {
+            for name in names {
+                candidates.push(directory.join(name));
             }
         }
     }
-    None
+
+    candidates.into_iter().find(|candidate| candidate.is_file())
 }
 
 fn run_claude<I, S>(command: &Path, args: I) -> Result<Output, String>
@@ -404,8 +474,15 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    Command::new(command)
-        .args(args)
+    let mut process = Command::new(command);
+    process.args(args);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        process.creation_flags(CREATE_NO_WINDOW);
+    }
+    process
         .output()
         .map_err(|_| "Claude Code 命令执行失败。".into())
 }
@@ -415,10 +492,16 @@ fn run_claude_owned(command: &Path, args: Vec<String>) -> Result<Output, String>
 }
 
 fn hook_session_id(payload: &Value) -> String {
-    let candidate = payload.get("session_id").and_then(Value::as_str).unwrap_or("").trim();
+    let candidate = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
     if !candidate.is_empty()
         && candidate.len() <= 96
-        && candidate.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        && candidate.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+        })
     {
         format!("claude-{candidate}")
     } else {
@@ -428,8 +511,17 @@ fn hook_session_id(payload: &Value) -> String {
 
 fn hook_project_name(payload: &Value) -> Option<String> {
     let cwd = payload.get("cwd").and_then(Value::as_str)?;
-    let name = Path::new(cwd).file_name()?.to_string_lossy().trim().to_string();
-    if name.is_empty() || name.chars().count() > 80 || name.contains('/') || name.contains('\\') || name.contains(':') {
+    let name = Path::new(cwd)
+        .file_name()?
+        .to_string_lossy()
+        .trim()
+        .to_string();
+    if name.is_empty()
+        || name.chars().count() > 80
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains(':')
+    {
         None
     } else {
         Some(name)
@@ -437,7 +529,10 @@ fn hook_project_name(payload: &Value) -> Option<String> {
 }
 
 fn classify_pre_tool_state(payload: &Value) -> Option<&'static str> {
-    let tool_name = payload.get("tool_name").and_then(Value::as_str).unwrap_or("");
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     if matches!(tool_name, "Edit" | "Write" | "MultiEdit" | "NotebookEdit") {
         return Some("editing");
     }
@@ -456,10 +551,26 @@ fn classify_pre_tool_state(payload: &Value) -> Option<&'static str> {
 }
 
 fn is_test_command(command: &str) -> bool {
-    let lower: String = command.chars().take(300).collect::<String>().to_ascii_lowercase();
+    let lower = command
+        .chars()
+        .take(300)
+        .collect::<String>()
+        .to_ascii_lowercase();
     [
-        "pytest", "vitest", "jest", "npm test", "npm run test", "pnpm test", "pnpm run test",
-        "yarn test", "cargo test", "go test", "dotnet test", "mvn test", "gradle test", "ctest",
+        "pytest",
+        "vitest",
+        "jest",
+        "npm test",
+        "npm run test",
+        "pnpm test",
+        "pnpm run test",
+        "yarn test",
+        "cargo test",
+        "go test",
+        "dotnet test",
+        "mvn test",
+        "gradle test",
+        "ctest",
     ]
     .iter()
     .any(|needle| lower.contains(needle))
@@ -469,7 +580,7 @@ fn bridge_state(session_id: &str, state: &str, project: Option<&str>) -> Result<
     let mut params = json!({
         "sessionId": session_id,
         "state": state,
-        "agent": "claude-code",
+        "agent": "claude-code"
     });
     if let Some(project) = project {
         params["project"] = Value::String(project.into());
@@ -480,24 +591,47 @@ fn bridge_state(session_id: &str, state: &str, project: Option<&str>) -> Result<
 fn bridge_call(method: &str, params: Value) -> Result<Value, String> {
     let path = agent_host::discovery_path()?;
     let content = fs::read_to_string(path).map_err(|_| "Agent Bridge unavailable".to_string())?;
-    let discovery: agent_host::AgentDiscovery = serde_json::from_str(&content).map_err(|_| "Agent Bridge unavailable".to_string())?;
+    let discovery: agent_host::AgentDiscovery = serde_json::from_str(&content)
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
     if discovery.protocol != agent_host::AGENT_PROTOCOL_VERSION || discovery.host != "127.0.0.1" {
         return Err("Agent Bridge unavailable".into());
     }
+
     let address: SocketAddr = format!("{}:{}", discovery.host, discovery.port)
         .parse()
         .map_err(|_| "Agent Bridge unavailable".to_string())?;
-    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(500)).map_err(|_| "Agent Bridge unavailable".to_string())?;
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(500))
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
     let _ = stream.set_read_timeout(Some(Duration::from_millis(800)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(800)));
-    let request = json!({ "token": discovery.token, "method": method, "params": params });
-    let encoded = serde_json::to_string(&request).map_err(|_| "Agent Bridge unavailable".to_string())?;
-    stream.write_all(encoded.as_bytes()).map_err(|_| "Agent Bridge unavailable".to_string())?;
-    stream.write_all(b"\n").map_err(|_| "Agent Bridge unavailable".to_string())?;
-    stream.flush().map_err(|_| "Agent Bridge unavailable".to_string())?;
+
+    let request = json!({
+        "token": discovery.token,
+        "method": method,
+        "params": params
+    });
+    let encoded = serde_json::to_string(&request)
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
+    stream
+        .write_all(encoded.as_bytes())
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
+    stream
+        .write_all(b"\n")
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
+    stream
+        .flush()
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
+
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
-    reader.read_line(&mut line).map_err(|_| "Agent Bridge unavailable".to_string())?;
-    let reply: HookBridgeReply = serde_json::from_str(&line).map_err(|_| "Agent Bridge unavailable".to_string())?;
-    if reply.ok { Ok(reply.result.unwrap_or(Value::Null)) } else { Err("Agent Bridge rejected request".into()) }
+    reader
+        .read_line(&mut line)
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
+    let reply: HookBridgeReply = serde_json::from_str(&line)
+        .map_err(|_| "Agent Bridge unavailable".to_string())?;
+    if reply.ok {
+        Ok(reply.result.unwrap_or(Value::Null))
+    } else {
+        Err("Agent Bridge rejected request".into())
+    }
 }
