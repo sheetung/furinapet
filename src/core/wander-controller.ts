@@ -31,12 +31,18 @@ export interface WorkArea {
   height: number;
 }
 
+export type WindowAppKind = "normal" | "game" | "immersive";
+export type DockPolicy = "normal" | "outside-only" | "blocked";
+
 export interface WindowSurface {
   id: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  processName?: string;
+  appKind?: WindowAppKind;
+  dockPolicy?: DockPolicy;
 }
 
 export interface PetSize {
@@ -186,6 +192,9 @@ export function chooseDockPlacement(
   positionRatio = Math.random(),
   preferredEdge?: DockEdge,
 ): DockPlacement | null {
+  const dockPolicy = surface.dockPolicy ?? "normal";
+  if (dockPolicy === "blocked") return null;
+
   const workRight = workArea.x + workArea.width;
   const workBottom = workArea.y + workArea.height;
   const surfaceRight = surface.x + surface.width;
@@ -215,6 +224,12 @@ export function chooseDockPlacement(
   };
 
   addHorizontal("top", surface.y - petSize.height + 2, 56, 176);
+  if (dockPolicy === "outside-only") {
+    return preferredEdge && preferredEdge !== "top"
+      ? null
+      : placements.find((placement) => placement.edge === "top") ?? null;
+  }
+
   addHorizontal("bottom-inside", surfaceBottom - petSize.height - 8, 24, 24);
   addVertical("left", surface.x - petSize.width + 12);
   addVertical("right", surfaceRight - 12);
