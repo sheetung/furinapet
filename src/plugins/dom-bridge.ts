@@ -1,20 +1,27 @@
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { desktop } from "../api";
+import type { PetSenseEventDetail, PetSenseName } from "../pet-brain";
 
 const TAP_MOVE_THRESHOLD = 8;
 const DOUBLE_TAP_WINDOW_MS = 360;
+export const PET_SENSE_EVENT = "furinapet:pet-sense";
+
+function emitSense(name: PetSenseName, handledByPlugin: boolean) {
+  const detail: PetSenseEventDetail = {
+    name,
+    at: Date.now(),
+    handledByPlugin,
+  };
+  window.dispatchEvent(new CustomEvent<PetSenseEventDetail>(PET_SENSE_EVENT, { detail }));
+}
 
 /**
  * Pet-window sensor bridge.
  *
- * PetView starts a native OS window drag immediately on pointerdown. On Windows
- * that native drag loop can consume pointerup/click/dblclick before WebView2
- * sees them. Therefore tap detection must not depend on DOM click events.
- *
- * We record the pointer/window position on pointerdown, wait for the physical
- * left mouse button to be released through the Rust command, then classify the
- * gesture as a tap or a real drag. This mirrors OpenPets' separation between
- * pet senses and movement while still keeping FurinaPet's native Tauri drag.
+ * Native dragging can consume WebView pointerup/click events on Windows, so
+ * physical tap classification lives here. The bridge reports every classified
+ * sense to Pet Brain after plugin arbitration. Plugins may still consume the
+ * event, while unhandled senses are free for the autonomous core to respond to.
  */
 export function installPetDomBridge(): () => void {
   let disposed = false;
@@ -26,21 +33,15 @@ export function installPetDomBridge(): () => void {
   const dispatch = async (name: "pet:clicked" | "pet:doubleClicked") => {
     try {
       const handled = await desktop.publishPetEvent(name);
-      // Preserve the original built-in double-click behaviour when no plugin
-      // consumes the event. The plugin host consumes this when click-reaction
-      // is enabled, so the system reaction and plugin reaction never compete.
-      if (name === "pet:doubleClicked" && !handled) {
-        await desktop.react("waving", "你好呀！");
-      }
+      emitSense(name, handled);
     } catch (error) {
       console.error(`[plugin-host] ${name} dispatch failed`, error);
+      emitSense(name, false);
     }
   };
 
   const dispatchDoubleTap = () => {
     const now = Date.now();
-    // A native dblclick may occasionally survive the OS drag loop. Deduplicate
-    // it against the manual two-tap recognizer below.
     if (now - lastDoubleDispatchAt < 450) return;
     lastDoubleDispatchAt = now;
     window.clearTimeout(singleTapTimer);
@@ -70,8 +71,6 @@ export function installPetDomBridge(): () => void {
     const scale = Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
       ? window.devicePixelRatio
       : 1;
-    // MouseEvent screen coordinates are CSS/logical pixels in WebView2 while
-    // Tauri cursorPosition() returns physical pixels.
     const startPointer = {
       x: event.screenX * scale,
       y: event.screenY * scale,
@@ -125,19 +124,13 @@ export function installPetDomBridge(): () => void {
         .filter((value): value is number => value !== null && Number.isFinite(value));
       if (distances.length === 0) return;
 
-      // Prefer the pointer measurement. Window displacement is only a fallback:
-      // gravity may move a floating pet immediately after mouse release.
       const moved = pointerDistance ?? windowDistance ?? Number.POSITIVE_INFINITY;
-      if (moved <= TAP_MOVE_THRESHOLD) {
-        registerTap();
-      }
+      if (moved <= TAP_MOVE_THRESHOLD) registerTap();
     })();
   };
 
   const onNativeDoubleClick = (event: MouseEvent) => {
     if (disposed || event.button !== 0) return;
-    // If WebView2 does produce dblclick, suppress PetView's built-in handler;
-    // this bridge performs host arbitration and the fallback itself.
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
