@@ -1,5 +1,5 @@
 import { PetBlackboard } from "./Blackboard";
-import { PetActionExecutor, type PetActionHandler } from "./Executor";
+import { PetActionExecutor, type PetActionHandler, type RunPlanOptions } from "./Executor";
 import { PetUtilityPlanner } from "./Planner";
 import type {
   BrainAgentState,
@@ -71,8 +71,8 @@ export class PetBrain {
     return plan;
   }
 
-  async execute(plan: PetActionPlan, handler: PetActionHandler) {
-    await this.executor.run(plan, handler);
+  execute(plan: PetActionPlan, handler: PetActionHandler, options?: RunPlanOptions) {
+    return this.executor.run(plan, handler, options);
   }
 
   interrupt() {
