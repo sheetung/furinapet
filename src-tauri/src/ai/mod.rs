@@ -138,7 +138,7 @@ pub fn update_ai_settings(
     state: State<'_, AiServiceState>,
     update: AiSettingsUpdate,
 ) -> Result<AiSettingsSnapshot, String> {
-    let next = normalize_settings(update)?;
+    let next = normalize_settings(&update)?;
 
     if next.enabled && (next.base_url.is_empty() || next.model.is_empty()) {
         return Err("启用 AI 建议前需要填写 API 地址和模型名称。".into());
@@ -230,7 +230,7 @@ fn settings_snapshot(settings: &AiSettings) -> AiSettingsSnapshot {
     }
 }
 
-fn normalize_settings(update: AiSettingsUpdate) -> Result<AiSettings, String> {
+fn normalize_settings(update: &AiSettingsUpdate) -> Result<AiSettings, String> {
     let base_url = update.base_url.trim().trim_end_matches('/').to_string();
     let model = update.model.trim().to_string();
     if model.chars().count() > 120 || model.contains('\n') || model.contains('\r') {
