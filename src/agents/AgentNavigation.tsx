@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   desktop,
+  type AgentConnectionSnapshot,
   type AgentState,
   type AgentStatusSnapshot,
   type ClaudeIntegrationStatus,
@@ -26,6 +27,30 @@ const statusLabel: Record<IntegrationStatus, string> = {
   error: "检查失败",
   unavailable: "未检测到",
 };
+
+function integrationLabel(value: string) {
+  switch (value) {
+    case "mcp": return "MCP";
+    case "hooks": return "Hooks";
+    case "mcp+hooks": return "MCP + Hooks";
+    case "manual": return "本地桥接";
+    default: return value || "未知";
+  }
+}
+
+function relativeTime(timestamp: number) {
+  if (!timestamp) return "刚刚";
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 5) return "刚刚";
+  if (seconds < 60) return `${seconds} 秒前`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟前`;
+  return `${Math.floor(minutes / 60)} 小时前`;
+}
+
+function clientInitial(session: AgentConnectionSnapshot) {
+  return session.clientName.trim().charAt(0).toUpperCase() || "A";
+}
 
 export function AgentNavigation() {
   const [active, setActive] = useState(false);
@@ -55,8 +80,6 @@ export function AgentNavigation() {
       button.className = "agent-nav-button";
       button.innerHTML = "<span>⌘</span>智能体";
       button.addEventListener("click", () => {
-        // Drive App and PluginNavigation back to a known page first so only one
-        // dynamically hosted page can be active at a time.
         const home = Array.from(nav.querySelectorAll<HTMLButtonElement>("button"))
           .find((item) => item !== button && item.textContent?.includes("主页"));
         home?.click();
@@ -194,6 +217,10 @@ export function AgentNavigation() {
   const meta = stateMeta[agent?.state ?? "idle"];
   const claudeInstalled = claude?.overallStatus === "installed";
   const claudeNeedsUpdate = claude?.overallStatus === "needs_update";
+  const currentClient = agent?.clientName ?? agent?.agent;
+  const currentIdentity = currentClient
+    ? `${currentClient}${agent?.clientVersion ? ` ${agent.clientVersion}` : ""}${agent?.project ? ` · ${agent.project}` : ""}`
+    : "当前没有已连接的智能体会话。";
 
   return createPortal(
     <section className="page agent-page">
@@ -213,6 +240,7 @@ export function AgentNavigation() {
         .agent-badge { display:inline-flex; align-items:center; min-height:21px; padding:0 8px; border-radius:999px; border:1px solid #3b4960; background:#273247; color:#aebdd1; font-size:10px; font-weight:700; }
         .agent-badge.live { border-color:rgba(79,187,133,.28); background:rgba(49,153,101,.10); color:#80d9aa; }
         .agent-badge.warn { border-color:rgba(236,174,71,.28); background:rgba(185,126,36,.10); color:#efc477; }
+        .agent-badge.active { border-color:rgba(105,168,255,.34); background:rgba(71,126,207,.12); color:#9bc8ff; }
         .agent-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
         .agent-actions button { min-height:34px; padding:0 12px; border-radius:9px; font-size:12px; white-space:nowrap; }
         .agent-status-hero { display:flex; align-items:center; gap:16px; padding:18px; }
@@ -224,18 +252,26 @@ export function AgentNavigation() {
         .agent-section-title { display:flex; justify-content:space-between; align-items:end; margin:24px 1px 10px; }
         .agent-section-title span { color:#74849a; font-size:11px; letter-spacing:.08em; }
         .agent-section-title h3 { margin:4px 0 0; font-size:16px; }
+        .agent-session-list { display:grid; gap:8px; padding:10px; }
+        .agent-session { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid #2b3549; border-radius:11px; background:#192233; }
+        .agent-session .agent-icon { width:38px; height:38px; flex-basis:38px; border-radius:10px; font-size:15px; }
+        .agent-session-meta { display:flex; gap:7px; flex-wrap:wrap; margin-top:6px; color:#78889f; font-size:10px; }
+        .agent-session-meta span + span::before { content:"·"; margin-right:7px; color:#4e5d73; }
+        .agent-session-state { margin-left:auto; text-align:right; flex:0 0 auto; }
+        .agent-session-state strong { display:block; color:#cdd8e8; font-size:12px; }
+        .agent-session-state span { display:block; margin-top:4px; color:#697a92; font-size:10px; }
         .agent-detail-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:7px; }
         .agent-mcp-config { padding:0 18px 18px; }
         .agent-mcp-config pre { margin:0; padding:13px 14px; max-height:150px; overflow:auto; border:1px solid #2d394d; border-radius:10px; background:#151d2b; color:#aebed5; font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; word-break:break-all; }
         .agent-privacy { margin-top:17px; padding:12px 14px; border:1px solid rgba(86,130,192,.20); border-radius:11px; background:rgba(38,72,117,.08); color:#8fa1ba; font-size:11px; line-height:1.65; }
         .agent-page .agent-danger { border-color:rgba(255,113,113,.24); color:#ffb2b2; background:rgba(198,63,63,.06); }
-        @media (max-width: 820px) { .agent-status-grid { grid-template-columns:1fr; } .agent-card-main { align-items:flex-start; flex-wrap:wrap; } .agent-actions { width:100%; } }
+        @media (max-width: 820px) { .agent-status-grid { grid-template-columns:1fr; } .agent-card-main,.agent-session { align-items:flex-start; flex-wrap:wrap; } .agent-actions { width:100%; } .agent-session-state { margin-left:50px; text-align:left; } }
       `}</style>
 
       <div className="agent-header">
         <span>Agents</span>
         <h1>智能体</h1>
-        <p>让 Claude Code 和其他 MCP 智能体把运行状态映射到桌宠动画。Agent Bridge、MCP Server 与 Claude Hooks 都内置在 FurinaPet 中。</p>
+        <p>查看是谁连接到 FurinaPet，以及它当前是否正在思考、编辑、测试或等待。客户端来源来自本地 MCP/Hook 会话，不代表用户账号身份。</p>
       </div>
 
       <div className="agent-card">
@@ -245,16 +281,56 @@ export function AgentNavigation() {
             <div className="agent-card-title">
               <strong>{meta.label}</strong>
               <span className="agent-badge live">Agent Bridge · 本地</span>
+              {agent?.integration && <span className="agent-badge">{integrationLabel(agent.integration)}</span>}
             </div>
-            <p>{agent?.agent ? `${agent.agent}${agent.project ? ` · ${agent.project}` : ""}` : "当前没有活跃的智能体会话。"}</p>
+            <p>{currentIdentity}</p>
           </div>
           <div className="agent-actions"><button className="secondary" onClick={() => void testIntegration()}>测试桌宠</button></div>
         </div>
         <div className="agent-status-grid">
-          <div className="agent-stat"><span>当前状态</span><strong>{meta.label}</strong></div>
-          <div className="agent-stat"><span>活跃会话</span><strong>{agent?.sessionCount ?? 0}</strong></div>
+          <div className="agent-stat"><span>连接会话</span><strong>{agent?.connectedCount ?? agent?.sessionCount ?? 0}</strong></div>
+          <div className="agent-stat"><span>工作中</span><strong>{agent?.workingCount ?? 0}</strong></div>
           <div className="agent-stat"><span>协议</span><strong>Agent Bridge v{agent?.protocolVersion ?? 1}</strong></div>
         </div>
+      </div>
+
+      <div className="agent-section-title">
+        <div><span>Connections</span><h3>当前连接</h3></div>
+        <span>{agent?.sessions?.length ?? 0} 个会话</span>
+      </div>
+
+      <div className="agent-card">
+        {agent?.sessions?.length ? (
+          <div className="agent-session-list">
+            {agent.sessions.map((session) => {
+              const sessionMeta = stateMeta[session.state];
+              return (
+                <div className="agent-session" key={session.sessionId}>
+                  <div className="agent-icon">{clientInitial(session)}</div>
+                  <div className="agent-card-info">
+                    <div className="agent-card-title">
+                      <strong>{session.clientName}</strong>
+                      {session.clientVersion && <span className="agent-badge">v{session.clientVersion}</span>}
+                      <span className={`agent-badge ${session.working ? "live" : ""}`}>{sessionMeta.label}</span>
+                      {session.active && <span className="agent-badge active">当前</span>}
+                    </div>
+                    <div className="agent-session-meta">
+                      <span>{integrationLabel(session.integration)}</span>
+                      <span>{session.agent}</span>
+                      {session.project && <span>{session.project}</span>}
+                    </div>
+                  </div>
+                  <div className="agent-session-state">
+                    <strong>{session.working ? "正在工作" : "已连接"}</strong>
+                    <span>活动于 {relativeTime(session.lastActivityMs)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="agent-card-main"><div className="agent-card-info"><p>暂无 MCP 或 Hooks 会话。连接支持 MCP 的智能体后会自动出现在这里。</p></div></div>
+        )}
       </div>
 
       <div className="agent-section-title"><div><span>官方集成</span><h3>智能体连接</h3></div></div>
@@ -289,14 +365,14 @@ export function AgentNavigation() {
           <div className="agent-icon">M</div>
           <div className="agent-card-info">
             <div className="agent-card-title"><strong>通用 MCP</strong><span className="agent-badge live">内置 stdio</span></div>
-            <p>适用于 Cursor、支持 MCP 的编辑器和其他智能体。直接启动当前 FurinaPet 可执行文件的 <code>mcp</code> 模式，无需 Node 或 npx。</p>
+            <p>适用于 Trae、Cursor、支持 MCP 的编辑器和其他智能体。FurinaPet 会读取 MCP 标准 clientInfo 名称和版本，用于本地连接展示。</p>
           </div>
           <div className="agent-actions"><button className="secondary" onClick={() => void copyMcpConfig()}>复制配置</button></div>
         </div>
         {mcp && <div className="agent-mcp-config"><pre>{mcp.json}</pre></div>}
       </div>
 
-      <div className="agent-privacy">自动状态只传递事件类别、会话标识、工具类别和项目名称，不把 prompt、代码内容、工具输出、终端日志或完整文件路径显示给桌宠。MCP 的主动气泡文本也会经过长度和敏感内容校验。</div>
+      <div className="agent-privacy">连接页只记录客户端名称/版本、接入方式、项目简称和生命周期状态。不会读取 MCP 客户端账号，也不会把 prompt、代码、工具输出、终端日志或完整文件路径展示给桌宠；clientInfo 仅用于显示，不作为可信身份认证。</div>
 
       {toast && <div className="toast">{toast}</div>}
     </section>,
