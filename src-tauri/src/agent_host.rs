@@ -17,10 +17,10 @@ use uuid::Uuid;
 pub const AGENT_PROTOCOL_VERSION: u32 = 1;
 const SESSION_TTL_MS: u64 = 15_000;
 const ACTIVITY_TTL_MS: u64 = 20_000;
-const AGENT_REACTION_TTL_MS: u64 = 12_000;
 const MAX_BRIDGE_LINE_BYTES: usize = 64 * 1024;
 const CONFIG_DIR_NAME: &str = "dev.furinapet.desktop";
 const DISCOVERY_FILE_NAME: &str = "agent-ipc.json";
+const PET_BRAIN_AGENT_STATE_EVENT: &str = "pet-brain-agent-state";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,10 +63,13 @@ impl Default for AgentHostState {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AgentReactionPayload {
-    reaction: String,
-    message: Option<String>,
-    duration_ms: u64,
+struct AgentStatePayload {
+    state: String,
+    session_id: Option<String>,
+    agent: Option<String>,
+    client_name: Option<String>,
+    project: Option<String>,
+    at: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -362,7 +365,7 @@ fn session_state(app: &AppHandle, params: &Value) -> Result<Value, String> {
         .active_session_id
         .lock()
         .map_err(|_| "active agent lock is poisoned")? = Some(session_id.clone());
-    emit_agent_reaction(app, reaction, None, AGENT_REACTION_TTL_MS)?;
+    emit_session_state(app, &session)?;
 
     Ok(json!({
         "sessionId": session_id,
@@ -398,7 +401,7 @@ fn session_end(app: &AppHandle, params: &Value) -> Result<Value, String> {
         if let Some(session) = next_active {
             emit_session_state(app, &session)?;
         } else {
-            emit_agent_reaction(app, "idle", None, 200)?;
+            emit_idle_agent_state(app)?;
         }
     }
     Ok(json!({ "sessionId": session_id, "ended": true }))
@@ -471,7 +474,7 @@ fn cleanup_stale_sessions(app: &AppHandle) -> Result<(), String> {
 
     if active_exists {
         if active_activity_expired {
-            emit_agent_reaction(app, "idle", None, 200)?;
+            emit_current_agent_state(app)?;
         }
         return Ok(());
     }
@@ -487,30 +490,58 @@ fn cleanup_stale_sessions(app: &AppHandle) -> Result<(), String> {
     if let Some(session) = next_active {
         emit_session_state(app, &session)?;
     } else {
-        emit_agent_reaction(app, "idle", None, 200)?;
+        emit_idle_agent_state(app)?;
     }
     Ok(())
 }
 
 fn emit_session_state(app: &AppHandle, session: &AgentSession) -> Result<(), String> {
-    let state = effective_session_state(session, now_ms());
-    let reaction = reaction_for_agent_state(state).unwrap_or("idle");
-    emit_agent_reaction(app, reaction, None, AGENT_REACTION_TTL_MS)
+    let now = now_ms();
+    let state = effective_session_state(session, now);
+    let payload = AgentStatePayload {
+        state: state.into(),
+        session_id: Some(session.session_id.clone()),
+        agent: Some(session.agent.clone()),
+        client_name: Some(session.client_name.clone()),
+        project: session.project.clone(),
+        at: now,
+    };
+    app.emit_to("pet", PET_BRAIN_AGENT_STATE_EVENT, payload)
+        .map_err(|error| error.to_string())
 }
 
-fn emit_agent_reaction(
-    app: &AppHandle,
-    reaction: &str,
-    message: Option<String>,
-    duration_ms: u64,
-) -> Result<(), String> {
-    let payload = AgentReactionPayload {
-        reaction: reaction.into(),
-        message,
-        duration_ms,
+fn emit_idle_agent_state(app: &AppHandle) -> Result<(), String> {
+    let payload = AgentStatePayload {
+        state: "idle".into(),
+        session_id: None,
+        agent: None,
+        client_name: None,
+        project: None,
+        at: now_ms(),
     };
-    app.emit_to("pet", "pet-reaction", payload)
+    app.emit_to("pet", PET_BRAIN_AGENT_STATE_EVENT, payload)
         .map_err(|error| error.to_string())
+}
+
+fn emit_current_agent_state(app: &AppHandle) -> Result<(), String> {
+    let host = app.state::<AgentHostState>();
+    let session = {
+        let sessions = host
+            .sessions
+            .lock()
+            .map_err(|_| "agent sessions lock is poisoned")?;
+        let active_id = host
+            .active_session_id
+            .lock()
+            .map_err(|_| "active agent lock is poisoned")?
+            .clone();
+        active_id.and_then(|id| sessions.get(&id).cloned())
+    };
+    if let Some(session) = session {
+        emit_session_state(app, &session)
+    } else {
+        emit_idle_agent_state(app)
+    }
 }
 
 pub fn snapshot(state: &State<'_, AgentHostState>) -> Result<AgentStatusSnapshot, String> {
