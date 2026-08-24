@@ -107,6 +107,61 @@ export interface McpServerConfigPreview {
   claudeCommand: string;
 }
 
+export interface AiSettingsSnapshot {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  cooldownSeconds: number;
+  timeoutSeconds: number;
+  hasApiKey: boolean;
+  configured: boolean;
+  provider: "openai-compatible" | string;
+}
+
+export interface AiSettingsUpdate {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  cooldownSeconds: number;
+  timeoutSeconds: number;
+  apiKey?: string;
+  clearApiKey?: boolean;
+}
+
+export interface AiBehaviorContext {
+  pet: {
+    goal: PetGoalId;
+    mood: "happy" | "normal" | "focused" | "tired";
+    energy: number;
+    recentGoals: PetGoalId[];
+  };
+  agent: {
+    state: AgentState;
+    connected: boolean;
+  };
+  user: {
+    idleForMs: number;
+    clickStreak: number;
+    recentInteraction: boolean;
+  };
+  environment: {
+    canWander: boolean;
+    canDock: boolean;
+  };
+}
+
+export interface AiBehaviorSuggestion {
+  goal: PetGoalId;
+  confidence: number;
+  ttlMs: number;
+}
+
+export interface AiSuggestionResult {
+  state: "suggested" | "skipped";
+  suggestion?: AiBehaviorSuggestion;
+  message: string;
+}
+
 export const desktop = {
   getSettings: () => invoke<AppSettings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<AppSettings>("update_settings", { patch }),
@@ -130,6 +185,12 @@ export const desktop = {
     ttlMs: options.ttlMs,
     id: options.id,
   }),
+
+  getAiSettings: () => invoke<AiSettingsSnapshot>("get_ai_settings"),
+  updateAiSettings: (update: AiSettingsUpdate) => invoke<AiSettingsSnapshot>("update_ai_settings", { update }),
+  testAiProvider: () => invoke<AiBehaviorSuggestion>("test_ai_provider"),
+  requestAiBehaviorSuggestion: (context: AiBehaviorContext) =>
+    invoke<AiSuggestionResult>("request_ai_behavior_suggestion", { context }),
 
   getAgentStatus: () => invoke<AgentStatusSnapshot>("get_agent_status"),
   getMcpServerConfig: () => invoke<McpServerConfigPreview>("get_mcp_server_config"),
