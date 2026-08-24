@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { AgentNavigation } from "./agents/AgentNavigation";
 import { App } from "./App";
 import { PetView } from "./PetView";
 import { installPetDomBridge } from "./plugins/dom-bridge";
@@ -24,6 +25,7 @@ createRoot(document.getElementById("root")!).render(
       <>
         <App />
         <PluginNavigation />
+        <AgentNavigation />
       </>
     )}
   </StrictMode>,

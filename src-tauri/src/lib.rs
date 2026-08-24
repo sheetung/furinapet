@@ -1,4 +1,8 @@
+mod agent_commands;
+mod agent_host;
+mod claude_integration;
 mod commands;
+mod mcp_server;
 mod pet;
 mod plugin_host;
 mod settings;
@@ -8,6 +12,14 @@ mod window_surfaces;
 
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
+
+pub fn run_mcp_stdio() -> Result<(), String> {
+    mcp_server::run()
+}
+
+pub fn run_claude_hook_stdio() -> Result<(), String> {
+    claude_integration::run_hook_from_stdin()
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,6 +31,10 @@ pub fn run() {
             let initial_settings = settings::load(&app_handle);
             app.manage(settings::AppState::new(initial_settings.clone()));
             app.manage(plugin_host::PluginHostState::load(&app_handle));
+            app.manage(agent_host::AgentHostState::default());
+            if let Err(error) = agent_host::start(&app_handle) {
+                eprintln!("[agent] failed to start local bridge: {error}");
+            }
 
             let pet_window = pet::create(&app_handle, &initial_settings)?;
             let pet_for_close = pet_window.clone();
@@ -54,6 +70,12 @@ pub fn run() {
             commands::trigger_reaction,
             commands::show_control_center,
             commands::quit_app,
+            agent_host::get_agent_status,
+            agent_commands::get_mcp_server_config,
+            claude_integration::get_claude_integration_status,
+            claude_integration::install_claude_integration,
+            claude_integration::uninstall_claude_integration,
+            claude_integration::test_agent_integration,
             plugin_host::list_plugins,
             plugin_host::fetch_plugin_catalog,
             plugin_host::install_plugin,

@@ -55,6 +55,57 @@ export interface RuntimePlugin {
 
 export type PetPluginEventName = "pet:clicked" | "pet:doubleClicked" | "pet:dragStart" | "pet:dragEnd";
 
+export type AgentState = "idle" | "thinking" | "editing" | "testing" | "waiting" | "success" | "error";
+
+export interface AgentConnectionSnapshot {
+  sessionId: string;
+  agent: string;
+  clientName: string;
+  clientVersion?: string;
+  integration: "mcp" | "hooks" | "mcp+hooks" | "manual" | string;
+  project?: string;
+  state: AgentState;
+  working: boolean;
+  active: boolean;
+  connectedAtMs: number;
+  lastActivityMs: number;
+  lastSeenMs: number;
+}
+
+export interface AgentStatusSnapshot {
+  appRunning: boolean;
+  protocolVersion: number;
+  state: AgentState;
+  reaction: Reaction;
+  agent?: string;
+  clientName?: string;
+  clientVersion?: string;
+  integration?: string;
+  project?: string;
+  sessionId?: string;
+  sessionCount: number;
+  connectedCount: number;
+  workingCount: number;
+  sessions: AgentConnectionSnapshot[];
+}
+
+export type IntegrationStatus = "installed" | "not_installed" | "needs_update" | "error" | "unavailable";
+
+export interface ClaudeIntegrationStatus {
+  claudeAvailable: boolean;
+  hooksStatus: IntegrationStatus;
+  mcpStatus: IntegrationStatus;
+  overallStatus: IntegrationStatus;
+  message: string;
+}
+
+export interface McpServerConfigPreview {
+  command: string;
+  args: string[];
+  json: string;
+  claudeCommand: string;
+}
+
 export const desktop = {
   getSettings: () => invoke<AppSettings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<AppSettings>("update_settings", { patch }),
@@ -67,6 +118,13 @@ export const desktop = {
   getWorkAreaAt: (x: number, y: number) => invoke<WorkArea>("get_work_area_at", { x, y }),
   listDockSurfaces: () => invoke<WindowSurface[]>("list_dock_surfaces"),
   react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message }),
+
+  getAgentStatus: () => invoke<AgentStatusSnapshot>("get_agent_status"),
+  getMcpServerConfig: () => invoke<McpServerConfigPreview>("get_mcp_server_config"),
+  getClaudeIntegrationStatus: () => invoke<ClaudeIntegrationStatus>("get_claude_integration_status"),
+  installClaudeIntegration: () => invoke<ClaudeIntegrationStatus>("install_claude_integration"),
+  uninstallClaudeIntegration: () => invoke<ClaudeIntegrationStatus>("uninstall_claude_integration"),
+  testAgentIntegration: () => invoke<void>("test_agent_integration"),
 
   listPlugins: () => invoke<PluginSnapshot[]>("list_plugins"),
   fetchPluginCatalog: () => invoke<PluginSnapshot[]>("fetch_plugin_catalog"),
