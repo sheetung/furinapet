@@ -1,0 +1,85 @@
+export type PetGoalId =
+  | "idle"
+  | "wander"
+  | "dock"
+  | "respond-user"
+  | "observe-agent"
+  | "celebrate"
+  | "rest";
+
+export type PetMood = "happy" | "normal" | "focused" | "tired";
+
+export type BrainAgentState =
+  | "idle"
+  | "thinking"
+  | "editing"
+  | "testing"
+  | "waiting"
+  | "success"
+  | "error";
+
+export type BrainIntentSource = "system" | "user" | "agent" | "plugin" | "ai";
+
+export interface BrainContext {
+  now: number;
+  autoWander: boolean;
+  canMove: boolean;
+  canDock: boolean;
+  userReactionActive: boolean;
+  agentState: BrainAgentState;
+  idleForMs: number;
+  wanderProbability: number;
+  activity: number;
+  curiosity: number;
+}
+
+export interface BrainIntent {
+  id: string;
+  source: BrainIntentSource;
+  goal: PetGoalId;
+  priority: number;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export type PetSemanticAction =
+  | { type: "idle"; durationMs?: number }
+  | { type: "wander" }
+  | { type: "dock" }
+  | { type: "observe"; durationMs: number }
+  | { type: "respond"; intensity: "soft" | "normal" | "excited" }
+  | { type: "celebrate"; intensity: "normal" | "excited" }
+  | { type: "rest"; durationMs: number }
+  | { type: "wait"; durationMs: number };
+
+export interface PetActionPlan {
+  id: string;
+  goal: PetGoalId;
+  score: number;
+  reason: string;
+  createdAt: number;
+  actions: PetSemanticAction[];
+}
+
+export interface GoalScore {
+  goal: PetGoalId;
+  score: number;
+  reason: string;
+}
+
+export interface BrainHistoryEntry {
+  goal: PetGoalId;
+  at: number;
+}
+
+export interface PetBrainSnapshot {
+  currentGoal: PetGoalId;
+  mood: PetMood;
+  energy: number;
+  clickStreak: number;
+  lastUserInteractionAt: number | null;
+  lastAgentActivityAt: number | null;
+  lastDecisionAt: number | null;
+  pendingIntentCount: number;
+  history: BrainHistoryEntry[];
+}
