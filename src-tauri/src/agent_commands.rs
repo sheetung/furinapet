@@ -18,7 +18,7 @@ pub fn get_mcp_server_config() -> Result<McpServerConfigPreview, String> {
         "mcpServers": {
             "furinapet": {
                 "type": "stdio",
-                "command": command,
+                "command": command.clone(),
                 "args": ["mcp"]
             }
         }
