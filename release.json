@@ -1,10 +1,12 @@
 {
-  "version": "1.1.1",
-  "title": "furinapet v1.1.1",
+  "version": "1.1.2",
+  "title": "furinapet v1.1.2",
   "notes": [
-    "修复插件导航与主页、宠物、设置同时高亮的问题，侧边栏现在始终只保留一个当前页面",
-    "优化插件管理页卡片布局、状态标记与操作按钮层级",
-    "插件设置改为独立模态弹窗，不再插入插件列表中间",
-    "插件设置统一使用 FurinaPet 暗色输入框、下拉框与滑动开关，并支持取消、保存、Esc 和点击遮罩关闭"
+    "新增内置 Agent Bridge 与 stdio MCP Server，可直接通过 furinapet.exe mcp 接入支持 MCP 的智能体与编辑器",
+    "新增 furinapet_status、furinapet_set_state、furinapet_react、furinapet_say 四个 MCP 工具，并加入 Windows MCP smoke test",
+    "新增 Claude Code 官方接入，支持 MCP + Hooks 自动映射思考、编辑、测试、等待授权、成功与失败状态",
+    "智能体页面新增客户端名称、版本、项目、接入方式、连接会话与工作中状态展示，可区分 Trae、Claude Code 等多个连接",
+    "修复 MCP heartbeat 重复续期工作动画的问题，工作状态超时后会自动回到 idle，同时保持客户端连接",
+    "优化桌宠消息气泡在屏幕顶部附近的显示范围，避免气泡扩展到可视区域外"
   ]
 }
