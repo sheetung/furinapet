@@ -112,15 +112,49 @@ jobs:
       - name: Smoke test built-in MCP server
         shell: pwsh
         run: |
-          $exe = Resolve-Path "src-tauri/target/release/furina-desktop-pet.exe"
+          $exe = (Resolve-Path "src-tauri/target/release/furina-desktop-pet.exe").Path
           $initialize = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"furinapet-ci","version":"1"}}}'
+          $initialized = '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}'
           $listTools = '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-          $responses = @($initialize, $listTools) | & $exe mcp
-          if ($LASTEXITCODE -ne 0) { throw "Built-in MCP process exited with $LASTEXITCODE." }
-          $parsed = @($responses | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
+
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $exe
+          $startInfo.ArgumentList.Add("mcp")
+          $startInfo.UseShellExecute = $false
+          $startInfo.CreateNoWindow = $true
+          $startInfo.RedirectStandardInput = $true
+          $startInfo.RedirectStandardOutput = $true
+          $startInfo.RedirectStandardError = $true
+
+          $process = [System.Diagnostics.Process]::new()
+          $process.StartInfo = $startInfo
+          if (-not $process.Start()) { throw "Failed to start built-in MCP server." }
+
+          $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+          $stderrTask = $process.StandardError.ReadToEndAsync()
+          $process.StandardInput.WriteLine($initialize)
+          $process.StandardInput.WriteLine($initialized)
+          $process.StandardInput.WriteLine($listTools)
+          $process.StandardInput.Close()
+
+          if (-not $process.WaitForExit(10000)) {
+            $process.Kill($true)
+            throw "Built-in MCP process did not exit after stdin closed."
+          }
+
+          $stdout = $stdoutTask.GetAwaiter().GetResult()
+          $stderr = $stderrTask.GetAwaiter().GetResult()
+          if ($process.ExitCode -ne 0) {
+            throw "Built-in MCP process exited with $($process.ExitCode). stderr: $stderr"
+          }
+
+          $responses = @($stdout -split "\r?\n" | Where-Object { $_.Trim() })
+          $parsed = @($responses | ForEach-Object { $_ | ConvertFrom-Json })
           $init = @($parsed | Where-Object { $_.id -eq 1 })[0]
           $tools = @($parsed | Where-Object { $_.id -eq 2 })[0]
           if (-not $init.result.serverInfo -or $init.result.serverInfo.name -ne "furinapet") { throw "MCP initialize response is invalid." }
+          if (-not $tools.result.tools) { throw "MCP tools/list response is invalid." }
+
           $names = @($tools.result.tools | ForEach-Object { $_.name })
           foreach ($required in @("furinapet_status", "furinapet_set_state", "furinapet_react", "furinapet_say")) {
             if ($required -notin $names) { throw "MCP tool missing: $required" }
