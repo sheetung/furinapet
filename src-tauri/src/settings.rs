@@ -123,7 +123,7 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 pub fn load(app: &AppHandle) -> Settings {
     let Ok(path) = settings_path(app) else { return Settings::default(); };
-    let mut value = fs::read_to_string(path)
+    let mut value: Settings = fs::read_to_string(path)
         .ok()
         .and_then(|content| serde_json::from_str(&content).ok())
         .unwrap_or_default();
