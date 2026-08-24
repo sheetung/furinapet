@@ -88,7 +88,6 @@ export class PetBrain {
 
   plan(context: BrainContext): PetActionPlan {
     this.blackboard.tick(context.now, context.userReactionActive || !context.canMove);
-    this.blackboard.observeAgentState(context.agentState, context.now);
     const activeIntents = this.blackboard.getActiveIntents(context.now);
     const plan = this.planner.plan(context, this.blackboard);
     const consumed = activeIntents.find((intent) => intent.goal === plan.goal);
