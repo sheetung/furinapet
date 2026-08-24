@@ -11,8 +11,9 @@ pub struct Settings {
     pub launch_at_login: bool,
     pub scale: f64,
     pub look_at_cursor: bool,
-    pub auto_wander: bool,
-    pub wander_probability: f64,
+    pub autonomous_movement: bool,
+    pub wander_weight: f64,
+    pub dock_weight: f64,
     pub wander_speed: f64,
     pub gravity_enabled: bool,
     pub window_docking: bool,
@@ -27,8 +28,9 @@ impl Default for Settings {
             launch_at_login: false,
             scale: 1.0,
             look_at_cursor: true,
-            auto_wander: false,
-            wander_probability: 1.0,
+            autonomous_movement: false,
+            wander_weight: 0.65,
+            dock_weight: 0.45,
             wander_speed: 1.0,
             gravity_enabled: true,
             window_docking: true,
@@ -45,8 +47,9 @@ pub struct SettingsPatch {
     pub launch_at_login: Option<bool>,
     pub scale: Option<f64>,
     pub look_at_cursor: Option<bool>,
-    pub auto_wander: Option<bool>,
-    pub wander_probability: Option<f64>,
+    pub autonomous_movement: Option<bool>,
+    pub wander_weight: Option<f64>,
+    pub dock_weight: Option<f64>,
     pub wander_speed: Option<f64>,
     pub gravity_enabled: Option<bool>,
     pub window_docking: Option<bool>,
@@ -70,7 +73,7 @@ impl Settings {
         if let Some(value) = patch.always_on_top { self.always_on_top = value; }
         if let Some(value) = patch.launch_at_login { self.launch_at_login = value; }
         if let Some(value) = patch.look_at_cursor { self.look_at_cursor = value; }
-        if let Some(value) = patch.auto_wander { self.auto_wander = value; }
+        if let Some(value) = patch.autonomous_movement { self.autonomous_movement = value; }
         if let Some(value) = patch.gravity_enabled { self.gravity_enabled = value; }
         if let Some(value) = patch.window_docking { self.window_docking = value; }
         if let Some(value) = patch.scale {
@@ -81,9 +84,13 @@ impl Settings {
             if !(0.6..=1.8).contains(&value) { return Err("wanderSpeed must be between 0.6 and 1.8".into()); }
             self.wander_speed = (value * 10.0).round() / 10.0;
         }
-        if let Some(value) = patch.wander_probability {
-            if ![0.25, 0.5, 0.75, 1.0].contains(&value) { return Err("wanderProbability must be 0.25, 0.5, 0.75, or 1.0".into()); }
-            self.wander_probability = value;
+        if let Some(value) = patch.wander_weight {
+            if !(0.0..=1.0).contains(&value) { return Err("wanderWeight must be between 0 and 1".into()); }
+            self.wander_weight = (value * 20.0).round() / 20.0;
+        }
+        if let Some(value) = patch.dock_weight {
+            if !(0.0..=1.0).contains(&value) { return Err("dockWeight must be between 0 and 1".into()); }
+            self.dock_weight = (value * 20.0).round() / 20.0;
         }
         Ok(())
     }

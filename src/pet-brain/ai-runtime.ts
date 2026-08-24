@@ -7,7 +7,6 @@ import type { BrainAgentStateEvent } from "./types";
 
 const IDLE_CHECK_MS = 30_000;
 const STARTUP_DELAY_MS = 8_000;
-const LOCOMOTION_INTENT_TTL_MS = 20_000;
 let bootstrapped = false;
 let inFlight = false;
 
@@ -39,8 +38,8 @@ async function buildContext(): Promise<AiBehaviorContext> {
       recentInteraction: idleForMs <= 5_000,
     },
     environment: {
-      canWander: settings.autoWander,
-      canDock: settings.autoWander && settings.windowDocking,
+      canWander: settings.autonomousMovement,
+      canDock: settings.autonomousMovement && settings.windowDocking,
     },
   };
 }
@@ -61,10 +60,9 @@ async function requestSuggestion(reason: string) {
       console.warn("[pet-brain:ai] rejected provider suggestion");
       return;
     }
-    const locomotion = intent.goal === "wander" || intent.goal === "dock";
     await desktop.submitBrainIntent(intent.source, intent.goal, {
       priority: intent.priority,
-      ttlMs: locomotion ? Math.max(LOCOMOTION_INTENT_TTL_MS, intent.ttlMs ?? 0) : intent.ttlMs,
+      ttlMs: intent.ttlMs,
       id: intent.id ?? `ai-${reason}-${Date.now()}`,
     });
   } catch (error) {

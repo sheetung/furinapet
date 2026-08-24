@@ -23,13 +23,14 @@ function immediateContext(now: number, agentState: BrainAgentState): BrainContex
   const lastInteraction = brain.blackboard.getLastUserInteractionAt();
   return {
     now,
-    autoWander: false,
+    autonomousMovement: false,
     canMove: false,
     canDock: false,
     userReactionActive: false,
     agentState,
     idleForMs: lastInteraction === null ? 0 : Math.max(0, now - lastInteraction),
-    wanderProbability: 0,
+    wanderWeight: 0,
+    dockWeight: 0,
     activity: 0.65,
     curiosity: 0.65,
   };

@@ -47,13 +47,14 @@ export interface BrainIntentEvent {
 
 export interface BrainContext {
   now: number;
-  autoWander: boolean;
+  autonomousMovement: boolean;
   canMove: boolean;
   canDock: boolean;
   userReactionActive: boolean;
   agentState: BrainAgentState;
   idleForMs: number;
-  wanderProbability: number;
+  wanderWeight: number;
+  dockWeight: number;
   activity: number;
   curiosity: number;
 }

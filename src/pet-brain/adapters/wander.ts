@@ -4,31 +4,35 @@ import type { BrainAgentState, PetGoalId } from "../types";
 
 export interface WanderDecisionInput {
   now: number;
-  autoWander: boolean;
+  autonomousMovement: boolean;
   canMove: boolean;
   canDock: boolean;
   userReactionActive: boolean;
   agentState?: BrainAgentState;
   idleForMs: number;
-  wanderProbability: number;
+  wanderWeight: number;
+  dockWeight: number;
   missedOpportunities: number;
   profile: WanderProfile;
 }
 
 export function planWanderGoal(brain: PetBrain, input: WanderDecisionInput): PetGoalId {
-  const effectiveProbability = Math.min(
-    1,
-    Math.max(0, input.wanderProbability) + Math.min(4, input.missedOpportunities) * 0.08,
-  );
+  const effectiveWanderWeight = input.wanderWeight <= 0
+    ? 0
+    : Math.min(1, Math.max(0, input.wanderWeight) + Math.min(4, input.missedOpportunities) * 0.05);
+  const effectiveDockWeight = input.dockWeight <= 0
+    ? 0
+    : Math.min(1, Math.max(0, input.dockWeight) + Math.min(4, input.missedOpportunities) * 0.03);
   const plan = brain.plan({
     now: input.now,
-    autoWander: input.autoWander,
+    autonomousMovement: input.autonomousMovement,
     canMove: input.canMove,
     canDock: input.canDock,
     userReactionActive: input.userReactionActive,
     agentState: input.agentState ?? brain.blackboard.getAgentState(),
     idleForMs: Math.max(0, input.idleForMs),
-    wanderProbability: effectiveProbability,
+    wanderWeight: effectiveWanderWeight,
+    dockWeight: effectiveDockWeight,
     activity: input.profile.activity,
     curiosity: input.profile.curiosity,
   });

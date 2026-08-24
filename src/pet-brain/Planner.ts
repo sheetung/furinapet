@@ -62,8 +62,9 @@ export class PetUtilityPlanner {
       - recentUserInteraction * 0.25;
     add("rest", restScore - cooldownPenalty("rest", 12000, 0.18), "energy recovery");
 
-    const wanderBase = context.autoWander && context.canMove && !context.userReactionActive
-      ? context.wanderProbability * (0.55 + context.activity * 0.45)
+    const movementAvailable = context.autonomousMovement && context.canMove && !context.userReactionActive;
+    const wanderBase = movementAvailable
+      ? context.wanderWeight * (0.48 + context.activity * 0.36)
       : 0;
     const wanderScore = wanderBase
       + Math.min(0.18, context.idleForMs / 90000 * 0.18)
@@ -72,15 +73,18 @@ export class PetUtilityPlanner {
       - (agentActive ? 0.2 : 0)
       - repeatPenalty("wander", 0.1)
       - cooldownPenalty("wander", 3500, 0.15);
-    add("wander", wanderScore, "autonomous exploration");
+    add("wander", wanderScore, "autonomous exploration tendency");
 
-    const dockScore = context.canDock
-      ? wanderBase * (0.45 + context.curiosity * 0.4)
-        - recentUserInteraction * 0.25
-        - repeatPenalty("dock", 0.12)
-        - cooldownPenalty("dock", 10000, 0.28)
+    const dockBase = movementAvailable && context.canDock
+      ? context.dockWeight * (0.38 + context.curiosity * 0.42)
       : 0;
-    add("dock", dockScore, "curiosity about nearby windows");
+    const dockScore = dockBase
+      + Math.min(0.08, context.idleForMs / 120000 * 0.08)
+      - recentUserInteraction * 0.25
+      - (agentActive ? 0.12 : 0)
+      - repeatPenalty("dock", 0.12)
+      - cooldownPenalty("dock", 10000, 0.28);
+    add("dock", dockScore, "window exploration tendency");
 
     if (intent) {
       const existing = scores.find((item) => item.goal === intent.goal);

@@ -341,7 +341,7 @@ export function PetView() {
         const workArea = await getWorkArea(position, size);
         const bounds = makeBounds(workArea, size);
 
-        if (currentSettings.autoWander && isLocomotionState) {
+        if (currentSettings.autonomousMovement && isLocomotionState) {
           if (wander.mode === "docked") {
             if (!currentSettings.windowDocking || wallClock >= wander.dockUntil) {
               resetWander(wallClock + pauseDuration(profile));
@@ -372,12 +372,13 @@ export function PetView() {
             const brain = brainRef.current!;
             const goal = planWanderGoal(brain, {
               now: wallClock,
-              autoWander: currentSettings.autoWander,
+              autonomousMovement: currentSettings.autonomousMovement,
               canMove: isLocomotionState,
               canDock: currentSettings.windowDocking,
               userReactionActive,
               idleForMs: wallClock - lastAutonomousActionAt,
-              wanderProbability: currentSettings.wanderProbability,
+              wanderWeight: currentSettings.wanderWeight,
+              dockWeight: currentSettings.dockWeight,
               missedOpportunities: wander.missedOpportunities,
               profile,
             });
