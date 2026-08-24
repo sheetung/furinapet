@@ -47,6 +47,7 @@ pub fn run() {
                     let _ = pet_for_close.hide();
                 }
             });
+            window_surfaces::start_fullscreen_watcher(&app_handle);
 
             if let Some(main_window) = app.get_webview_window("main") {
                 let main_for_close = main_window.clone();
