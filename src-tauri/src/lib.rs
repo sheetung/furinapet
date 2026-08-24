@@ -1,4 +1,6 @@
+mod agent_host;
 mod commands;
+mod mcp_server;
 mod pet;
 mod plugin_host;
 mod settings;
@@ -8,6 +10,10 @@ mod window_surfaces;
 
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
+
+pub fn run_mcp_stdio() -> Result<(), String> {
+    mcp_server::run()
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,6 +25,10 @@ pub fn run() {
             let initial_settings = settings::load(&app_handle);
             app.manage(settings::AppState::new(initial_settings.clone()));
             app.manage(plugin_host::PluginHostState::load(&app_handle));
+            app.manage(agent_host::AgentHostState::default());
+            if let Err(error) = agent_host::start(&app_handle) {
+                eprintln!("[agent] failed to start local bridge: {error}");
+            }
 
             let pet_window = pet::create(&app_handle, &initial_settings)?;
             let pet_for_close = pet_window.clone();
@@ -54,6 +64,7 @@ pub fn run() {
             commands::trigger_reaction,
             commands::show_control_center,
             commands::quit_app,
+            agent_host::get_agent_status,
             plugin_host::list_plugins,
             plugin_host::fetch_plugin_catalog,
             plugin_host::install_plugin,
