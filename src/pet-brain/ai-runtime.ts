@@ -39,7 +39,7 @@ async function buildContext(): Promise<AiBehaviorContext> {
     },
     environment: {
       canWander: settings.autonomousMovement,
-      canDock: settings.autonomousMovement && settings.windowDocking,
+      canDock: settings.autonomousMovement && settings.windowDocking && !settings.gravityEnabled,
     },
   };
 }
