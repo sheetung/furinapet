@@ -18,6 +18,9 @@ pub struct WindowSurface {
     y: i32,
     width: u32,
     height: u32,
+    process_name: String,
+    app_kind: String,
+    dock_policy: String,
 }
 
 #[cfg(target_os = "windows")]
@@ -29,16 +32,19 @@ mod windows_impl {
     };
     use windows_sys::core::BOOL;
     use windows_sys::Win32::{
-        Foundation::{HWND, LPARAM, POINT, RECT},
+        Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT},
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS},
             Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST},
         },
-        System::Threading::GetCurrentProcessId,
+        System::Threading::{
+            GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW,
+            PROCESS_QUERY_LIMITED_INFORMATION,
+        },
         UI::WindowsAndMessaging::{
             EnumWindows, GetClassNameW, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
-            IsIconic, IsWindowVisible, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-            WS_EX_TRANSPARENT,
+            IsIconic, IsWindowVisible, GWL_EXSTYLE, GWL_STYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            WS_EX_TRANSPARENT, WS_POPUP,
         },
     };
 
@@ -66,6 +72,28 @@ mod windows_impl {
             return String::new();
         }
         String::from_utf16_lossy(&buffer[..length as usize])
+    }
+
+    unsafe fn process_image_path(process_id: u32) -> Option<String> {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id);
+        if handle.is_null() {
+            return None;
+        }
+        let mut buffer = vec![0u16; 2048];
+        let mut length = buffer.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length) != 0;
+        let _ = CloseHandle(handle);
+        if !ok || length == 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&buffer[..length as usize]))
+    }
+
+    fn process_name(path: Option<&str>) -> String {
+        path.and_then(|value| value.rsplit(['\\', '/']).next())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("unknown")
+            .to_string()
     }
 
     unsafe fn window_rectangle(hwnd: HWND) -> Option<RECT> {
@@ -117,13 +145,73 @@ mod windows_impl {
     }
 
     fn rectangle_covers_monitor(rect: RECT, monitor: RECT) -> bool {
-        // DWM frame bounds can differ from the physical monitor by a handful of
-        // pixels depending on DPI and borderless-window implementation.
         const TOLERANCE: i32 = 8;
         rect.left <= monitor.left + TOLERANCE
             && rect.top <= monitor.top + TOLERANCE
             && rect.right >= monitor.right - TOLERANCE
             && rect.bottom >= monitor.bottom - TOLERANCE
+    }
+
+    fn monitor_info_at(x: i32, y: i32) -> Result<MONITORINFO, String> {
+        unsafe {
+            let monitor = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
+            if monitor.is_null() {
+                return Err("无法识别当前显示器。".into());
+            }
+            let mut info: MONITORINFO = zeroed();
+            info.cbSize = size_of::<MONITORINFO>() as u32;
+            if GetMonitorInfoW(monitor, &mut info) == 0 {
+                return Err("无法读取显示器信息。".into());
+            }
+            Ok(info)
+        }
+    }
+
+    fn is_probable_game(path: &str, class: &str, style: u32) -> bool {
+        let path = path.to_ascii_lowercase();
+        let class = class.to_ascii_lowercase();
+        let known_game_paths = [
+            "\\steamapps\\common\\",
+            "\\epic games\\",
+            "\\xboxgames\\",
+            "\\riot games\\",
+            "\\ubisoft\\",
+            "\\ea games\\",
+            "\\gog galaxy\\games\\",
+        ];
+        let known_game_classes = [
+            "unitywndclass",
+            "unrealwindow",
+            "sdl_app",
+            "glfw30",
+            "grcwindow",
+            "crytek",
+        ];
+        known_game_paths.iter().any(|marker| path.contains(marker))
+            || known_game_classes.iter().any(|marker| class.contains(marker))
+            || ((style & WS_POPUP) != 0
+                && (path.contains("\\games\\") || path.contains("\\game\\"))
+                && !path.contains("\\windows\\"))
+    }
+
+    unsafe fn classify_window(hwnd: HWND, rect: RECT, process_id: u32) -> (String, String, String) {
+        let path = process_image_path(process_id).unwrap_or_default();
+        let name = process_name((!path.is_empty()).then_some(path.as_str()));
+        let class = class_name(hwnd);
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        let center_x = rect.left + (rect.right - rect.left) / 2;
+        let center_y = rect.top + (rect.bottom - rect.top) / 2;
+        let fullscreen = monitor_info_at(center_x, center_y)
+            .map(|info| rectangle_covers_monitor(rect, info.rcMonitor))
+            .unwrap_or(false);
+
+        if fullscreen {
+            return (name, "immersive".into(), "blocked".into());
+        }
+        if is_probable_game(&path, &class, style) {
+            return (name, "game".into(), "outside-only".into());
+        }
+        (name, "normal".into(), "normal".into())
     }
 
     unsafe extern "system" fn enumerate_window(hwnd: HWND, parameter: LPARAM) -> BOOL {
@@ -141,12 +229,19 @@ mod windows_impl {
         if width < 220 || height < 120 {
             return 1;
         }
+
+        let mut process_id = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut process_id);
+        let (process_name, app_kind, dock_policy) = classify_window(hwnd, rect, process_id);
         context.surfaces.push(WindowSurface {
             id: format!("{:X}", hwnd as usize),
             x: rect.left,
             y: rect.top,
             width,
             height,
+            process_name,
+            app_kind,
+            dock_policy,
         });
         1
     }
@@ -162,21 +257,6 @@ mod windows_impl {
             }
         }
         1
-    }
-
-    fn monitor_info_at(x: i32, y: i32) -> Result<MONITORINFO, String> {
-        unsafe {
-            let monitor = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
-            if monitor.is_null() {
-                return Err("无法识别当前显示器。".into());
-            }
-            let mut info: MONITORINFO = zeroed();
-            info.cbSize = size_of::<MONITORINFO>() as u32;
-            if GetMonitorInfoW(monitor, &mut info) == 0 {
-                return Err("无法读取显示器信息。".into());
-            }
-            Ok(info)
-        }
     }
 
     pub fn work_area_at(x: i32, y: i32) -> Result<WorkArea, String> {
@@ -224,9 +304,7 @@ mod windows_impl {
             {
                 return Err("无法枚举桌面窗口。".into());
             }
-            context
-                .surfaces
-                .sort_by_key(|surface| (surface.y, surface.x));
+            context.surfaces.sort_by_key(|surface| (surface.y, surface.x));
             Ok(context.surfaces)
         }
     }
