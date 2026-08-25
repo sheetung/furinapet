@@ -26,8 +26,9 @@ const defaultSettings: AppSettings = {
   launchAtLogin: false,
   scale: 1,
   lookAtCursor: true,
-  autoWander: false,
-  wanderProbability: 1,
+  autonomousMovement: false,
+  wanderWeight: 0.65,
+  dockWeight: 0.45,
   wanderSpeed: 1,
   gravityEnabled: true,
   windowDocking: true,
@@ -268,7 +269,7 @@ export function App() {
               <div>
                 <span className="hero-kicker">当前状态</span>
                 <h2>{settings.petVisible ? `${activeCharacter.name}正在舞台上` : `${activeCharacter.name}暂时隐藏了`}</h2>
-                <p>视线、动画和漫步均在本地运行，不需要插件市场或后台服务。</p>
+                <p>视线、动画和自主行为均在本地运行，不需要插件市场或后台服务。</p>
                 <div className="button-row">
                   <button className="primary" onClick={() => void togglePet()}>{settings.petVisible ? "暂时隐藏" : `显示${activeCharacter.name}`}</button>
                   <button className="secondary" disabled={characterUpdateChecking} onClick={() => void checkCharacterUpdate()}>{characterUpdateChecking ? "检查中…" : "角色更新"}</button>
@@ -309,7 +310,7 @@ export function App() {
 
         {page === "pet" && (
           <section className="page">
-            <PageHeader eyebrow="Companion" title="宠物" description="所有角色共享一套可靠的 v2 动画契约。" />
+            <PageHeader eyebrow="Companion" title="宠物" description="这里配置角色的显示、物理和运动表现；自主决策权重统一放在“自主”页面。" />
             <div className="pet-profile card">
               <img src={activeCharacter.thumbnailUrl} alt={activeCharacter.name} />
               <div><span className="tag">已注册 · v2</span><h2>{activeCharacter.name}</h2><p>{activeCharacter.description} 11 行、8 列图集，包含 9 种基础动画和 16 个顺时针视线方向。</p></div>
@@ -317,22 +318,13 @@ export function App() {
             <div className="settings-list">
               <SettingRow title="显示桌宠" description={`在桌面显示或隐藏${activeCharacter.name}。`}><Switch checked={settings.petVisible} disabled={busy} onChange={(value) => void updateSettings({ petVisible: value })} /></SettingRow>
               <SettingRow title="视线跟随" description="空闲时看向全局鼠标位置。"><Switch checked={settings.lookAtCursor} disabled={busy} onChange={(value) => void updateSettings({ lookAtCursor: value })} /></SettingRow>
-              <SettingRow title="自动漫步" description="按设定概率在当前显示器内开始一次漫步。"><Switch checked={settings.autoWander} disabled={busy} onChange={(value) => void updateSettings({ autoWander: value })} /></SettingRow>
-              <SettingRow title="漫步概率" description="每次漫步机会实际出发的概率。">
-                <select className="select" value={settings.wanderProbability} disabled={busy || !settings.autoWander} onChange={(event) => void updateSettings({ wanderProbability: Number(event.target.value) })}>
-                  <option value="0.25">偶尔 · 25%</option>
-                  <option value="0.5">适中 · 50%</option>
-                  <option value="0.75">经常 · 75%</option>
-                  <option value="1">总是 · 100%</option>
-                </select>
-              </SettingRow>
-              <SettingRow title="重力落地" description="开启后拖动松手自然落地并贴地漫步；关闭后可在屏幕内自由漫步。"><Switch checked={settings.gravityEnabled} disabled={busy} onChange={(value) => void updateSettings({ gravityEnabled: value })} /></SettingRow>
-              <SettingRow title="窗口停靠" description="允许角色停留在其他应用窗口的顶部、内侧底边或左右轮廓。"><Switch checked={settings.windowDocking} disabled={busy || !settings.autoWander} onChange={(value) => void updateSettings({ windowDocking: value })} /></SettingRow>
+              <SettingRow title="重力落地" description="开启后拖动松手自然落地并贴地漫步；关闭后可在屏幕内自由移动。"><Switch checked={settings.gravityEnabled} disabled={busy} onChange={(value) => void updateSettings({ gravityEnabled: value })} /></SettingRow>
+              <SettingRow title="窗口停靠" description="允许角色停留在其他应用窗口的顶部、内侧底边或左右轮廓；是否主动探索由自主页面权重决定。"><Switch checked={settings.windowDocking} disabled={busy} onChange={(value) => void updateSettings({ windowDocking: value })} /></SettingRow>
               <SettingRow title="宠物大小" description={`${Math.round(settings.scale * 100)}%`} wide>
                 <input className="range" type="range" min="0.65" max="1.5" step="0.05" value={settings.scale} onChange={(event) => setSettings((current) => ({ ...current, scale: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ scale: Number(event.currentTarget.value) })} />
               </SettingRow>
-              <SettingRow title="漫步速度" description={`${Math.round(settings.wanderSpeed * 100)}%`} wide>
-                <input className="range" type="range" min="0.6" max="1.8" step="0.1" value={settings.wanderSpeed} disabled={!settings.autoWander} onChange={(event) => setSettings((current) => ({ ...current, wanderSpeed: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ wanderSpeed: Number(event.currentTarget.value) })} />
+              <SettingRow title="漫步速度" description={`${Math.round(settings.wanderSpeed * 100)}% · 自主移动开启后生效`} wide>
+                <input className="range" type="range" min="0.6" max="1.8" step="0.1" value={settings.wanderSpeed} disabled={!settings.autonomousMovement} onChange={(event) => setSettings((current) => ({ ...current, wanderSpeed: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ wanderSpeed: Number(event.currentTarget.value) })} />
               </SettingRow>
             </div>
             <button className="secondary" onClick={() => void desktop.resetPetPosition().then(() => showToast("已重置到主屏幕右下角"))}>重置桌宠位置</button>

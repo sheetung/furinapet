@@ -14,7 +14,6 @@ import {
   advanceSpeed,
   chooseDockPlacement,
   chooseWanderTarget,
-  effectiveWanderProbability,
   nextDecisionDelay,
   pauseDuration,
   type DockEdge,
@@ -24,6 +23,9 @@ import {
   type WindowSurface,
   type WorkArea,
 } from "./core/wander-controller";
+import { PetBrain } from "./pet-brain";
+import { planWanderGoal } from "./pet-brain/adapters/wander";
+import { publishPetBrainSnapshot } from "./pet-brain/runtime";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
 import "./pet.css";
 
@@ -33,6 +35,7 @@ const BUBBLE_SPACE = 92;
 const MOTION_INTERVAL_MS = 32;
 const GRAVITY_ACCELERATION = 2200;
 const MAX_FALL_SPEED = 1250;
+const GROUNDED_Y_TOLERANCE = 2;
 
 type MotionReaction = Reaction | "run-left" | "run-right";
 
@@ -94,6 +97,8 @@ export function PetView() {
   const layoutQueue = useRef<Promise<void>>(Promise.resolve());
   const bubbleExpandedRef = useRef(false);
   const bubbleClampRef = useRef(0);
+  const brainRef = useRef<PetBrain | null>(null);
+  if (!brainRef.current) brainRef.current = new PetBrain();
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -253,6 +258,7 @@ export function PetView() {
     let lastLook = -1;
     let lastLookAt = 0;
     let lastTick = performance.now();
+    let lastAutonomousActionAt = Date.now();
 
     const resetWander = (nextAt = Date.now() + 1500) => {
       wander.mode = "idle";
@@ -337,7 +343,7 @@ export function PetView() {
         const workArea = await getWorkArea(position, size);
         const bounds = makeBounds(workArea, size);
 
-        if (currentSettings.autoWander && isLocomotionState) {
+        if (currentSettings.autonomousMovement && isLocomotionState) {
           if (wander.mode === "docked") {
             if (!currentSettings.windowDocking || wallClock >= wander.dockUntil) {
               resetWander(wallClock + pauseDuration(profile));
@@ -363,15 +369,37 @@ export function PetView() {
             }
           }
 
+          if (
+            currentSettings.gravityEnabled
+            && wander.mode === "idle"
+            && Math.abs(position.y - bounds.groundY) > GROUNDED_Y_TOLERANCE
+          ) {
+            resetWander(wallClock + 300);
+            changeReaction("idle");
+            void settleWithGravity();
+            return;
+          }
+
           if (wander.mode === "idle" && wallClock >= wander.nextAt) {
             wander.nextAt = wallClock + nextDecisionDelay(profile);
-            const probability = effectiveWanderProbability(
-              currentSettings.wanderProbability * (0.7 + profile.activity * 0.3),
-              wander.missedOpportunities,
-            );
-            if (Math.random() <= probability) {
+            const brain = brainRef.current!;
+            const goal = planWanderGoal(brain, {
+              now: wallClock,
+              autonomousMovement: currentSettings.autonomousMovement,
+              canMove: isLocomotionState,
+              canDock: currentSettings.windowDocking,
+              userReactionActive,
+              idleForMs: wallClock - lastAutonomousActionAt,
+              wanderWeight: currentSettings.wanderWeight,
+              dockWeight: currentSettings.dockWeight,
+              missedOpportunities: wander.missedOpportunities,
+              profile,
+            });
+            publishPetBrainSnapshot();
+
+            if (goal === "wander" || goal === "dock") {
               wander.missedOpportunities = 0;
-              if (currentSettings.windowDocking && Math.random() <= profile.windowDockChance) {
+              if (goal === "dock" && currentSettings.windowDocking) {
                 const candidates = (await desktop.listDockSurfaces())
                   .map((surface) => ({
                     surface,
@@ -396,11 +424,14 @@ export function PetView() {
                   wander.dockSurfaceId = candidate.surface.id;
                   wander.dockEdge = candidate.placement.edge;
                   wander.dockRatio = candidate.ratio;
+                  lastAutonomousActionAt = wallClock;
                 }
               }
               if (wander.mode === "idle") {
                 wander.mode = "walking";
                 wander.target = chooseWanderTarget(position, bounds, currentSettings.gravityEnabled, profile);
+                if (currentSettings.gravityEnabled) wander.target.y = bounds.groundY;
+                lastAutonomousActionAt = wallClock;
               }
             } else {
               wander.missedOpportunities += 1;
@@ -417,6 +448,7 @@ export function PetView() {
           }
 
           if ((wander.mode === "walking" || wander.mode === "approaching") && wander.target) {
+            const groundedWander = wander.mode === "walking" && currentSettings.gravityEnabled;
             if (wander.mode === "approaching") {
               wander.target.x = Math.min(
                 workArea.x + workArea.width - size.width - 8,
@@ -428,15 +460,24 @@ export function PetView() {
               );
             } else {
               wander.target.x = Math.min(bounds.maxX, Math.max(bounds.minX, wander.target.x));
-              wander.target.y = currentSettings.gravityEnabled
+              wander.target.y = groundedWander
                 ? bounds.groundY
                 : Math.min(bounds.maxY, Math.max(bounds.minY, wander.target.y));
             }
+
+            if (groundedWander && Math.abs(position.y - bounds.groundY) > GROUNDED_Y_TOLERANCE) {
+              resetWander(wallClock + 300);
+              changeReaction("idle");
+              void settleWithGravity();
+              return;
+            }
+
             const dx = wander.target.x - position.x;
-            const dy = wander.target.y - position.y;
-            const distance = Math.hypot(dx, dy);
+            const dy = groundedWander ? 0 : wander.target.y - position.y;
+            const distance = groundedWander ? Math.abs(dx) : Math.hypot(dx, dy);
             if (distance < 3) {
-              await petWindow.setPosition(new PhysicalPosition(wander.target.x, wander.target.y));
+              const finalY = groundedWander ? bounds.groundY : wander.target.y;
+              await petWindow.setPosition(new PhysicalPosition(wander.target.x, finalY));
               if (wander.mode === "approaching") {
                 wander.mode = "docked";
                 wander.target = null;
@@ -457,13 +498,20 @@ export function PetView() {
                 currentSettings.wanderSpeed * profile.preferredSpeed,
               );
               const step = Math.min(distance, wander.speed * elapsed / 1000);
-              position = new PhysicalPosition(
-                Math.round(position.x + dx / distance * step),
-                Math.round(position.y + dy / distance * step),
-              );
+              position = groundedWander
+                ? new PhysicalPosition(
+                    Math.round(position.x + Math.sign(dx) * step),
+                    bounds.groundY,
+                  )
+                : new PhysicalPosition(
+                    Math.round(position.x + dx / distance * step),
+                    Math.round(position.y + dy / distance * step),
+                  );
               await petWindow.setPosition(position);
               setLook(null);
-              changeReaction(Math.abs(dy) > Math.abs(dx) * 1.25 ? "jumping" : dx >= 0 ? "run-right" : "run-left");
+              changeReaction(groundedWander
+                ? dx >= 0 ? "run-right" : "run-left"
+                : Math.abs(dy) > Math.abs(dx) * 1.25 ? "jumping" : dx >= 0 ? "run-right" : "run-left");
             }
           }
         } else {
@@ -592,6 +640,8 @@ export function PetView() {
       window.clearTimeout(reactionTimer.current);
       reactionTimer.current = null;
     }
+    brainRef.current?.interrupt();
+    brainRef.current?.observeUserInteraction(Date.now());
     motionRef.current.fallToken += 1;
     motionRef.current.falling = false;
     motionRef.current.dragging = true;

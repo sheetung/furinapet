@@ -1,4 +1,5 @@
 use serde::Serialize;
+use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +18,9 @@ pub struct WindowSurface {
     y: i32,
     width: u32,
     height: u32,
+    process_name: String,
+    app_kind: String,
+    dock_policy: String,
 }
 
 #[cfg(target_os = "windows")]
@@ -28,21 +32,31 @@ mod windows_impl {
     };
     use windows_sys::core::BOOL;
     use windows_sys::Win32::{
-        Foundation::{HWND, LPARAM, POINT, RECT},
+        Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT},
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS},
             Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST},
         },
-        System::Threading::GetCurrentProcessId,
+        System::Threading::{
+            GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW,
+            PROCESS_QUERY_LIMITED_INFORMATION,
+        },
         UI::WindowsAndMessaging::{
             EnumWindows, GetClassNameW, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
-            IsIconic, IsWindowVisible, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            IsIconic, IsWindowVisible, GWL_EXSTYLE, GWL_STYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            WS_EX_TRANSPARENT, WS_POPUP,
         },
     };
 
     struct EnumContext {
         process_id: u32,
         surfaces: Vec<WindowSurface>,
+    }
+
+    struct FullscreenContext {
+        process_id: u32,
+        monitor: RECT,
+        found: bool,
     }
 
     fn rectangle_size(rect: RECT) -> Option<(u32, u32)> {
@@ -60,6 +74,28 @@ mod windows_impl {
         String::from_utf16_lossy(&buffer[..length as usize])
     }
 
+    unsafe fn process_image_path(process_id: u32) -> Option<String> {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id);
+        if handle.is_null() {
+            return None;
+        }
+        let mut buffer = vec![0u16; 2048];
+        let mut length = buffer.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length) != 0;
+        let _ = CloseHandle(handle);
+        if !ok || length == 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&buffer[..length as usize]))
+    }
+
+    fn process_name(path: Option<&str>) -> String {
+        path.and_then(|value| value.rsplit(['\\', '/']).next())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("unknown")
+            .to_string()
+    }
+
     unsafe fn window_rectangle(hwnd: HWND) -> Option<RECT> {
         let mut rect: RECT = zeroed();
         let result = DwmGetWindowAttribute(
@@ -74,21 +110,20 @@ mod windows_impl {
         (GetWindowRect(hwnd, &mut rect) != 0 && rectangle_size(rect).is_some()).then_some(rect)
     }
 
-    unsafe extern "system" fn enumerate_window(hwnd: HWND, parameter: LPARAM) -> BOOL {
-        let context = &mut *(parameter as *mut EnumContext);
+    unsafe fn window_is_eligible(hwnd: HWND, own_process_id: u32) -> bool {
         if IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 {
-            return 1;
+            return false;
         }
 
         let mut process_id = 0u32;
         GetWindowThreadProcessId(hwnd, &mut process_id);
-        if process_id == 0 || process_id == context.process_id {
-            return 1;
+        if process_id == 0 || process_id == own_process_id {
+            return false;
         }
 
         let extended_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-        if extended_style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) != 0 {
-            return 1;
+        if extended_style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT) != 0 {
+            return false;
         }
 
         let class = class_name(hwnd);
@@ -96,7 +131,7 @@ mod windows_impl {
             class.as_str(),
             "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
         ) {
-            return 1;
+            return false;
         }
 
         let mut cloaked = 0u32;
@@ -106,7 +141,82 @@ mod windows_impl {
             &mut cloaked as *mut u32 as *mut c_void,
             size_of::<u32>() as u32,
         );
-        if cloak_result >= 0 && cloaked != 0 {
+        cloak_result < 0 || cloaked == 0
+    }
+
+    fn rectangle_covers_monitor(rect: RECT, monitor: RECT) -> bool {
+        const TOLERANCE: i32 = 8;
+        rect.left <= monitor.left + TOLERANCE
+            && rect.top <= monitor.top + TOLERANCE
+            && rect.right >= monitor.right - TOLERANCE
+            && rect.bottom >= monitor.bottom - TOLERANCE
+    }
+
+    fn monitor_info_at(x: i32, y: i32) -> Result<MONITORINFO, String> {
+        unsafe {
+            let monitor = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
+            if monitor.is_null() {
+                return Err("无法识别当前显示器。".into());
+            }
+            let mut info: MONITORINFO = zeroed();
+            info.cbSize = size_of::<MONITORINFO>() as u32;
+            if GetMonitorInfoW(monitor, &mut info) == 0 {
+                return Err("无法读取显示器信息。".into());
+            }
+            Ok(info)
+        }
+    }
+
+    fn is_probable_game(path: &str, class: &str, style: u32) -> bool {
+        let path = path.to_ascii_lowercase();
+        let class = class.to_ascii_lowercase();
+        let known_game_paths = [
+            "\\steamapps\\common\\",
+            "\\epic games\\",
+            "\\xboxgames\\",
+            "\\riot games\\",
+            "\\ubisoft\\",
+            "\\ea games\\",
+            "\\gog galaxy\\games\\",
+        ];
+        let known_game_classes = [
+            "unitywndclass",
+            "unrealwindow",
+            "sdl_app",
+            "glfw30",
+            "grcwindow",
+            "crytek",
+        ];
+        known_game_paths.iter().any(|marker| path.contains(marker))
+            || known_game_classes.iter().any(|marker| class.contains(marker))
+            || ((style & WS_POPUP) != 0
+                && (path.contains("\\games\\") || path.contains("\\game\\"))
+                && !path.contains("\\windows\\"))
+    }
+
+    unsafe fn classify_window(hwnd: HWND, rect: RECT, process_id: u32) -> (String, String, String) {
+        let path = process_image_path(process_id).unwrap_or_default();
+        let name = process_name((!path.is_empty()).then_some(path.as_str()));
+        let class = class_name(hwnd);
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        let center_x = rect.left + (rect.right - rect.left) / 2;
+        let center_y = rect.top + (rect.bottom - rect.top) / 2;
+        let fullscreen = monitor_info_at(center_x, center_y)
+            .map(|info| rectangle_covers_monitor(rect, info.rcMonitor))
+            .unwrap_or(false);
+
+        if fullscreen {
+            return (name, "immersive".into(), "blocked".into());
+        }
+        if is_probable_game(&path, &class, style) {
+            return (name, "game".into(), "outside-only".into());
+        }
+        (name, "normal".into(), "normal".into())
+    }
+
+    unsafe extern "system" fn enumerate_window(hwnd: HWND, parameter: LPARAM) -> BOOL {
+        let context = &mut *(parameter as *mut EnumContext);
+        if !window_is_eligible(hwnd, context.process_id) {
             return 1;
         }
 
@@ -119,37 +229,65 @@ mod windows_impl {
         if width < 220 || height < 120 {
             return 1;
         }
+
+        let mut process_id = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut process_id);
+        let (process_name, app_kind, dock_policy) = classify_window(hwnd, rect, process_id);
         context.surfaces.push(WindowSurface {
             id: format!("{:X}", hwnd as usize),
             x: rect.left,
             y: rect.top,
             width,
             height,
+            process_name,
+            app_kind,
+            dock_policy,
         });
         1
     }
 
+    unsafe extern "system" fn detect_fullscreen_window(hwnd: HWND, parameter: LPARAM) -> BOOL {
+        let context = &mut *(parameter as *mut FullscreenContext);
+        if context.found || !window_is_eligible(hwnd, context.process_id) {
+            return 1;
+        }
+        if let Some(rect) = window_rectangle(hwnd) {
+            if rectangle_covers_monitor(rect, context.monitor) {
+                context.found = true;
+            }
+        }
+        1
+    }
+
     pub fn work_area_at(x: i32, y: i32) -> Result<WorkArea, String> {
+        let info = monitor_info_at(x, y)?;
+        let rect = info.rcWork;
+        let Some((width, height)) = rectangle_size(rect) else {
+            return Err("显示器工作区无效。".into());
+        };
+        Ok(WorkArea {
+            x: rect.left,
+            y: rect.top,
+            width,
+            height,
+        })
+    }
+
+    pub fn has_fullscreen_at(x: i32, y: i32) -> bool {
+        let Ok(info) = monitor_info_at(x, y) else {
+            return false;
+        };
         unsafe {
-            let monitor = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
-            if monitor.is_null() {
-                return Err("无法识别当前显示器。".into());
-            }
-            let mut info: MONITORINFO = zeroed();
-            info.cbSize = size_of::<MONITORINFO>() as u32;
-            if GetMonitorInfoW(monitor, &mut info) == 0 {
-                return Err("无法读取显示器工作区。".into());
-            }
-            let rect = info.rcWork;
-            let Some((width, height)) = rectangle_size(rect) else {
-                return Err("显示器工作区无效。".into());
+            let mut context = FullscreenContext {
+                process_id: GetCurrentProcessId(),
+                monitor: info.rcMonitor,
+                found: false,
             };
-            Ok(WorkArea {
-                x: rect.left,
-                y: rect.top,
-                width,
-                height,
-            })
+            let _ = EnumWindows(
+                Some(detect_fullscreen_window),
+                &mut context as *mut FullscreenContext as LPARAM,
+            );
+            context.found
         }
     }
 
@@ -166,11 +304,71 @@ mod windows_impl {
             {
                 return Err("无法枚举桌面窗口。".into());
             }
-            context
-                .surfaces
-                .sort_by_key(|surface| (surface.y, surface.x));
+            context.surfaces.sort_by_key(|surface| (surface.y, surface.x));
             Ok(context.surfaces)
         }
+    }
+}
+
+pub fn start_fullscreen_watcher(app: &AppHandle) {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::settings::AppState;
+        use std::{thread, time::Duration};
+
+        let app = app.clone();
+        thread::spawn(move || {
+            let mut auto_hidden = false;
+            loop {
+                let Some(window) = app.get_webview_window("pet") else {
+                    break;
+                };
+
+                let user_wants_visible = app
+                    .state::<AppState>()
+                    .settings
+                    .lock()
+                    .map(|settings| settings.pet_visible)
+                    .unwrap_or(false);
+
+                if !user_wants_visible {
+                    auto_hidden = false;
+                    thread::sleep(Duration::from_millis(450));
+                    continue;
+                }
+
+                let fullscreen = match (window.outer_position(), window.outer_size()) {
+                    (Ok(position), Ok(size)) => windows_impl::has_fullscreen_at(
+                        position.x + size.width as i32 / 2,
+                        position.y + size.height as i32 / 2,
+                    ),
+                    _ => false,
+                };
+
+                if fullscreen && !auto_hidden {
+                    let _ = window.hide();
+                    auto_hidden = true;
+                } else if !fullscreen && auto_hidden {
+                    let should_restore = app
+                        .state::<AppState>()
+                        .settings
+                        .lock()
+                        .map(|settings| settings.pet_visible)
+                        .unwrap_or(false);
+                    if should_restore {
+                        let _ = window.show();
+                    }
+                    auto_hidden = false;
+                }
+
+                thread::sleep(Duration::from_millis(450));
+            }
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
     }
 }
 

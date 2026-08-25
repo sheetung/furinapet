@@ -1,5 +1,7 @@
 mod agent_commands;
 mod agent_host;
+mod ai;
+mod brain_commands;
 mod claude_integration;
 mod commands;
 mod mcp_server;
@@ -32,6 +34,7 @@ pub fn run() {
             app.manage(settings::AppState::new(initial_settings.clone()));
             app.manage(plugin_host::PluginHostState::load(&app_handle));
             app.manage(agent_host::AgentHostState::default());
+            app.manage(ai::AiServiceState::load(&app_handle));
             if let Err(error) = agent_host::start(&app_handle) {
                 eprintln!("[agent] failed to start local bridge: {error}");
             }
@@ -44,6 +47,7 @@ pub fn run() {
                     let _ = pet_for_close.hide();
                 }
             });
+            window_surfaces::start_fullscreen_watcher(&app_handle);
 
             if let Some(main_window) = app.get_webview_window("main") {
                 let main_for_close = main_window.clone();
@@ -71,6 +75,11 @@ pub fn run() {
             commands::show_control_center,
             commands::quit_app,
             agent_host::get_agent_status,
+            brain_commands::submit_pet_brain_intent,
+            ai::get_ai_settings,
+            ai::update_ai_settings,
+            ai::test_ai_provider,
+            ai::request_ai_behavior_suggestion,
             agent_commands::get_mcp_server_config,
             claude_integration::get_claude_integration_status,
             claude_integration::install_claude_integration,

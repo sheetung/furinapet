@@ -31,12 +31,18 @@ export interface WorkArea {
   height: number;
 }
 
+export type WindowAppKind = "normal" | "game" | "immersive";
+export type DockPolicy = "normal" | "outside-only" | "blocked";
+
 export interface WindowSurface {
   id: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  processName?: string;
+  appKind?: WindowAppKind;
+  dockPolicy?: DockPolicy;
 }
 
 export interface PetSize {
@@ -57,8 +63,8 @@ export const DEFAULT_WANDER_PROFILE: WanderProfile = {
   preferredSpeed: 1,
   windowDockChance: 0.25,
   shortMoveChance: 0.6,
-  pauseMinMs: 2500,
-  pauseMaxMs: 8000,
+  pauseMinMs: 900,
+  pauseMaxMs: 2600,
 };
 
 function finiteNumber(source: Record<string, unknown>, key: keyof WanderProfile, minimum: number, maximum: number, fallback: number): number {
@@ -78,8 +84,8 @@ export function normalizeWanderProfile(value: unknown): WanderProfile {
   if (movementStyle !== "grounded" && movementStyle !== "floating") {
     throw new Error("wanderProfile.movementStyle 仅支持 grounded 或 floating。");
   }
-  const pauseMinMs = finiteNumber(source, "pauseMinMs", 1000, 20000, DEFAULT_WANDER_PROFILE.pauseMinMs);
-  const pauseMaxMs = finiteNumber(source, "pauseMaxMs", 1000, 30000, DEFAULT_WANDER_PROFILE.pauseMaxMs);
+  const pauseMinMs = finiteNumber(source, "pauseMinMs", 500, 20000, DEFAULT_WANDER_PROFILE.pauseMinMs);
+  const pauseMaxMs = finiteNumber(source, "pauseMaxMs", 500, 30000, DEFAULT_WANDER_PROFILE.pauseMaxMs);
   if (pauseMaxMs < pauseMinMs) throw new Error("wanderProfile.pauseMaxMs 不能小于 pauseMinMs。");
   return {
     movementStyle,
@@ -94,6 +100,7 @@ export function normalizeWanderProfile(value: unknown): WanderProfile {
 }
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value));
+const MIN_WANDER_DISPLACEMENT = 56;
 
 export function nextDecisionDelay(profile: WanderProfile, random = Math.random): number {
   const activityFactor = 1.2 - profile.activity * 0.45;
@@ -104,15 +111,30 @@ export function pauseDuration(profile: WanderProfile, random = Math.random): num
   return Math.round(profile.pauseMinMs + random() * (profile.pauseMaxMs - profile.pauseMinMs));
 }
 
-export function effectiveWanderProbability(baseProbability: number, missedOpportunities: number): number {
-  return clamp(baseProbability + Math.min(4, missedOpportunities) * 0.1, 0, 1);
-}
-
 function distanceBand(profile: WanderProfile, random: () => number): [number, number] {
   const value = random();
   if (value < profile.shortMoveChance) return [0.08, 0.28];
   if (value < 0.92) return [0.28, 0.58];
   return [0.58, 0.9];
+}
+
+function farthestValidTarget(current: Point, bounds: WanderBounds, grounded: boolean): Point {
+  const candidates: Point[] = grounded
+    ? [
+        { x: bounds.minX, y: bounds.groundY },
+        { x: bounds.maxX, y: bounds.groundY },
+      ]
+    : [
+        { x: bounds.minX, y: bounds.minY },
+        { x: bounds.maxX, y: bounds.minY },
+        { x: bounds.minX, y: bounds.maxY },
+        { x: bounds.maxX, y: bounds.maxY },
+      ];
+  return candidates.reduce((best, candidate) => {
+    const bestDistance = Math.hypot(best.x - current.x, best.y - current.y);
+    const candidateDistance = Math.hypot(candidate.x - current.x, candidate.y - current.y);
+    return candidateDistance > bestDistance ? candidate : best;
+  });
 }
 
 export function chooseWanderTarget(
@@ -128,9 +150,9 @@ export function chooseWanderTarget(
   let best = { x: current.x, y: grounded ? bounds.groundY : current.y };
   let bestDistance = -1;
 
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     const [minimum, maximum] = distanceBand(profile, random);
-    const distance = Math.max(48, diagonal * (minimum + random() * (maximum - minimum)));
+    const distance = Math.max(MIN_WANDER_DISPLACEMENT, diagonal * (minimum + random() * (maximum - minimum)));
     const angle = grounded ? (random() < 0.5 ? Math.PI : 0) : random() * Math.PI * 2;
     const candidate = {
       x: clamp(current.x + Math.cos(angle) * distance, bounds.minX, bounds.maxX),
@@ -143,6 +165,10 @@ export function chooseWanderTarget(
       best = candidate;
       bestDistance = candidateDistance;
     }
+  }
+
+  if (bestDistance < Math.min(MIN_WANDER_DISPLACEMENT, diagonal * 0.08)) {
+    best = farthestValidTarget(current, bounds, grounded);
   }
   return { x: Math.round(best.x), y: Math.round(best.y) };
 }
@@ -166,6 +192,9 @@ export function chooseDockPlacement(
   positionRatio = Math.random(),
   preferredEdge?: DockEdge,
 ): DockPlacement | null {
+  const dockPolicy = surface.dockPolicy ?? "normal";
+  if (dockPolicy === "blocked") return null;
+
   const workRight = workArea.x + workArea.width;
   const workBottom = workArea.y + workArea.height;
   const surfaceRight = surface.x + surface.width;
@@ -195,6 +224,12 @@ export function chooseDockPlacement(
   };
 
   addHorizontal("top", surface.y - petSize.height + 2, 56, 176);
+  if (dockPolicy === "outside-only") {
+    return preferredEdge && preferredEdge !== "top"
+      ? null
+      : placements.find((placement) => placement.edge === "top") ?? null;
+  }
+
   addHorizontal("bottom-inside", surfaceBottom - petSize.height - 8, 24, 24);
   addVertical("left", surface.x - petSize.width + 12);
   addVertical("right", surfaceRight - 12);

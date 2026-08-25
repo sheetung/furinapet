@@ -7,8 +7,9 @@ export interface AppSettings {
   launchAtLogin: boolean;
   scale: number;
   lookAtCursor: boolean;
-  autoWander: boolean;
-  wanderProbability: number;
+  autonomousMovement: boolean;
+  wanderWeight: number;
+  dockWeight: number;
   wanderSpeed: number;
   gravityEnabled: boolean;
   windowDocking: boolean;

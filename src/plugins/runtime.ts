@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { desktop, type RuntimePlugin } from "../api";
+import type { PetGoalId } from "../pet-brain";
 
 export const PLUGINS_CHANGED_EVENT = "furinapet-plugins-changed";
 
@@ -91,6 +92,17 @@ const ctx = Object.freeze({
         ...(message === undefined ? {} : { message: String(message) }),
       });
     },
+    intent(goal, options = {}) {
+      requirePermission("pet:behavior");
+      const priority = Number(options?.priority ?? 0.7);
+      const ttlMs = Number(options?.ttlMs ?? 3000);
+      return sdk("pet.intent", {
+        goal: String(goal),
+        priority: Number.isFinite(priority) ? priority : 0.7,
+        ttlMs: Number.isFinite(ttlMs) ? ttlMs : 3000,
+        ...(options?.id === undefined ? {} : { id: String(options.id) }),
+      });
+    },
   }),
   timer: Object.freeze({
     setTimeout(handler, milliseconds) {
@@ -178,6 +190,18 @@ function stopWorker(id: string) {
   workers.delete(id);
 }
 
+function isPetGoal(value: unknown): value is PetGoalId {
+  return typeof value === "string" && [
+    "idle",
+    "wander",
+    "dock",
+    "respond-user",
+    "observe-agent",
+    "celebrate",
+    "rest",
+  ].includes(value);
+}
+
 function startWorker(plugin: RuntimePlugin) {
   const pluginUrl = URL.createObjectURL(new Blob([plugin.source], { type: "text/javascript" }));
   const workerUrl = URL.createObjectURL(new Blob([workerBootstrap(plugin, pluginUrl)], { type: "text/javascript" }));
@@ -186,6 +210,34 @@ function startWorker(plugin: RuntimePlugin) {
   worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
     const message = event.data;
     if (message.kind === "sdk") {
+      if (message.method === "pet.intent") {
+        const args = message.args && typeof message.args === "object"
+          ? message.args as Record<string, unknown>
+          : {};
+        const goal = args.goal;
+        if (!plugin.permissions.includes("pet:behavior") || !isPetGoal(goal)) {
+          worker.postMessage({
+            kind: "sdk-result",
+            requestId: message.requestId,
+            ok: false,
+            error: "Plugin permission denied or invalid Pet Brain goal",
+          });
+          return;
+        }
+        const priority = typeof args.priority === "number" ? args.priority : 0.7;
+        const ttlMs = typeof args.ttlMs === "number" ? args.ttlMs : 3000;
+        const id = typeof args.id === "string" ? `${plugin.id}:${args.id}` : undefined;
+        void desktop.submitBrainIntent("plugin", goal, { priority, ttlMs, id })
+          .then(() => worker.postMessage({ kind: "sdk-result", requestId: message.requestId, ok: true, result: null }))
+          .catch((error) => worker.postMessage({
+            kind: "sdk-result",
+            requestId: message.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          }));
+        return;
+      }
+
       void desktop.pluginSdkCall(plugin.id, message.method, message.args)
         .then((result) => worker.postMessage({ kind: "sdk-result", requestId: message.requestId, ok: true, result }))
         .catch((error) => worker.postMessage({
@@ -219,8 +271,6 @@ async function performRefresh() {
 
   for (const plugin of runtimePlugins) {
     const current = workers.get(plugin.id);
-    // Configuration changes can affect activation-time timers, so reload the
-    // worker even when the version is unchanged.
     if (current) stopWorker(plugin.id);
     startWorker(plugin);
   }
