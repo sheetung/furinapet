@@ -36,6 +36,8 @@ const MOTION_INTERVAL_MS = 32;
 const GRAVITY_ACCELERATION = 2200;
 const MAX_FALL_SPEED = 1250;
 const GROUNDED_Y_TOLERANCE = 2;
+const MIN_EFFECTIVE_MOTION_PX = 1;
+const MAX_STALLED_TICKS = 4;
 
 type MotionReaction = Reaction | "run-left" | "run-right";
 
@@ -70,6 +72,8 @@ interface WanderState {
   dockRefreshAt: number;
   workArea: WorkArea | null;
   workAreaRefreshAt: number;
+  lastPosition: Point | null;
+  stalledTicks: number;
 }
 
 interface MotionState {
@@ -252,6 +256,8 @@ export function PetView() {
       dockRefreshAt: 0,
       workArea: null,
       workAreaRefreshAt: 0,
+      lastPosition: null,
+      stalledTicks: 0,
     };
     let cancelled = false;
     let timer = 0;
@@ -268,6 +274,8 @@ export function PetView() {
       wander.dockSurfaceId = null;
       wander.dockEdge = null;
       wander.dockUntil = 0;
+      wander.lastPosition = null;
+      wander.stalledTicks = 0;
     };
 
     const getWorkArea = async (position: PhysicalPosition, size: PhysicalSize): Promise<WorkArea> => {
@@ -424,6 +432,8 @@ export function PetView() {
                   wander.dockSurfaceId = candidate.surface.id;
                   wander.dockEdge = candidate.placement.edge;
                   wander.dockRatio = candidate.ratio;
+                  wander.lastPosition = null;
+                  wander.stalledTicks = 0;
                   lastAutonomousActionAt = wallClock;
                 }
               }
@@ -431,6 +441,8 @@ export function PetView() {
                 wander.mode = "walking";
                 wander.target = chooseWanderTarget(position, bounds, currentSettings.gravityEnabled, profile);
                 if (currentSettings.gravityEnabled) wander.target.y = bounds.groundY;
+                wander.lastPosition = null;
+                wander.stalledTicks = 0;
                 lastAutonomousActionAt = wallClock;
               }
             } else {
@@ -472,6 +484,20 @@ export function PetView() {
               return;
             }
 
+            if (wander.lastPosition) {
+              const progress = Math.hypot(
+                position.x - wander.lastPosition.x,
+                position.y - wander.lastPosition.y,
+              );
+              wander.stalledTicks = progress < 0.5 ? wander.stalledTicks + 1 : 0;
+              if (wander.stalledTicks >= MAX_STALLED_TICKS) {
+                resetWander(wallClock + 450);
+                changeReaction("idle");
+                return;
+              }
+            }
+            wander.lastPosition = { x: position.x, y: position.y };
+
             const dx = wander.target.x - position.x;
             const dy = groundedWander ? 0 : wander.target.y - position.y;
             const distance = groundedWander ? Math.abs(dx) : Math.hypot(dx, dy);
@@ -484,6 +510,8 @@ export function PetView() {
                 wander.speed = 0;
                 wander.dockUntil = wallClock + pauseDuration(profile);
                 wander.dockRefreshAt = 0;
+                wander.lastPosition = null;
+                wander.stalledTicks = 0;
                 const sideDock = wander.dockEdge === "left" || wander.dockEdge === "right";
                 changeReaction(sideDock || Math.random() < profile.curiosity ? "review" : "waiting", true);
               } else {
@@ -498,15 +526,22 @@ export function PetView() {
                 currentSettings.wanderSpeed * profile.preferredSpeed,
               );
               const step = Math.min(distance, wander.speed * elapsed / 1000);
-              position = groundedWander
-                ? new PhysicalPosition(
-                    Math.round(position.x + Math.sign(dx) * step),
-                    bounds.groundY,
-                  )
-                : new PhysicalPosition(
-                    Math.round(position.x + dx / distance * step),
-                    Math.round(position.y + dy / distance * step),
-                  );
+              let nextX = groundedWander
+                ? Math.round(position.x + Math.sign(dx) * step)
+                : Math.round(position.x + dx / distance * step);
+              let nextY = groundedWander
+                ? bounds.groundY
+                : Math.round(position.y + dy / distance * step);
+
+              if (nextX === position.x && nextY === position.y) {
+                if (groundedWander || Math.abs(dx) >= Math.abs(dy)) {
+                  nextX = position.x + Math.sign(dx) * MIN_EFFECTIVE_MOTION_PX;
+                } else {
+                  nextY = position.y + Math.sign(dy) * MIN_EFFECTIVE_MOTION_PX;
+                }
+              }
+
+              position = new PhysicalPosition(nextX, nextY);
               await petWindow.setPosition(position);
               setLook(null);
               changeReaction(groundedWander
@@ -551,7 +586,13 @@ export function PetView() {
           setLook(null);
         }
       } catch {
-        // A hidden or closing window is retried by the next non-overlapping tick.
+        if (wander.mode === "walking" || wander.mode === "approaching") {
+          wander.stalledTicks += 1;
+          if (wander.stalledTicks >= MAX_STALLED_TICKS) {
+            resetWander(Date.now() + 450);
+            changeReaction("idle");
+          }
+        }
       } finally {
         if (!cancelled) timer = window.setTimeout(() => void tick(), MOTION_INTERVAL_MS);
       }
