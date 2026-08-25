@@ -44,6 +44,7 @@ const reactions: readonly { id: Reaction; label: string; icon: string }[] = [
 
 export function App() {
   const [page, setPage] = useState<Page>("home");
+  const [extensionPageActive, setExtensionPageActive] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
@@ -86,6 +87,26 @@ export function App() {
     if (!("__TAURI_INTERNALS__" in window)) return;
     const cleanup = listen<DownloadProgress>("update-download-progress", (event) => setDownloadProgress(event.payload));
     return () => { void cleanup.then((unlisten) => unlisten()); };
+  }, []);
+
+  useEffect(() => {
+    const nav = document.querySelector<HTMLElement>(".sidebar nav");
+    if (!nav) return;
+
+    const handleNavigation = (event: Event) => {
+      const button = event.target instanceof Element
+        ? event.target.closest<HTMLButtonElement>("button")
+        : null;
+      if (!button || !nav.contains(button)) return;
+      setExtensionPageActive(
+        button.classList.contains("plugin-nav-button")
+          || button.classList.contains("agent-nav-button")
+          || button.classList.contains("brain-nav-button"),
+      );
+    };
+
+    nav.addEventListener("click", handleNavigation);
+    return () => nav.removeEventListener("click", handleNavigation);
   }, []);
 
   const statusText = settings.petVisible ? "正在陪伴" : "暂时隐藏";
@@ -254,9 +275,9 @@ export function App() {
         <div className="sidebar-name">{activeCharacter.name}</div>
         <div className={`status-pill ${settings.petVisible ? "online" : ""}`}><span />{statusText}</div>
         <nav>
-          <NavButton active={page === "home"} icon="⌂" label="主页" onClick={() => setPage("home")} />
-          <NavButton active={page === "pet"} icon="♢" label="宠物" onClick={() => setPage("pet")} />
-          <NavButton active={page === "settings"} icon="⚙" label="设置" onClick={() => setPage("settings")} />
+          <NavButton active={!extensionPageActive && page === "home"} icon="⌂" label="主页" onClick={() => setPage("home")} />
+          <NavButton active={!extensionPageActive && page === "pet"} icon="♢" label="宠物" onClick={() => setPage("pet")} />
+          <NavButton active={!extensionPageActive && page === "settings"} icon="⚙" label="设置" onClick={() => setPage("settings")} />
         </nav>
         <div className="sidebar-foot">Tauri · WebView2<br />v{version}</div>
       </aside>
