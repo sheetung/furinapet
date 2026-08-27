@@ -4,7 +4,8 @@ import { buildCharacterState, characterSnapshot } from "../neuro/character/chara
 import { planMotor, synthesizeBrainIntent } from "../neuro/cerebellum/rule-cerebellum";
 import { evaluateReflex } from "../neuro/reflex/reflex";
 import { reactionForMotorPlan } from "../neuro/motion/legacy-sprite-backend";
-import { getWorldState } from "../neuro/perception/store";
+import { getPerceptionLog, getWorldState } from "../neuro/perception/store";
+import type { BodyRegion } from "../neuro/contracts";
 import { getNeuroTrace, recordNeuroTrace } from "../neuro/trace/neuro-trace";
 import { PET_SENSE_EVENT } from "../plugins/dom-bridge";
 import { getPetBrain, waitForAction } from "./index";
@@ -49,6 +50,8 @@ export function publishPetBrainSnapshot() {
     ...brain.snapshot(),
     character: characterSnapshot(brain.blackboard, Date.now()),
     neuroTrace: getNeuroTrace().slice(0, 20),
+    world: getWorldState(),
+    perceptionLog: getPerceptionLog().slice(0, 30),
   };
   window.dispatchEvent(new CustomEvent(PET_BRAIN_SNAPSHOT_EVENT, { detail: snapshot }));
   void emit(PET_BRAIN_SNAPSHOT_EVENT, snapshot).catch((error) => {
@@ -95,6 +98,7 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
       primitives: motorPlan.actions.map((primitive) => primitive.type),
       reaction: directive.reaction,
       durationMs: directive.durationMs,
+      source: motorPlan.source,
     });
     await desktop.react(directive.reaction);
     await waitForAction(directive.durationMs, signal);
@@ -121,7 +125,11 @@ function handlePetSense(detail: PetSenseEventDetail) {
   if (reflexEvent) {
     const reflex = evaluateReflex(reflexEvent);
     if (reflex) {
-      void executeReflex(reflex, detail.at);
+      void executeReflex(
+        reflex,
+        detail.at,
+        reflexEvent.type === "touch" ? reflexEvent.region : undefined,
+      );
       // Brain still gets intent for state tracking, but reflex owns the animation
       if (detail.name === "pet:clicked" || detail.name === "pet:doubleClicked") {
         brain.submitIntent("user", "respond-user", {
@@ -148,7 +156,7 @@ function handlePetSense(detail: PetSenseEventDetail) {
 }
 
 /** Build a PerceptionEvent from a pet-sense detail for reflex evaluation. */
-function buildReflexEvent(detail: PetSenseEventDetail, world: ReturnType<typeof getWorldState>) {
+export function buildReflexEvent(detail: PetSenseEventDetail, world: ReturnType<typeof getWorldState>) {
   if (detail.name === "pet:dragStart" || detail.name === "pet:dragEnd") {
     return { type: "drag" as const, at: detail.at, phase: detail.name === "pet:dragStart" ? "start" as const : "end" as const };
   }
@@ -157,7 +165,9 @@ function buildReflexEvent(detail: PetSenseEventDetail, world: ReturnType<typeof 
       type: "touch" as const,
       at: detail.at,
       sense: detail.name,
-      region: world.pointer.targetRegion,
+      // Prefer the region resolved from the real click position; the sampler's
+      // targetRegion is stale for delayed tap dispatches (pointer already moved).
+      region: detail.region ?? world.pointer.targetRegion,
       streak: 0,
       intensity: 0,
     };
@@ -166,7 +176,11 @@ function buildReflexEvent(detail: PetSenseEventDetail, world: ReturnType<typeof 
 }
 
 /** Execute a reflex motor plan immediately (no brain pipeline). */
-async function executeReflex(reflex: ReturnType<typeof evaluateReflex>, at: number) {
+async function executeReflex(
+  reflex: ReturnType<typeof evaluateReflex>,
+  at: number,
+  region?: BodyRegion,
+) {
   if (!reflex) return;
   const directive = reactionForMotorPlan(reflex.plan, reflex.plan.durationMs);
   if (!directive) return;
@@ -178,6 +192,9 @@ async function executeReflex(reflex: ReturnType<typeof evaluateReflex>, at: numb
     primitives: reflex.plan.actions.map((p) => p.type),
     reaction: directive.reaction,
     durationMs: directive.durationMs,
+    source: reflex.plan.source,
+    reflex: reflex.name,
+    ...(region !== undefined ? { region } : {}),
   });
   await desktop.react(directive.reaction);
   // Reflex runs to completion: a never-aborting signal keeps waitForAction valid

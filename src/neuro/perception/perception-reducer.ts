@@ -8,6 +8,7 @@
 
 import {
   bodyRegionAt,
+  type BodyRegion,
   type PerceptionEvent,
   type PointerMotion,
   type WorldState,
@@ -215,4 +216,29 @@ export function regionAtPointer(pointer: { x: number; y: number }, geometry: Pet
     pointer.y <= geometry.y + geometry.height;
   if (!inside) return "none" as const;
   return bodyRegionAt((pointer.y - geometry.y) / Math.max(1, geometry.height));
+}
+
+/** Compact, serializable log line for the LMC inspector's Perception drawer. */
+export interface PerceptionLogEntry {
+  at: number;
+  type: PerceptionEvent["type"];
+  region?: BodyRegion;
+  detail: string;
+}
+
+export function formatPerceptionLogEntry(event: PerceptionEvent): PerceptionLogEntry {
+  switch (event.type) {
+    case "pointer":
+      return { at: event.at, type: event.type, region: event.region, detail: `(${Math.round(event.x)}, ${Math.round(event.y)})` };
+    case "pointerApproach":
+      return { at: event.at, type: event.type, region: event.region, detail: event.motion };
+    case "touch":
+      return { at: event.at, type: event.type, region: event.region, detail: `${event.sense.replace("pet:", "")} · streak ${event.streak}` };
+    case "drag":
+      return { at: event.at, type: event.type, detail: event.phase };
+    case "agentState":
+      return { at: event.at, type: event.type, detail: event.clientName ? `${event.state} · ${event.clientName}` : event.state };
+    case "userIdle":
+      return { at: event.at, type: event.type, detail: `${Math.round(event.idleMs / 1000)}s` };
+  }
 }

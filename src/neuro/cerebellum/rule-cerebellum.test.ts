@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { planMotor, synthesizeBrainIntent, AVOIDANCE_OVERRIDE } from "./rule-cerebellum";
 import type { CharacterState, WorldState } from "../contracts";
 import { emptyCharacterState, emptyWorldState, normalizeBrainIntent, NEUTRAL_MOTOR_TENDENCY } from "../contracts";
-import type { PetActionPlan, PetGoalId } from "../../pet-brain/types";
+import type { PetActionPlan, PetGoalId, PetSemanticAction } from "../../pet-brain/types";
 
 /* ------------------------------------------------------------------ */
 /*  helpers                                                            */
@@ -250,5 +250,31 @@ describe("planMotor — celebrate", () => {
     expect(types).toContain("expression");
     expect(types).not.toContain("tailMotion");
     expect(motor.durationMs).toBe(2200);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  MotorSource tagging                                                */
+/* ------------------------------------------------------------------ */
+
+describe("motor source tagging", () => {
+  it("tags every planMotor output with source: rule", () => {
+    const cases: PetSemanticAction[] = [
+      { type: "idle" },
+      { type: "wander" },
+      { type: "dock" },
+      { type: "wait", durationMs: 500 },
+      { type: "rest", durationMs: 5000 },
+      { type: "observe", durationMs: 2000 },
+      { type: "respond", intensity: "excited" },
+      { type: "respond", intensity: "normal" },
+      { type: "respond", intensity: "soft" },
+      { type: "celebrate", intensity: "excited" },
+      { type: "celebrate", intensity: "normal" },
+    ];
+    for (const action of cases) {
+      const plan = planMotor(baseIntent(), character(), world(), action);
+      expect(plan.source, `planMotor(${action.type}) should carry source`).toBe("rule");
+    }
   });
 });
