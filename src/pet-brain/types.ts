@@ -1,4 +1,5 @@
 import type { NeuroCharacterSnapshot } from "../neuro/character/character-adapter";
+import type { NeuroTraceEntry } from "../neuro/trace/neuro-trace";
 
 export type PetGoalId =
   | "idle"
@@ -149,4 +150,6 @@ export interface PetBrainSnapshot {
   executor?: BrainExecutorSnapshot;
   /** Neuro character layer (emotion model), merged in by the pet-window runtime. */
   character?: NeuroCharacterSnapshot;
+  /** Recent neuro pipeline decisions (intent → motor plan → reaction). */
+  neuroTrace?: NeuroTraceEntry[];
 }

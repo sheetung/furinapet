@@ -1,8 +1,11 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { desktop } from "../api";
-import { characterSnapshot } from "../neuro/character/character-adapter";
+import { buildCharacterState, characterSnapshot } from "../neuro/character/character-adapter";
+import { planMotor, synthesizeBrainIntent } from "../neuro/cerebellum/rule-cerebellum";
+import { reactionForMotorPlan } from "../neuro/motion/legacy-sprite-backend";
+import { getWorldState } from "../neuro/perception/store";
+import { getNeuroTrace, recordNeuroTrace } from "../neuro/trace/neuro-trace";
 import { PET_SENSE_EVENT } from "../plugins/dom-bridge";
-import { reactionForSemanticAction } from "./adapters/reaction";
 import { getPetBrain, waitForAction } from "./index";
 import type {
   BrainAgentState,
@@ -10,6 +13,7 @@ import type {
   BrainContext,
   BrainIntentEvent,
   PetActionPlan,
+  PetSemanticAction,
   PetSenseEventDetail,
 } from "./types";
 
@@ -43,6 +47,7 @@ export function publishPetBrainSnapshot() {
   const snapshot = {
     ...brain.snapshot(),
     character: characterSnapshot(brain.blackboard, Date.now()),
+    neuroTrace: getNeuroTrace().slice(0, 20),
   };
   window.dispatchEvent(new CustomEvent(PET_BRAIN_SNAPSHOT_EVENT, { detail: snapshot }));
   void emit(PET_BRAIN_SNAPSHOT_EVENT, snapshot).catch((error) => {
@@ -50,9 +55,25 @@ export function publishPetBrainSnapshot() {
   });
 }
 
+/** Duration the old fixed mapping took from the action itself. */
+function actionFallbackDuration(action: PetSemanticAction): number | undefined {
+  switch (action.type) {
+    case "idle":
+      return action.durationMs ?? 1200;
+    case "observe":
+    case "rest":
+      return action.durationMs;
+    default:
+      return undefined;
+  }
+}
+
 async function executeReactionPlan(plan: PetActionPlan, force = false) {
   const brain = getPetBrain();
-  const agentState = brain.blackboard.getAgentState();
+  const now = Date.now();
+  const character = buildCharacterState(brain.blackboard, now);
+  const world = getWorldState();
+  const intent = synthesizeBrainIntent(plan, character, world);
   publishPetBrainSnapshot();
   await brain.execute(plan, async (action, signal) => {
     publishPetBrainSnapshot();
@@ -62,8 +83,18 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
     }
     if (action.type === "wander" || action.type === "dock") return;
 
-    const directive = reactionForSemanticAction(action, agentState);
+    const motorPlan = planMotor(intent, character, world, action);
+    const directive = reactionForMotorPlan(motorPlan, actionFallbackDuration(action));
     if (!directive || signal.aborted) return;
+    recordNeuroTrace({
+      t: Date.now(),
+      goal: plan.goal,
+      confidence: intent.confidence,
+      motorTendency: intent.motorTendency,
+      primitives: motorPlan.actions.map((primitive) => primitive.type),
+      reaction: directive.reaction,
+      durationMs: directive.durationMs,
+    });
     await desktop.react(directive.reaction);
     await waitForAction(directive.durationMs, signal);
   }, { force });

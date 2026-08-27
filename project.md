@@ -45,12 +45,12 @@ LegacySpriteBackend         ← MotorPlan → 现有 v2 Reaction（8×11 图集�
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | **M0** | Neuro Contracts v1（`src/neuro/contracts/`：L1–L5 五份契约 + 校验函数 + vitest） | ✅ 已提交 `df738fd` |
-| **M1** | Perception Reducer（`WorldState` 累加器、指针采样 125ms、感知接线、补 dragStart/dragEnd sense） | 🔨 进行中 |
-| **M2** | CharacterState V1（确定性七维情绪、PetMood 兼容派生、快照扩展 + 情绪调试面板） | ⬜ |
-| **M3** | RuleCerebellum（W+C+I → MotorPlan）+ LegacySpriteBackend（替换 `adapters/reaction.ts` 固定映射）+ Neuro Trace | ⬜ |
+| **M1** | Perception Reducer（`WorldState` 累加器、指针采样 125ms、感知接线、补 dragStart/dragEnd sense） | ✅ 已提交 `160ba7b` |
+| **M2** | CharacterState V1（确定性七维情绪、PetMood 兼容派生、快照扩展 + 情绪调试面板） | ✅ 已提交 `f8e0053` |
+| **M3** | RuleCerebellum + LegacySpriteBackend + Neuro Trace（管线已接线，单测完成） | ✅ 待提交 |
 | M4+ | Rust StructuredBrainProvider（AI → NeuroBrainIntent）→ FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body | ⬜（不在本轮） |
 
-接入方式（已定）：**直接替换** `adapters/reaction.ts` 映射为 MotorPlan 路径，不加开关；等价性由逐条映射测试保证。
+接入方式（已定）：**直接替换**——旧 `adapters/reaction.ts` 固定映射已被删除，`runtime.ts` 内联走 MotorPlan 路径（`synthesizeBrainIntent → planMotor → reactionForMotorPlan`）；等价性由逐条映射测试保证（`legacy-sprite-backend.test.ts` 23 条 ✅）。
 
 ## 四、目录结构（neuro 部分）
 
@@ -62,15 +62,25 @@ src/neuro/
 │  ├─ character-state.ts    # L3: 七维 EmotionState + CharacterState
 │  ├─ brain-intent.ts       # L4: NeuroBrainIntent + MotorTendency
 │  ├─ motor-plan.ts         # L5: 13 个 MotorPrimitive + MotorPlan
-│  └─ contracts.test.ts
-├─ perception/           # M1
+│  ├─ index.ts              # barrel + NEURO_SCHEMA_VERSION
+│  └─ contracts.test.ts     # 11 tests ✅
+├─ perception/           # M1 ✅
 │  ├─ perception-reducer.ts # 纯函数 reducer（事件 + 记忆 → WorldState）
 │  ├─ store.ts              # pet 窗口单例 store + bootstrapNeuroPerception()
-│  └─ perception-reducer.test.ts
-├─ character/            # M2（待建）
-├─ cerebellum/           # M3（待建）
-├─ motion/               # M3（待建）
-└─ trace/                # M3（待建）
+│  └─ perception-reducer.test.ts  # 9 tests ✅
+├─ character/            # M2 ✅
+│  ├─ character-store.ts    # 确定性情绪累加器（observe + tick）
+│  ├─ character-adapter.ts  # PetBlackboard + CharacterStore → CharacterState (L3)
+│  └─ character-store.test.ts     # 11 tests ✅
+├─ cerebellum/           # M3 ✅
+│  ├─ rule-cerebellum.ts  # synthesizeBrainIntent + planMotor（W+C+I → MotorPlan）
+│  └─ rule-cerebellum.test.ts   # 27 tests ✅
+├─ motion/               # M3 ✅
+│  ├─ legacy-sprite-backend.ts  # MotorPlan → ReactionDirective（替代旧映射）
+│  └─ legacy-sprite-backend.test.ts  # 23 tests ✅
+└─ trace/                # M3 ✅
+   ├─ neuro-trace.ts      # 环形缓冲（intent → motor → reaction 记录）
+   └─ neuro-trace.test.ts       # 6 tests ✅
 ```
 
 ## 五、开发规约
@@ -87,13 +97,20 @@ src/neuro/
 - 意图统一入口：Tauri 命令 `submit_pet_brain_intent`（优先级封顶 user/system 1.0、agent/plugin 0.95、ai 0.82）；
 - Planner 直接覆盖阈值 0.85（介于插件与 AI 之间）；
 - 快照通道：`furinapet:brain-snapshot`（pet 窗口发布，控制中心 1Hz 轮询）；
-- 语义动作 → Reaction 旧映射：`src/pet-brain/adapters/reaction.ts`（M3 将被 LegacySpriteBackend 取代）。
+- 语义动作 → Reaction 映射：旧 `adapters/reaction.ts` 已删除，现由 `runtime.ts` 内联走 `synthesizeBrainIntent → planMotor → reactionForMotorPlan` 路径（M3 接线完成）。
 
 ## 七、进度日志
 
 - **2026-08-27**：分支 `furinapet-neuro` 建立于 v1.1.2 基线（本地手写 MCP/IPC 草稿已被官方 Agent Bridge 取代，存于 stash `WIP: hand-rolled MCP/IPC agent-state bridge`）。
 - **2026-08-27 M0 完成**（`df738fd`）：五份契约 + vitest 基建；产物 hash 与改动前一致，零行为变化。
-- **2026-08-27 M1 进行中**：reducer/store/sampler 已写，PetView 拖拽 sense 与 main.tsx 接线完成，单测 20 条（19 绿 1 修复中）。
+- **2026-08-27 M1 完成**（`160ba7b`）：perception-reducer + store + sampler；PetView 拖拽 sense 与 main.tsx bootstrap 接线；9 tests ✅。
+- **2026-08-27 M2 完成**（`f8e0053`）：CharacterStore（确定性七维情绪 observe/tick）+ character-adapter（PetBlackboard → CharacterState L3）+ BrainNavigation 情绪调试面板 + neuroTrace 面板；11 tests ✅。
+- **2026-08-27 M3 完成**（待提交）：
+  - `rule-cerebellum.test.ts` 27 条 ✅：synthesizeBrainIntent（7 条：confidence/goal/attention/approach-boost/avoidance/clamp）+ planMotor 全分支（20 条：idle/wander/dock/wait/rest/observe×6/respond×6/celebrate×2）
+  - `legacy-sprite-backend.test.ts` 23 条 ✅：优先级扫描（recoil > gesture > expression > idleStyle > turn > lookAt）+ 逐条映射等价性 + 端到端 plan 验证
+  - `neuro-trace.test.ts` 6 条 ✅：环形缓冲 record/reverse-order/TRACE_LIMIT 截断/字段完整性/null reaction
+  - `vitest run` **87 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
+  - **M0–M3 全部完成**，可执行 `git commit` 提交 M3
 
 ## 八、参考文档
 

@@ -447,6 +447,26 @@ export function BrainNavigation() {
                   </div>
                 </div>
               )}
+
+              {brainSnapshot.neuroTrace && brainSnapshot.neuroTrace.length > 0 && (
+                <div className="brain-panel" style={{ marginTop: 12 }}>
+                  <div className="brain-panel-title"><strong>Neuro Trace</strong><small>intent → motor plan → reaction · 最近 {brainSnapshot.neuroTrace.length} 条</small></div>
+                  <div className="brain-ai-traces">
+                    {brainSnapshot.neuroTrace.map((entry) => (
+                      <div className="brain-ai-trace" key={`${entry.t}-${entry.goal}`}>
+                        <time>{relativeTime(entry.t)}</time>
+                        <div>
+                          <strong>{goalLabel(entry.goal)} → {entry.reaction ?? "—"} · {entry.durationMs}ms</strong>
+                          <small title={`avoid ${entry.motorTendency.avoidance.toFixed(2)} / approach ${entry.motorTendency.approach.toFixed(2)} / energy ${entry.motorTendency.energy.toFixed(2)} / express ${entry.motorTendency.expressiveness.toFixed(2)}`}>
+                            {entry.primitives.length ? entry.primitives.join(" → ") : "（无动作）"}
+                          </small>
+                        </div>
+                        <span className="brain-ai-status accepted">{Math.round(entry.confidence * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           ) : <div className="brain-empty">正在请求宠物窗口的 Brain Snapshot…</div>}
         </div>
