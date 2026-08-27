@@ -1,0 +1,103 @@
+# FurinaPet Neuro 工程记录
+
+> 本文档记录 `furinapet-neuro` 分支上的「类人认知—运动架构」改造：目标、架构、里程碑与当前进度。
+> 基线：`main` v1.1.2（`cccf510`）。架构总纲见 **《LMC》**（详见文末「参考文档」）。
+
+## 一、项目简介
+
+FurinaPet 是 Windows 轻量芙宁娜桌宠（Tauri 2 + WebView2 + React，无重型渲染依赖）。
+v1.1.2 已内置：
+
+- **Pet Brain**（`src/pet-brain/`）：Blackboard → Utility Planner（7 个语义 goal）→ Executor → Reaction 固定映射；
+- **AI Adviser v1**（`src-tauri/src/ai/`）：OpenAI-compatible Provider，只能从 7 个 goal 里选一个，优先级封顶 0.82；
+- **Agent Bridge / MCP**（`agent_host.rs` / `mcp_server.rs`）：TCP 本地桥 + stdio MCP server；
+- **插件系统**（`plugin_host.rs` + `src/plugins/`）：Worker 隔离、市场、`pet:behavior` 意图权限。
+
+Neuro 改造在 Pet Brain 之上加一层**神经系统**，把「感知 → 认知 → 动作表达」拆成可替换的协议化管线，为后续接入 LLM 大脑（BrainIntent）与 FunctionGemma/蒸馏小脑（MotorNet）铺路。
+
+## 二、目标架构
+
+```text
+PerceptionEvent (L1)
+      ↓
+   WorldState (L2)          ← 感知 Reducer，事件驱动，无 AI
+      ↓
+CharacterState (L3)         ← 确定性情绪/能量/注意力（七维情绪）
+      ↓
+NeuroBrainIntent (L4)       ← 大脑输出：goal + attention + emotionDelta + motorTendency
+      ↓                       （大脑禁止输出动画/坐标/帧；AI 优先级封顶 0.82）
+   MotorPlan (L5)           ← 小脑输出：13 个 MotorPrimitive（lookAt/recoil/earPose…）
+      ↓
+LegacySpriteBackend         ← MotorPlan → 现有 v2 Reaction（8×11 图集）
+      ↓
+   PetView 渲染              ← wander/dock 仍由 PetView 运动循环执行（pass-through）
+```
+
+核心原则（摘自《LMC》）：
+
+- **越靠近身体越不用大模型**：实时层全部是数学/状态机/规则；
+- **脊髓反射优先**：身体先反应，大脑后理解（Reflex 层后续加入）；
+- **内部数据不传自然语言**：Typed State → Typed Intent → Typed Motor Command；
+- **LLM 永远不跨过 L4/L5 直接碰 L6（关节数据）**。
+
+## 三、里程碑
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| **M0** | Neuro Contracts v1（`src/neuro/contracts/`：L1–L5 五份契约 + 校验函数 + vitest） | ✅ 已提交 `df738fd` |
+| **M1** | Perception Reducer（`WorldState` 累加器、指针采样 125ms、感知接线、补 dragStart/dragEnd sense） | 🔨 进行中 |
+| **M2** | CharacterState V1（确定性七维情绪、PetMood 兼容派生、快照扩展 + 情绪调试面板） | ⬜ |
+| **M3** | RuleCerebellum（W+C+I → MotorPlan）+ LegacySpriteBackend（替换 `adapters/reaction.ts` 固定映射）+ Neuro Trace | ⬜ |
+| M4+ | Rust StructuredBrainProvider（AI → NeuroBrainIntent）→ FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body | ⬜（不在本轮） |
+
+接入方式（已定）：**直接替换** `adapters/reaction.ts` 映射为 MotorPlan 路径，不加开关；等价性由逐条映射测试保证。
+
+## 四、目录结构（neuro 部分）
+
+```text
+src/neuro/
+├─ contracts/            # 神经系统 ABI（schema v1）
+│  ├─ perception-event.ts   # L1: click/drag/agentState/userIdle 等类型化事件
+│  ├─ world-state.ts        # L2: pointer/interaction/agent/environment
+│  ├─ character-state.ts    # L3: 七维 EmotionState + CharacterState
+│  ├─ brain-intent.ts       # L4: NeuroBrainIntent + MotorTendency
+│  ├─ motor-plan.ts         # L5: 13 个 MotorPrimitive + MotorPlan
+│  └─ contracts.test.ts
+├─ perception/           # M1
+│  ├─ perception-reducer.ts # 纯函数 reducer（事件 + 记忆 → WorldState）
+│  ├─ store.ts              # pet 窗口单例 store + bootstrapNeuroPerception()
+│  └─ perception-reducer.test.ts
+├─ character/            # M2（待建）
+├─ cerebellum/           # M3（待建）
+├─ motion/               # M3（待建）
+└─ trace/                # M3（待建）
+```
+
+## 五、开发规约
+
+- 每个里程碑一个独立提交，提交前必须 `pnpm build` + `pnpm test` 全绿；
+- M0–M3 期间**禁止修改** `src-tauri/**`、`characters/**`、Rust 插件宿主；
+- 允许触碰的现有文件：`src/pet-brain/**`、`src/PetView.tsx`、`src/plugins/dom-bridge.ts`、`src/main.tsx`、`src/api.ts`（仅必要接线）；
+- 契约演进只做**增量加字段**；改/删字段必须升 schema 版本（当前 `NEURO_SCHEMA_VERSION = 1`）；
+- 情绪系统第一版**不用模型算**——确定性、可测试、可复现，之后才让 Brain 修正（emotionDelta）。
+
+## 六、关键既有契约（对接点）
+
+- 感知事件源：window 事件 `furinapet:pet-sense`（dom-bridge）、Tauri 事件 `pet-brain-agent-state`、`pet-brain-intent`；
+- 意图统一入口：Tauri 命令 `submit_pet_brain_intent`（优先级封顶 user/system 1.0、agent/plugin 0.95、ai 0.82）；
+- Planner 直接覆盖阈值 0.85（介于插件与 AI 之间）；
+- 快照通道：`furinapet:brain-snapshot`（pet 窗口发布，控制中心 1Hz 轮询）；
+- 语义动作 → Reaction 旧映射：`src/pet-brain/adapters/reaction.ts`（M3 将被 LegacySpriteBackend 取代）。
+
+## 七、进度日志
+
+- **2026-08-27**：分支 `furinapet-neuro` 建立于 v1.1.2 基线（本地手写 MCP/IPC 草稿已被官方 Agent Bridge 取代，存于 stash `WIP: hand-rolled MCP/IPC agent-state bridge`）。
+- **2026-08-27 M0 完成**（`df738fd`）：五份契约 + vitest 基建；产物 hash 与改动前一致，零行为变化。
+- **2026-08-27 M1 进行中**：reducer/store/sampler 已写，PetView 拖拽 sense 与 main.tsx 接线完成，单测 20 条（19 绿 1 修复中）。
+
+## 八、参考文档
+
+- **《LMC》**（原名「造人计划」，FurinaPet 类人认知—运动架构总纲）
+  - 来源：Obsidian `sheetung的知识区/make/造人计划.md`（`C:\Users\sheetung\Documents\Obsidian\sheetung的知识区\make\造人计划.md`）
+  - 内容：感知/大脑/小脑/脊髓反射/运动系统/身体/渲染七层架构；Level 0–6 数据分级；大脑只输出 BrainIntent、小脑输出 MotorPrimitive 的职责划分；M0–M9 双线（工程线 + 模型线）开发路线；FunctionGemma → FurinaMotorNet 蒸馏策略；Shadow 模式与 Benchmark/Replay 基建要求。
+  - 本工程的 M0–M3 里程碑即按其「Agent 工程线」前四个阶段执行。
