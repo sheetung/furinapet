@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - codex/furina-lite
+      - furinapet-neuro
     tags:
       - "v*"
 
