@@ -48,7 +48,9 @@ LegacySpriteBackend         ← MotorPlan → 现有 v2 Reaction（8×11 图集�
 | **M1** | Perception Reducer（`WorldState` 累加器、指针采样 125ms、感知接线、补 dragStart/dragEnd sense） | ✅ 已提交 `160ba7b` |
 | **M2** | CharacterState V1（确定性七维情绪、PetMood 兼容派生、快照扩展 + 情绪调试面板） | ✅ 已提交 `f8e0053` |
 | **M3** | RuleCerebellum + LegacySpriteBackend + Neuro Trace（管线已接线，单测完成） | ✅ 已提交 `e1bd20a` |
-| M4+ | Rust StructuredBrainProvider（AI → NeuroBrainIntent）→ FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body | ⬜（不在本轮） |
+| **M4** | Reflex 脊髓反射层（blink/startle/flinch/grip，reflex 优先于 brain pipeline） | 🔨 进行中 |
+| M5 | StructuredBrainProvider（AI → NeuroBrainIntent，OpenAI-compatible API） | ⬜ |
+| M6+ | FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body | ⬜（不在本轮） |
 
 接入方式（已定）：**直接替换**——旧 `adapters/reaction.ts` 固定映射已被删除，`runtime.ts` 内联走 MotorPlan 路径（`synthesizeBrainIntent → planMotor → reactionForMotorPlan`）；等价性由逐条映射测试保证（`legacy-sprite-backend.test.ts` 23 条 ✅）。
 
@@ -72,6 +74,9 @@ src/neuro/
 │  ├─ character-store.ts    # 确定性情绪累加器（observe + tick）
 │  ├─ character-adapter.ts  # PetBlackboard + CharacterStore → CharacterState (L3)
 │  └─ character-store.test.ts     # 11 tests ✅
+├─ reflex/               # M4 🔨
+│  ├─ reflex.ts             # 脊髓反射弧（blink/startle/flinch/grip → MotorPlan）
+│  └─ reflex.test.ts        # 20 tests ✅
 ├─ cerebellum/           # M3 ✅
 │  ├─ rule-cerebellum.ts  # synthesizeBrainIntent + planMotor（W+C+I → MotorPlan）
 │  └─ rule-cerebellum.test.ts   # 27 tests ✅
@@ -111,6 +116,13 @@ src/neuro/
   - `neuro-trace.test.ts` 6 条 ✅：环形缓冲 record/reverse-order/TRACE_LIMIT 截断/字段完整性/null reaction
   - `vitest run` **87 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
   - **M0–M3 全部完成并提交**，下一站 M4+（Rust StructuredBrainProvider → FunctionGemma Shadow → 蒸馏 FurinaMotorNet）
+- **2026-08-27 M4 进行中**：
+  - `reflex.ts` ✅：4 个反射弧（blink=脸部点击/startle=双击/flinch=连续戳≥6次/grip=拖拽开始），零 AI 纯规则
+  - `reflex.test.ts` 20 条 ✅：覆盖全部分支、优先级（startle > flinch > blink）、region 过滤、streak 阈值、severity 递增
+  - `runtime.ts` 接线 ✅：`handlePetSense` 先走 reflex arc，命中则立即执行 MotorPlan → Reaction，跳过 brain pipeline（brain 仍更新 intent 用于状态追踪）
+  - `buildReflexEvent()` 从 PetSenseEventDetail 构建 PerceptionEvent 供 reflex 求值
+  - `executeReflex()` 走 `reactionForMotorPlan → recordNeuroTrace → desktop.react`
+  - `vitest run` **107 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
 
 ## 八、参考文档
 

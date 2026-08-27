@@ -2,6 +2,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { desktop } from "../api";
 import { buildCharacterState, characterSnapshot } from "../neuro/character/character-adapter";
 import { planMotor, synthesizeBrainIntent } from "../neuro/cerebellum/rule-cerebellum";
+import { evaluateReflex } from "../neuro/reflex/reflex";
 import { reactionForMotorPlan } from "../neuro/motion/legacy-sprite-backend";
 import { getWorldState } from "../neuro/perception/store";
 import { getNeuroTrace, recordNeuroTrace } from "../neuro/trace/neuro-trace";
@@ -114,6 +115,26 @@ function handlePetSense(detail: PetSenseEventDetail) {
     return;
   }
 
+  /* ---- Reflex arc: body reacts first, brain understands later ---- */
+  const world = getWorldState();
+  const reflexEvent = buildReflexEvent(detail, world);
+  if (reflexEvent) {
+    const reflex = evaluateReflex(reflexEvent);
+    if (reflex) {
+      void executeReflex(reflex, detail.at);
+      // Brain still gets intent for state tracking, but reflex owns the animation
+      if (detail.name === "pet:clicked" || detail.name === "pet:doubleClicked") {
+        brain.submitIntent("user", "respond-user", {
+          id: `sense-${detail.name}-${detail.at}`,
+          priority: detail.name === "pet:doubleClicked" ? 0.97 : 0.9,
+          ttlMs: 1200,
+          now: detail.at,
+        });
+      }
+      return;
+    }
+  }
+
   if (detail.name === "pet:clicked" || detail.name === "pet:doubleClicked") {
     brain.submitIntent("user", "respond-user", {
       id: `sense-${detail.name}-${detail.at}`,
@@ -124,6 +145,43 @@ function handlePetSense(detail: PetSenseEventDetail) {
     const plan = brain.plan(immediateContext(detail.at, brain.blackboard.getAgentState()));
     void executeReactionPlan(plan, true);
   }
+}
+
+/** Build a PerceptionEvent from a pet-sense detail for reflex evaluation. */
+function buildReflexEvent(detail: PetSenseEventDetail, world: ReturnType<typeof getWorldState>) {
+  if (detail.name === "pet:dragStart" || detail.name === "pet:dragEnd") {
+    return { type: "drag" as const, at: detail.at, phase: detail.name === "pet:dragStart" ? "start" as const : "end" as const };
+  }
+  if (detail.name === "pet:clicked" || detail.name === "pet:doubleClicked") {
+    return {
+      type: "touch" as const,
+      at: detail.at,
+      sense: detail.name,
+      region: world.pointer.targetRegion,
+      streak: 0,
+      intensity: 0,
+    };
+  }
+  return null;
+}
+
+/** Execute a reflex motor plan immediately (no brain pipeline). */
+async function executeReflex(reflex: ReturnType<typeof evaluateReflex>, at: number) {
+  if (!reflex) return;
+  const directive = reactionForMotorPlan(reflex.plan, reflex.plan.durationMs);
+  if (!directive) return;
+  recordNeuroTrace({
+    t: at,
+    goal: "idle",
+    confidence: 1,
+    motorTendency: { approach: 0, avoidance: 0, energy: 0, expressiveness: 0 },
+    primitives: reflex.plan.actions.map((p) => p.type),
+    reaction: directive.reaction,
+    durationMs: directive.durationMs,
+  });
+  await desktop.react(directive.reaction);
+  await waitForAction(directive.durationMs, undefined as unknown as AbortSignal);
+  publishPetBrainSnapshot();
 }
 
 function handleAgentState(payload: BrainAgentStateEvent) {
