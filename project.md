@@ -49,7 +49,7 @@ LegacySpriteBackend         ← MotorPlan → 现有 v2 Reaction（8×11 图集�
 | **M2** | CharacterState V1（确定性七维情绪、PetMood 兼容派生、快照扩展 + 情绪调试面板） | ✅ 已提交 `f8e0053` |
 | **M3** | RuleCerebellum + LegacySpriteBackend + Neuro Trace（管线已接线，单测完成） | ✅ 已提交 `e1bd20a` |
 | **M4** | Reflex 脊髓反射层（blink/startle/flinch/grip，reflex 优先于 brain pipeline） | ✅ 已提交 `a8d3bff` |
-| **M5** | StructuredBrainProvider（AI → NeuroBrainIntent，OpenAI-compatible API，TS 直接调用） | 🔨 进行中 |
+| **M5** | StructuredBrainProvider（AI → NeuroBrainIntent，OpenAI-compatible API，TS 直接调用）+ 契约增强（SocialIntent/BrainSource/MotorSource + JSON Schema） | ✅ 已提交 `d7e98f3` + `59e7ff1` |
 | M6+ | FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body | ⬜（不在本轮） |
 
 接入方式（已定）：**直接替换**——旧 `adapters/reaction.ts` 固定映射已被删除，`runtime.ts` 内联走 MotorPlan 路径（`synthesizeBrainIntent → planMotor → reactionForMotorPlan`）；等价性由逐条映射测试保证（`legacy-sprite-backend.test.ts` 23 条 ✅）。
@@ -77,9 +77,11 @@ src/neuro/
 ├─ reflex/               # M4 ✅
 │  ├─ reflex.ts             # 脊髓反射弧（blink/startle/flinch/grip → MotorPlan）
 │  └─ reflex.test.ts        # 20 tests ✅
-├─ brain/                # M5 🔨
+├─ brain/                # M5 ✅
 │  ├─ structured-brain.ts   # StructuredBrainProvider（OpenAI-compatible → full NeuroBrainIntent）
 │  └─ structured-brain.test.ts  # 19 tests ✅
+├─ schemas/              # M5 ✅（借鉴 PR #9）
+│  └─ neuro-v1.schema.json  # 跨语言契约验证（JSON Schema 2020-12）
 ├─ cerebellum/           # M3 ✅
 │  ├─ rule-cerebellum.ts  # synthesizeBrainIntent + planMotor（W+C+I → MotorPlan）
 │  └─ rule-cerebellum.test.ts   # 27 tests ✅
@@ -126,13 +128,19 @@ src/neuro/
   - `buildReflexEvent()` 从 PetSenseEventDetail 构建 PerceptionEvent 供 reflex 求值
   - `executeReflex()` 走 `reactionForMotorPlan → recordNeuroTrace → desktop.react`
   - `vitest run` **107 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
-- **2026-08-27 M5 进行中**：
+- **2026-08-27 M5 完成**（`d7e98f3` + `59e7ff1`）：
   - Rust 侧：`ai/mod.rs` 新增 `get_ai_api_credentials` 命令（返回 baseUrl/model/apiKey/timeoutSeconds），`lib.rs` 注册
   - `structured-brain.ts` ✅：TypeScript 直接 fetch OpenAI-compatible API，system prompt 要求完整 BrainIntent JSON（goal + attention + emotionDelta + motorTendency + confidence）
   - `validateAndNormalizeBrainIntent()` 解析+校验+归一化：goal 白名单、attention target 白名单、motorTendency clamp、emotionDelta 过滤非数值键
   - `structured-brain.test.ts` 19 条 ✅：null/非对象/缺 goal/错 goal/全 7 goal/confidence clamp/attention target 白名单/motorTendency clamp+默认值/emotionDelta 过滤/复杂完整 intent
   - `ai-runtime.ts` 接线 ✅：`tryStructuredBrain()` 优先走 structured path（buildStructuredContext → requestStructuredBrain → recordNeuroTrace → submitBrainIntent），失败回退 legacy single-goal
-  - `vitest run` **126 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
+  - **契约增强**（借鉴 PR #9，合入 PR #10 `59e7ff1`）：
+    - `SocialIntent` 类型：社交维度（greet/complain/tease/comfort/brag/withdraw/plead）
+    - `BrainSource` 类型 + `SOURCE_CONFIDENCE_CAP`：追踪意图来源及置信度上限
+    - `MotorSource` 类型：追踪运动计划来源（reflex/rule/ai/shadow），为 Shadow 模式铺路
+    - `neuro-v1.schema.json`：跨语言契约验证（JSON Schema 2020-12），供 Python 训练管线或远程 Brain Server 使用
+  - `vitest run` **131 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
+  - 下一站 M6+（FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body）
 
 ## 八、参考文档
 
