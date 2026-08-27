@@ -94,6 +94,27 @@ function roundEmotion(e: EmotionState): Record<string, number> {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Failure logging (rate-limited)                                     */
+/* ------------------------------------------------------------------ */
+
+const WARN_INTERVAL_MS = 60_000;
+const lastWarnAt = new Map<string, number>();
+
+/**
+ * Structured-brain failures fall back to the legacy suggestion path (or to
+ * local autonomy), so they must not spam the console — but a misconfigured
+ * provider that never surfaces would be undebuggable. One warn per category
+ * per minute.
+ */
+function warnFailure(category: string, message: string) {
+  const now = Date.now();
+  const last = lastWarnAt.get(category) ?? 0;
+  if (now - last < WARN_INTERVAL_MS) return;
+  lastWarnAt.set(category, now);
+  console.warn(`[neuro:brain] ${category}: ${message}`);
+}
+
+/* ------------------------------------------------------------------ */
 /*  API call                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -119,7 +140,8 @@ async function getAiApiSettings(): Promise<AiApiSettings | null> {
     );
     if (!settings.baseUrl || !settings.model || !settings.apiKey) return null;
     return settings;
-  } catch {
+  } catch (error) {
+    warnFailure("credentials", `get_ai_api_credentials invoke failed: ${String(error)}`);
     return null;
   }
 }
@@ -165,20 +187,34 @@ export async function requestStructuredBrain(
       signal: controller.signal,
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      warnFailure("http", `${response.status} ${response.statusText || ""} from ${settings.model}`);
+      return null;
+    }
     const data = await response.json() as { choices?: { message?: { content?: string } }[] };
     const content = data.choices?.[0]?.message?.content;
-    if (!content) return null;
+    if (!content) {
+      warnFailure("empty-response", `no message content from ${settings.model}`);
+      return null;
+    }
 
     const parsed = parseBrainIntentResponse(content);
-    if (!parsed) return null;
+    if (!parsed) {
+      warnFailure("parse", `response did not validate as BrainIntent: ${content.slice(0, 160)}`);
+      return null;
+    }
 
     return {
       intent: parsed,
       raw: data,
       latencyMs: Date.now() - start,
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      warnFailure("timeout", `request exceeded ${settings.timeoutSeconds}s`);
+    } else {
+      warnFailure("network", String(error));
+    }
     return null;
   } finally {
     clearTimeout(timeout);
@@ -195,7 +231,8 @@ function parseBrainIntentResponse(content: string): NeuroBrainIntent | null {
     const cleaned = content.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
     const json = JSON.parse(cleaned);
     return validateAndNormalizeBrainIntent(json);
-  } catch {
+  } catch (error) {
+    warnFailure("json", `JSON.parse failed: ${String(error)}`);
     return null;
   }
 }

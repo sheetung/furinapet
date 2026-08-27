@@ -8,7 +8,7 @@
  */
 
 import type { EmotionState, TargetRef } from "./character-state";
-import type { PetGoalId } from "../../pet-brain/types";
+import type { BrainIntentSource, PetGoalId } from "../../pet-brain/types";
 
 /**
  * Social dimension of the brain's intent — how the character wants to relate
@@ -38,12 +38,16 @@ export type BrainSource = "rule" | "ai" | "plugin" | "user";
 export const BRAIN_SOURCES: readonly BrainSource[] = ["rule", "ai", "plugin", "user"];
 
 /**
- * Ceiling on how much a source is trusted. Mirrors the existing planner's
- * policy of capping AI suggestions below system and user input.
+ * Ceiling on how much an intent source is trusted in priority arbitration,
+ * keyed by pet-brain's BrainIntentSource (the real arbitration axis).
+ *
+ * Rust mirror: `src-tauri/src/brain_commands.rs` `source_cap` — keep the two
+ * tables in sync (a drift guard test compares the ai cap value).
  */
-export const SOURCE_CONFIDENCE_CAP: Record<BrainSource, number> = {
+export const SOURCE_CONFIDENCE_CAP: Record<BrainIntentSource, number> = {
+  system: 1,
   user: 1,
-  rule: 1,
+  agent: 0.95,
   plugin: 0.95,
   ai: 0.82,
 };

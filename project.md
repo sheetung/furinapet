@@ -229,6 +229,12 @@ src/neuro/
   - BrainNavigation 旧平铺面板（Planner 评分/动作计划/AI 建议/情绪/Neuro Trace 五个 panel）全部折叠进对应层的抽屉，六格实时统计条保留
   - 感知日志测试 ×3（touch/drag 即时记录、pointer 节流、30 条上限），测试 161 → **164** ✅，`tsc` 零错误
   - 验证方式切换：`pnpm tauri dev` 热更新迭代（免打包），最终发布前再打 NSIS 包实测
+- **2026-08-27 P2 修复完成**（架构审查 Minor 全清，分支 fix/neuro-p2-review-leftovers）：
+  - **m1 优先级封顶收敛**：`SOURCE_CONFIDENCE_CAP` 键集从 BrainSource（rule/ai/plugin/user，死代码）改为 BrainIntentSource（system/user/agent/plugin/ai，真实仲裁轴），数值对齐 Rust `brain_commands.rs` source_cap（1/1/0.95/0.95/0.82）；`ai-runtime.ts` 与 `adapters/ai.ts` 两处 `Math.min(0.82,…)` 魔法数全部接线到该常量；新增 2 条守卫测试（键集比对 + Rust 表逐值比对，跨语言漂移直接红）
+  - **m2 快照死通道清理**：`publishPetBrainSnapshot` 删除 window CustomEvent 派发（控制中心与宠物是不同 WebView，CustomEvent 零订阅者），仅保留 Tauri emit，注释说明原因
+  - **m3 structured-brain 失败可观测**：7 个失败分支（credentials/http/empty-response/parse/json/timeout/network）加率限定 console.warn（每分类每分钟至多 1 条），AI 配错不再静默
+  - **m4 生命周期句柄**：runtime.ts / ai-runtime.ts / perception store.ts 三处 bootstrap 的 listen unlisten 全部保存并导出 `dispose*()`；ai-runtime 的 agent-state 风暴合并（700ms 触发定时器替换而非堆叠）；perception store 的 beforeunload 改走统一 teardown
+  - 测试 164 → **166** ✅，`tsc` 零错误，`vite build` 通过（Rust 侧无改动）
 
 ## 八、自主决策面板（Decision Inspector）
 

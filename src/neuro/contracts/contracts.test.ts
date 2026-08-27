@@ -12,6 +12,7 @@ import {
   NEUTRAL_MOTOR_TENDENCY,
   normalizeBrainIntent,
   planActionWeight,
+  SOURCE_CONFIDENCE_CAP,
 } from "./index";
 import { bodyRegionAt, type MotorPrimitive } from "./motor-plan";
 
@@ -112,6 +113,23 @@ describe("brain intent contract", () => {
       source: "unknown" as any,
     });
     expect(intent.source).toBeUndefined();
+  });
+
+  it("keys SOURCE_CONFIDENCE_CAP by the arbitration BrainIntentSource set", () => {
+    // Mirrors pet-brain/types.ts BrainIntentSource — the real arbitration axis.
+    expect(Object.keys(SOURCE_CONFIDENCE_CAP).sort()).toEqual(
+      ["agent", "ai", "plugin", "system", "user"],
+    );
+  });
+
+  it("matches the Rust source_cap table in brain_commands.rs", () => {
+    // src-tauri/src/brain_commands.rs:
+    //   user|system => 1.0, agent|plugin => 0.95, ai => 0.82
+    expect(SOURCE_CONFIDENCE_CAP.user).toBe(1);
+    expect(SOURCE_CONFIDENCE_CAP.system).toBe(1);
+    expect(SOURCE_CONFIDENCE_CAP.agent).toBe(0.95);
+    expect(SOURCE_CONFIDENCE_CAP.plugin).toBe(0.95);
+    expect(SOURCE_CONFIDENCE_CAP.ai).toBe(0.82);
   });
 });
 

@@ -25,6 +25,7 @@ export const PET_BRAIN_SNAPSHOT_EVENT = "furinapet:brain-snapshot";
 export const PET_BRAIN_SNAPSHOT_REQUEST_EVENT = "furinapet:brain-snapshot-request";
 
 let bootstrapped = false;
+let disposers: (() => void)[] = [];
 
 function immediateContext(now: number, agentState: BrainAgentState): BrainContext {
   const brain = getPetBrain();
@@ -53,7 +54,9 @@ export function publishPetBrainSnapshot() {
     world: getWorldState(),
     perceptionLog: getPerceptionLog().slice(0, 30),
   };
-  window.dispatchEvent(new CustomEvent(PET_BRAIN_SNAPSHOT_EVENT, { detail: snapshot }));
+  // Tauri event only: the dashboard and the pet window are separate WebViews,
+  // so a window CustomEvent would never reach the consumers (the pet window's
+  // own listeners all read the snapshot via this module's functions directly).
   void emit(PET_BRAIN_SNAPSHOT_EVENT, snapshot).catch((error) => {
     console.warn("[pet-brain] snapshot publish failed", error);
   });
@@ -243,18 +246,36 @@ export function bootstrapPetBrainRuntime() {
     if (detail) handlePetSense(detail);
   };
   window.addEventListener(PET_SENSE_EVENT, onSense);
+  disposers.push(() => window.removeEventListener(PET_SENSE_EVENT, onSense));
 
-  void listen<BrainAgentStateEvent>(PET_BRAIN_AGENT_STATE_EVENT, (event) => {
-    handleAgentState(event.payload);
-  }).catch((error) => console.error("[pet-brain] agent state bridge failed", error));
-
-  void listen<BrainIntentEvent>(PET_BRAIN_INTENT_EVENT, (event) => {
-    handleExternalIntent(event.payload);
-  }).catch((error) => console.error("[pet-brain] intent bridge failed", error));
-
-  void listen(PET_BRAIN_SNAPSHOT_REQUEST_EVENT, () => {
-    publishPetBrainSnapshot();
-  }).catch((error) => console.error("[pet-brain] snapshot request bridge failed", error));
+  void (async () => {
+    const [agentState, intent, snapshotRequest] = await Promise.all([
+      listen<BrainAgentStateEvent>(PET_BRAIN_AGENT_STATE_EVENT, (event) => {
+        handleAgentState(event.payload);
+      }),
+      listen<BrainIntentEvent>(PET_BRAIN_INTENT_EVENT, (event) => {
+        handleExternalIntent(event.payload);
+      }),
+      listen(PET_BRAIN_SNAPSHOT_REQUEST_EVENT, () => {
+        publishPetBrainSnapshot();
+      }),
+    ]);
+    if (!bootstrapped) {
+      // Disposed while the listeners were being registered.
+      agentState();
+      intent();
+      snapshotRequest();
+      return;
+    }
+    disposers.push(agentState, intent, snapshotRequest);
+  })().catch((error) => console.error("[pet-brain] bridge registration failed", error));
 
   publishPetBrainSnapshot();
+}
+
+/** Tear down the pet-brain runtime (event bridges + listeners). Test/HMR safety. */
+export function disposePetBrainRuntime() {
+  for (const dispose of disposers) dispose();
+  disposers = [];
+  bootstrapped = false;
 }
