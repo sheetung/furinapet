@@ -9,6 +9,7 @@ import { listen } from "@tauri-apps/api/event";
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { desktop } from "../../api";
 import { PET_SENSE_EVENT } from "../../plugins/dom-bridge";
+import { getCharacterStore } from "../character/character-store";
 import type { BrainAgentStateEvent, PetSenseEventDetail } from "../../pet-brain/types";
 import type {
   PerceptionEvent,
@@ -57,12 +58,14 @@ class WorldStateStore {
     const result = reducePerceptionEvent(this.world, this.memory, event, this.geometry);
     this.world = result.world;
     this.memory = result.memory;
+    getCharacterStore().observe(event);
   }
 
   tick(now: number, input: { canMove: boolean; canDock: boolean }) {
     const result = tickWorldState(this.world, this.memory, now, input);
     this.world = result.world;
     this.memory = result.memory;
+    getCharacterStore().tick(now);
   }
 
   snapshot(): WorldState {

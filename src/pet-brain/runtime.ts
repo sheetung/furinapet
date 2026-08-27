@@ -1,5 +1,6 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { desktop } from "../api";
+import { characterSnapshot } from "../neuro/character/character-adapter";
 import { PET_SENSE_EVENT } from "../plugins/dom-bridge";
 import { reactionForSemanticAction } from "./adapters/reaction";
 import { getPetBrain, waitForAction } from "./index";
@@ -38,7 +39,11 @@ function immediateContext(now: number, agentState: BrainAgentState): BrainContex
 }
 
 export function publishPetBrainSnapshot() {
-  const snapshot = getPetBrain().snapshot();
+  const brain = getPetBrain();
+  const snapshot = {
+    ...brain.snapshot(),
+    character: characterSnapshot(brain.blackboard, Date.now()),
+  };
   window.dispatchEvent(new CustomEvent(PET_BRAIN_SNAPSHOT_EVENT, { detail: snapshot }));
   void emit(PET_BRAIN_SNAPSHOT_EVENT, snapshot).catch((error) => {
     console.warn("[pet-brain] snapshot publish failed", error);

@@ -426,6 +426,27 @@ export function BrainNavigation() {
                   </div>
                 ) : <div className="brain-empty">运行中的 AI Adviser 还没有产生建议。</div>}
               </div>
+
+              {brainSnapshot.character && (
+                <div className="brain-panel" style={{ marginTop: 12 }}>
+                  <div className="brain-panel-title">
+                    <strong>情绪状态 · Neuro</strong>
+                    <small>{`arousal ${Math.round(brainSnapshot.character.arousal * 100)}% · 注意力 ${attentionLabel(brainSnapshot.character.attention.target)} ${Math.round(brainSnapshot.character.attention.strength * 100)}% · 派生 ${moodLabel(brainSnapshot.character.derivedMood)}`}</small>
+                  </div>
+                  <div className="brain-score-list">
+                    {EMOTION_LABELS.map(({ key, label }) => {
+                      const value = brainSnapshot.character!.emotion[key];
+                      return (
+                        <div className="brain-score-row" key={key}>
+                          <span className="brain-score-name">{label}</span>
+                          <span className="brain-score-track"><i style={{ width: `${Math.round(value * 100)}%` }} /></span>
+                          <span className="brain-score-value">{value.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           ) : <div className="brain-empty">正在请求宠物窗口的 Brain Snapshot…</div>}
         </div>
@@ -497,6 +518,21 @@ export function BrainNavigation() {
 
 function LiveStat({ label, value }: { label: string; value: string }) {
   return <div className="brain-live-stat"><small>{label}</small><strong title={value}>{value}</strong></div>;
+}
+
+const EMOTION_LABELS: { key: keyof import("../neuro/contracts").EmotionState; label: string }[] = [
+  { key: "happiness", label: "开心" },
+  { key: "affection", label: "亲密" },
+  { key: "curiosity", label: "好奇" },
+  { key: "annoyance", label: "烦躁" },
+  { key: "fear", label: "紧张" },
+  { key: "boredom", label: "无聊" },
+  { key: "sleepiness", label: "困倦" },
+];
+
+function attentionLabel(target: string) {
+  const labels: Record<string, string> = { pointer: "鼠标", user: "用户", agent: "Agent", self: "自己", none: "无" };
+  return labels[target] ?? target;
 }
 
 function AiTraceRow({ trace }: { trace: AiSuggestionTrace }) {
