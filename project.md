@@ -221,8 +221,8 @@ src/neuro/
   - 新增 `schema-consistency.test.ts` **11 条防漂移测试**（枚举逐值比对 + 变体覆盖 + required 对齐），schema 与 TS 再漂移会直接红
   - reflex/cerebellum 测试补 source 断言 ×2
   - 测试 141 → **154** ✅，`tsc` 零错误，`pnpm build` + `cargo check` 通过
-- **2026-08-27 点击部位丢失修复**（region 传递链）：实测发现不同部位点击无差异化反应。根因：`dom-bridge emitSense` 丢弃点击坐标 → `buildReflexEvent` 回退到 125ms 采样器的过期 `targetRegion`（点击派发延迟 360ms 双击窗口，指针早已移开，恒为 "none"）→ blink（要求 face/head）永不命中 → 全部点击走大脑路径渲染同一动画。修复：`PetSenseEventDetail` 新增 `region?: BodyRegion`；dom-bridge 在 pointerdown 时刻用 `regionAtPointer` 解析真实部位随事件下发（双击路径同样处理）；`buildReflexEvent`/`senseToPerceptionEvent` 优先使用 `detail.region`。测试 154 → **161** ✅（runtime buildReflexEvent ×4 + store sense 映射 ×3）
-- **2026-08-27 M-Panel 完成**（LMC 自主决策面板，project.md 第八节）：
+- **2026-08-27 点击部位丢失修复**（region 传递链，PR #13 `7054da3`）：实测发现不同部位点击无差异化反应。根因：`dom-bridge emitSense` 丢弃点击坐标 → `buildReflexEvent` 回退到 125ms 采样器的过期 `targetRegion`（点击派发延迟 360ms 双击窗口，指针早已移开，恒为 "none"）→ blink（要求 face/head）永不命中 → 全部点击走大脑路径渲染同一动画。修复：`PetSenseEventDetail` 新增 `region?: BodyRegion`；dom-bridge 在 pointerdown 时刻用 `regionAtPointer` 解析真实部位随事件下发（双击路径同样处理）；`buildReflexEvent`/`senseToPerceptionEvent` 优先使用 `detail.region`。测试 154 → **161** ✅（runtime buildReflexEvent ×4 + store sense 映射 ×3）
+- **2026-08-27 M-Panel 完成**（LMC 自主决策面板，project.md 第八节，PR #13 `7054da3`）：
   - **数据管线扩展**：`publishPetBrainSnapshot` 快照新增 `world: WorldState` + `perceptionLog`（最近 30 条感知事件，pointer 节流 1 条/秒，touch/drag/agentState 全量）；`NeuroTraceEntry` 新增 `reflex?: ReflexName` + `region?: BodyRegion`（executeReflex 记录反射名与触发部位）
   - **新增 `src/components/DecisionInspector.tsx`**（~600 行）：七层架构图（Environment → Perception → Brain|Reflex 并行 → Cerebellum → Motion → Body → Renderer），每层框内显示当前执行状态摘要（鼠标运动/目标区域/连点/goal/source/原语序列/当前 reaction 等）；点击任意层弹出右侧抽屉展示该层详情（Planner 评分/动作计划/情绪七维/AI 建议/大脑输出轨迹/反射触发历史/感知事件日志/MotorTendency/legacy 映射表/13 原语词汇表）；新决策流经时对应层闪烁高亮（reflex → Reflex 框，rule/ai → Brain 框，全部 → Cerebellum/Motion 框）；Esc/遮罩关闭抽屉
   - **`src/pet-brain/labels.ts`** 抽取共享中文标签（goalLabel/moodLabel/agentStateLabel 等 9 个），BrainNavigation 与 DecisionInspector 共用
