@@ -243,6 +243,17 @@ src/neuro/
   - **Trace 完整性 trace-integrity.test.ts（6）**：recordNeuroTrace 写入完整性（goal/confidence/primitives/reaction）、reflex 条目字段、时间戳单调非递减（newest-first）、TRACE_LIMIT 50 环形缓冲、必需字段校验
   - 测试 166 → **208** ✅，`tsc` 零错误，`vite build` 通过；方案文档 `docs/neuro-testing-plan.md` 提交入仓库
 
+- **2026-08-28 B1 Brain-as-Primary**（PR #16 已合入：`f89f624` → merge `6391493`，分支已删；8 files +432/-23）：
+  - **arbitration.ts（新）**：纯函数置信仲裁，`arbitrateDecision(aiResult, rulePlan, activeIntents, blackboard, now)` → AI cap 0.82 vs intent source caps
+  - **arbitration.test.ts（新，10 tests）**：覆盖 AI wins/user intent beats/AI at cap beats plugin/null fallback/tie-break/system intent/double-click
+  - **runtime.ts**：新增 `decidePlan()` 异步仲裁入口，`handleAgentState` 改用 B1 flow（`void decidePlan().then(executeReactionPlan)`）
+  - **ai-runtime.ts**：新增 `requestAiPrimaryDecision()` 导出，复用 `buildStructuredContext()` + `inFlight` guard
+  - **Planner.ts**：提取 `actionsForGoal()` 为独立导出函数，class method 委托调用
+  - **types.ts**：`PetActionPlan` 新增 `source?: "ai" | "rule"` 字段
+  - **structured-brain.ts**：`validateAndNormalizeBrainIntent` 补全 socialIntent 解析（修复 known gap）；system prompt 加入 socialIntent schema
+  - Click fast-path 保留：user intents priority 0.9/0.97 > AI cap 0.82 → 直接 Rule Planner，无网络延迟
+  - 测试 208 → **218** ✅，`tsc` 零错误，`vite build` 通过，`cargo check` 通过
+
 ## 八、自主决策面板（Decision Inspector）
 
 ### 当前状态（✅ 2026-08-27 已实现）
@@ -388,7 +399,7 @@ LMC 架构可视化交互面板已上线（`src/components/DecisionInspector.tsx
 
 | 阶段 | 内容 | 依赖 | 估时 | 状态 |
 |------|------|------|------|------|
-| **B1** | **Brain-as-Primary**：AI 大脑替代 Rule Planner 成为主决策者。`ai-runtime.ts` 从 suggestion 模式升级为 primary 模式，每 tick 主动调用 `requestStructuredBrain()` 并直接 `submitBrainIntent("ai", ...)`；Rule Planner 仅在 AI 不可用（未配置/超时/错误）时接管。需新增 confidence 仲裁逻辑：AI goal 与 Rule goal 共存时按 source confidence cap 竞争。`structured-brain.ts` 的 `validateAndNormalizeBrainIntent` 需补全 socialIntent 解析。 | 无 | ~3d | ⏳ 已实现待提交 |
+| **B1** | **Brain-as-Primary**：AI 大脑替代 Rule Planner 成为主决策者。`ai-runtime.ts` 新增 `requestAiPrimaryDecision()`；`runtime.ts` 新增 `decidePlan()` 异步仲裁；click fast-path 保留（user intents ≥ 0.9 跳过 AI）；`arbitration.ts` 纯函数置信仲裁（AI cap 0.82）；`structured-brain.ts` 补全 socialIntent 解析 + system prompt 更新；`Planner.ts` 提取 `actionsForGoal()` 共享函数。 | 无 | ~3d | ✅ PR #16 `6391493`（208→218 tests） |
 | **B2** | **人格系统（Personality）**：16 维人格模型（参考 LMC.md personality 定义），持久化为 JSON 配置文件（`settings.personality`），注入 `BrainProviderContext`。人格维度影响情绪衰减率、reflex 敏感度、motor tendency baseline。新增 `src/neuro/personality/` 模块 + 设置页 UI。 | 无（可与 B1 并行） | ~2d | ⬜ |
 | **B3** | **短期记忆（Short-term Memory）**：session-scoped ring buffer（容量 ~100 条），记录近期 PerceptionEvent + BrainIntent + 对话片段。注入 `BrainProviderContext.recentMemory`，使 AI 大脑具备上下文连续性。新增 `src/neuro/memory/short-term.ts`。 | 无（可与 B1/B2 并行） | ~2d | ⬜ |
 | **B4** | **语言输入（Language Input）**：新增 `userMessage` PerceptionEvent 类型（含 text/transcript/source 字段）；UI 层新增文本输入框 + 语音按钮（调用 Web Speech API 或 Tauri 侧 Whisper）；Rust 侧新增 `process_user_message` command 将文本注入感知管线。语言事件经 Perception → WorldState → Brain 全链路透传。契约/Schema 同步更新。 | B1（大脑已为主决策者才能理解语言意图） | ~4d | ⬜ |
