@@ -103,6 +103,8 @@ export interface PetActionPlan {
   createdAt: number;
   actions: PetSemanticAction[];
   candidates: GoalScore[];
+  /** Which decision layer produced this plan. Added by B1 Brain-as-Primary. */
+  source?: "ai" | "rule";
 }
 
 export interface BrainHistoryEntry {

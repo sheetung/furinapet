@@ -5,6 +5,37 @@ const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
 const ACTIVE_AGENT_STATES = new Set(["thinking", "editing", "testing", "waiting"]);
 
+/**
+ * Generate semantic actions for a given goal. Shared between PetUtilityPlanner
+ * (rule-based path) and B1 arbitration (AI primary path uses this to build
+ * a PetActionPlan from a NeuroBrainIntent).
+ */
+export function actionsForGoal(
+  goal: PetGoalId,
+  blackboard: PetBlackboard,
+  random: () => number = Math.random,
+): PetSemanticAction[] {
+  switch (goal) {
+    case "wander":
+      return [{ type: "wander" }];
+    case "dock":
+      return [{ type: "dock" }];
+    case "respond-user": {
+      const streak = blackboard.getClickStreak();
+      return [{ type: "respond", intensity: streak >= 3 ? "excited" : streak >= 2 ? "normal" : "soft" }];
+    }
+    case "observe-agent":
+      return [{ type: "observe", durationMs: 2200 + Math.round(random() * 1800) }, { type: "wait", durationMs: 500 }];
+    case "celebrate":
+      return [{ type: "celebrate", intensity: blackboard.getMood() === "happy" ? "excited" : "normal" }];
+    case "rest":
+      return [{ type: "rest", durationMs: 3000 + Math.round(random() * 3500) }];
+    case "idle":
+    default:
+      return [{ type: "idle", durationMs: 1200 + Math.round(random() * 2200) }];
+  }
+}
+
 export class PetUtilityPlanner {
   constructor(private readonly random: () => number = Math.random) {}
 
@@ -130,24 +161,6 @@ export class PetUtilityPlanner {
   }
 
   private actionsFor(goal: PetGoalId, blackboard: PetBlackboard): PetSemanticAction[] {
-    switch (goal) {
-      case "wander":
-        return [{ type: "wander" }];
-      case "dock":
-        return [{ type: "dock" }];
-      case "respond-user": {
-        const streak = blackboard.getClickStreak();
-        return [{ type: "respond", intensity: streak >= 3 ? "excited" : streak >= 2 ? "normal" : "soft" }];
-      }
-      case "observe-agent":
-        return [{ type: "observe", durationMs: 2200 + Math.round(this.random() * 1800) }, { type: "wait", durationMs: 500 }];
-      case "celebrate":
-        return [{ type: "celebrate", intensity: blackboard.getMood() === "happy" ? "excited" : "normal" }];
-      case "rest":
-        return [{ type: "rest", durationMs: 3000 + Math.round(this.random() * 3500) }];
-      case "idle":
-      default:
-        return [{ type: "idle", durationMs: 1200 + Math.round(this.random() * 2200) }];
-    }
+    return actionsForGoal(goal, blackboard, this.random);
   }
 }

@@ -5,7 +5,7 @@ import { getPetBrain } from "./index";
 import { PET_BRAIN_AGENT_STATE_EVENT, publishPetBrainSnapshot } from "./runtime";
 import type { BrainAgentStateEvent } from "./types";
 import { buildCharacterState } from "../neuro/character/character-adapter";
-import { requestStructuredBrain, type BrainProviderContext } from "../neuro/brain/structured-brain";
+import { requestStructuredBrain, type BrainProviderContext, type StructuredBrainResult } from "../neuro/brain/structured-brain";
 import { SOURCE_CONFIDENCE_CAP } from "../neuro/contracts";
 import { getWorldState } from "../neuro/perception/store";
 import { getNeuroTrace, recordNeuroTrace } from "../neuro/trace/neuro-trace";
@@ -70,6 +70,26 @@ function buildStructuredContext(): BrainProviderContext {
     userIdleMs,
     agentConnected: world.agent.connected,
   };
+}
+
+/**
+ * B1 Brain-as-Primary: perform a single AI decision call.
+ * Called from runtime.ts decidePlan() as the primary decision path.
+ * Returns null if AI is not configured, in-flight, or fails.
+ */
+export async function requestAiPrimaryDecision(): Promise<StructuredBrainResult | null> {
+  if (inFlight || !("__TAURI_INTERNALS__" in window)) return null;
+  inFlight = true;
+  try {
+    const settings = await desktop.getAiSettings();
+    if (!settings.enabled || !settings.configured) return null;
+    return await requestStructuredBrain(buildStructuredContext());
+  } catch (error) {
+    console.warn("[pet-brain:ai] primary decision failed", error);
+    return null;
+  } finally {
+    inFlight = false;
+  }
 }
 
 /**

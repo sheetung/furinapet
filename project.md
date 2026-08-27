@@ -363,3 +363,59 @@ LMC 架构可视化交互面板已上线（`src/components/DecisionInspector.tsx
   - 原始位置：Obsidian `sheetung的知识区/make/LMC.md`（`C:\Users\sheetung\Documents\Obsidian\sheetung的知识区\make\LMC.md`）
   - 内容：感知/大脑/小脑/脊髓反射/运动系统/身体/渲染七层架构；Level 0–6 数据分级；大脑只输出 BrainIntent、小脑输出 MotorPrimitive 的职责划分；M0–M9 双线（工程线 + 模型线）开发路线；FunctionGemma → FurinaMotorNet 蒸馏策略；Shadow 模式与 Benchmark/Replay 基建要求。
   - 本工程的 M0–M3 里程碑即按其「Agent 工程线」前四个阶段执行。
+
+## 十、大脑升级里程碑（Brain Upgrade）
+
+### 架构决策（2026-08-28 确定）
+
+- **LLM 部署策略**：混合模式——本地小模型为主（低延迟/隐私），云端大模型为辅（fallback + 离线蒸馏教师）
+- **输入模态**：物理交互（已有 touch/drag/pointer）+ 语言输入（文本/语音，新增 `userMessage` PerceptionEvent）
+- **切换优先级**：Brain-as-Primary first——AI 大脑先替代 Rule Planner 成为主决策者，Rule Planner 降级为 fallback
+
+### 当前大脑 vs 目标大脑
+
+| 维度 | 当前实现（M0–M5） | 目标（B7 完成） |
+|------|-------------------|-----------------|
+| 决策者 | Rule Planner（Blackboard + Planner + Executor） | AI Brain 为主，Rule Planner 为 fallback |
+| 语言理解 | 无 | 文本/语音输入 → PerceptionEvent → 大脑理解 |
+| 人格 | 无 | 16 维人格模型，持久化配置，注入 brain context |
+| 短期记忆 | 无（仅 snapshot.history 最近 6 条 goal） | session 内 ring buffer，近期事件/对话上下文 |
+| 长期记忆 | 无 | 跨 session 持久存储（SQLite/JSON），检索/巩固 |
+| 关系状态 | 无 | trust/bond/familiarity，从长期交互演化 |
+| 情绪推理 | 固定 TOUCH_DELTAS 查表 | AI 驱动 emotionDelta，情境敏感 |
+
+### 里程碑列表
+
+| 阶段 | 内容 | 依赖 | 估时 | 状态 |
+|------|------|------|------|------|
+| **B1** | **Brain-as-Primary**：AI 大脑替代 Rule Planner 成为主决策者。`ai-runtime.ts` 从 suggestion 模式升级为 primary 模式，每 tick 主动调用 `requestStructuredBrain()` 并直接 `submitBrainIntent("ai", ...)`；Rule Planner 仅在 AI 不可用（未配置/超时/错误）时接管。需新增 confidence 仲裁逻辑：AI goal 与 Rule goal 共存时按 source confidence cap 竞争。`structured-brain.ts` 的 `validateAndNormalizeBrainIntent` 需补全 socialIntent 解析。 | 无 | ~3d | ⏳ 已实现待提交 |
+| **B2** | **人格系统（Personality）**：16 维人格模型（参考 LMC.md personality 定义），持久化为 JSON 配置文件（`settings.personality`），注入 `BrainProviderContext`。人格维度影响情绪衰减率、reflex 敏感度、motor tendency baseline。新增 `src/neuro/personality/` 模块 + 设置页 UI。 | 无（可与 B1 并行） | ~2d | ⬜ |
+| **B3** | **短期记忆（Short-term Memory）**：session-scoped ring buffer（容量 ~100 条），记录近期 PerceptionEvent + BrainIntent + 对话片段。注入 `BrainProviderContext.recentMemory`，使 AI 大脑具备上下文连续性。新增 `src/neuro/memory/short-term.ts`。 | 无（可与 B1/B2 并行） | ~2d | ⬜ |
+| **B4** | **语言输入（Language Input）**：新增 `userMessage` PerceptionEvent 类型（含 text/transcript/source 字段）；UI 层新增文本输入框 + 语音按钮（调用 Web Speech API 或 Tauri 侧 Whisper）；Rust 侧新增 `process_user_message` command 将文本注入感知管线。语言事件经 Perception → WorldState → Brain 全链路透传。契约/Schema 同步更新。 | B1（大脑已为主决策者才能理解语言意图） | ~4d | ⬜ |
+| **B5** | **长期记忆（Long-term Memory）**：跨 session 持久存储，选用 SQLite（via `tauri-plugin-sql`）或 JSON 文件。存储用户偏好、重要对话摘要、情绪转折点。新增 memory retrieval（相关记忆注入 brain context）和 consolidation（session 结束时短期记忆筛选沉淀）。新增 `src/neuro/memory/long-term.ts` + Rust migration。 | B3（短期记忆为数据源） | ~5d | ⬜ |
+| **B6** | **关系状态（Relationship）**：trust/bond/familiarity 三维关系模型，从长期交互数据（touch 频率/对话情感/共处时长）演化。注入 `BrainProviderContext.relationship`，影响 AI 的 socialIntent 选择和 motor tendency。持久化跟随长期记忆存储。 | B5（依赖长期记忆提供历史数据） | ~3d | ⬜ |
+| **B7** | **情绪推理（Emotion Inference）**：AI 驱动 emotionDelta 替代固定 TOUCH_DELTAS 查表。`requestStructuredBrain()` 返回的 `emotionDelta` 已包含在 NeuroBrainIntent 中，此里程碑重点在：让 AI 根据完整上下文（人格+记忆+关系+当前事件）推理出情境敏感的情绪变化，而非硬编码映射。需 benchmark 集验证情绪合理性。 | B2+B5+B6（人格/记忆/关系全部就位） | ~3d | ⬜ |
+
+### 依赖路线
+
+```
+B1 (Brain-as-Primary)
+ ├─ B2 (人格) ─────────────────────┐
+ ├─ B3 (短期记忆) ── B5 (长期记忆) ─┤
+ │                    │              │
+ │                    B6 (关系) ──────┤
+ └─ B4 (语言输入) ──────────────────┤
+                                    B7 (情绪推理)
+```
+
+执行顺序：B1 → B2/B3 并行 → B4（需 B1） → B5（需 B3） → B6（需 B5） → B7（需 B2+B5+B6）
+
+### 与 M6+ 的关系
+
+B1–B7 聚焦「大脑」（LMC 第三层）的能力升级，M6+ 聚焦「运动系统」（LMC 第五~七层）的模型化。两条线可并行但共享 MotorPlan 契约：
+
+- B1 的 Brain-as-Primary 不改变 MotorPlan 契约，只改变谁产出 BrainIntent
+- M6+ 的 FunctionGemma Shadow 需要 B1 先就位（Shadow 模式需要 AI brain 产出 shadow MotorPlan 与 rule MotorPlan 对比）
+- B7 完成后，AI 大脑具备完整上下文 → 可开始蒸馏 FurinaMotorNet（用完整 AI 决策轨迹训练小模型）
+
+因此建议：B1–B7 主线推进，M6+ Shadow 在 B1 完成后可启动 shadow 数据收集。
