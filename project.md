@@ -47,7 +47,7 @@ LegacySpriteBackend         ← MotorPlan → 现有 v2 Reaction（8×11 图集�
 | **M0** | Neuro Contracts v1（`src/neuro/contracts/`：L1–L5 五份契约 + 校验函数 + vitest） | ✅ 已提交 `df738fd` |
 | **M1** | Perception Reducer（`WorldState` 累加器、指针采样 125ms、感知接线、补 dragStart/dragEnd sense） | ✅ 已提交 `160ba7b` |
 | **M2** | CharacterState V1（确定性七维情绪、PetMood 兼容派生、快照扩展 + 情绪调试面板） | ✅ 已提交 `f8e0053` |
-| **M3** | RuleCerebellum + LegacySpriteBackend + Neuro Trace（管线已接线，单测完成） | ✅ 待提交 |
+| **M3** | RuleCerebellum + LegacySpriteBackend + Neuro Trace（管线已接线，单测完成） | ✅ 已提交 `e1bd20a` |
 | M4+ | Rust StructuredBrainProvider（AI → NeuroBrainIntent）→ FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body | ⬜（不在本轮） |
 
 接入方式（已定）：**直接替换**——旧 `adapters/reaction.ts` 固定映射已被删除，`runtime.ts` 内联走 MotorPlan 路径（`synthesizeBrainIntent → planMotor → reactionForMotorPlan`）；等价性由逐条映射测试保证（`legacy-sprite-backend.test.ts` 23 条 ✅）。
@@ -105,12 +105,12 @@ src/neuro/
 - **2026-08-27 M0 完成**（`df738fd`）：五份契约 + vitest 基建；产物 hash 与改动前一致，零行为变化。
 - **2026-08-27 M1 完成**（`160ba7b`）：perception-reducer + store + sampler；PetView 拖拽 sense 与 main.tsx bootstrap 接线；9 tests ✅。
 - **2026-08-27 M2 完成**（`f8e0053`）：CharacterStore（确定性七维情绪 observe/tick）+ character-adapter（PetBlackboard → CharacterState L3）+ BrainNavigation 情绪调试面板 + neuroTrace 面板；11 tests ✅。
-- **2026-08-27 M3 完成**（待提交）：
+- **2026-08-27 M3 完成**（`e1bd20a`）：
   - `rule-cerebellum.test.ts` 27 条 ✅：synthesizeBrainIntent（7 条：confidence/goal/attention/approach-boost/avoidance/clamp）+ planMotor 全分支（20 条：idle/wander/dock/wait/rest/observe×6/respond×6/celebrate×2）
   - `legacy-sprite-backend.test.ts` 23 条 ✅：优先级扫描（recoil > gesture > expression > idleStyle > turn > lookAt）+ 逐条映射等价性 + 端到端 plan 验证
   - `neuro-trace.test.ts` 6 条 ✅：环形缓冲 record/reverse-order/TRACE_LIMIT 截断/字段完整性/null reaction
   - `vitest run` **87 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
-  - **M0–M3 全部完成**，可执行 `git commit` 提交 M3
+  - **M0–M3 全部完成并提交**，下一站 M4+（Rust StructuredBrainProvider → FunctionGemma Shadow → 蒸馏 FurinaMotorNet）
 
 ## 八、参考文档
 
