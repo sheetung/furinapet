@@ -80,6 +80,7 @@ pub fn run() {
             ai::update_ai_settings,
             ai::test_ai_provider,
             ai::request_ai_behavior_suggestion,
+            ai::get_ai_api_credentials,
             agent_commands::get_mcp_server_config,
             claude_integration::get_claude_integration_status,
             claude_integration::install_claude_integration,

@@ -4,6 +4,10 @@ import { normalizeAiBehaviorSuggestion } from "./adapters/ai";
 import { getPetBrain } from "./index";
 import { PET_BRAIN_AGENT_STATE_EVENT, publishPetBrainSnapshot } from "./runtime";
 import type { BrainAgentStateEvent } from "./types";
+import { buildCharacterState } from "../neuro/character/character-adapter";
+import { requestStructuredBrain, type BrainProviderContext } from "../neuro/brain/structured-brain";
+import { getWorldState } from "../neuro/perception/store";
+import { getNeuroTrace, recordNeuroTrace } from "../neuro/trace/neuro-trace";
 
 const IDLE_CHECK_MS = 30_000;
 const STARTUP_DELAY_MS = 8_000;
@@ -44,6 +48,71 @@ async function buildContext(): Promise<AiBehaviorContext> {
   };
 }
 
+/** Build a BrainProviderContext for the structured brain from current state. */
+function buildStructuredContext(): BrainProviderContext {
+  const brain = getPetBrain();
+  const snapshot = brain.snapshot();
+  const now = Date.now();
+  const world = getWorldState();
+  const character = buildCharacterState(brain.blackboard, now);
+  const lastInteraction = snapshot.lastUserInteractionAt;
+  const userIdleMs = lastInteraction === null ? 60_000 : Math.max(0, now - lastInteraction);
+
+  return {
+    world,
+    character,
+    recentGoals: snapshot.history.slice(-6).map((entry) => entry.goal),
+    userIdleMs,
+    agentConnected: world.agent.connected,
+  };
+}
+
+/**
+ * Try the structured brain provider first (full NeuroBrainIntent).
+ * Returns true if a structured intent was successfully submitted.
+ */
+async function tryStructuredBrain(reason: string): Promise<boolean> {
+  const ctx = buildStructuredContext();
+  const result = await requestStructuredBrain(ctx);
+  if (!result) return false;
+
+  const now = Date.now();
+  const intentId = `ai-structured-${reason}-${now}`;
+  const priority = Math.min(0.82, 0.5 + result.intent.confidence * 0.32);
+  const ttlMs = 5_000;
+
+  // Record in neuro trace for debugging
+  recordNeuroTrace({
+    t: now,
+    goal: result.intent.goal,
+    confidence: result.intent.confidence,
+    motorTendency: result.intent.motorTendency,
+    primitives: [],
+    reaction: "idle" as never,
+    durationMs: 0,
+  });
+
+  getPetBrain().recordAiSuggestion(
+    intentId,
+    result.intent.goal,
+    result.intent.confidence,
+    ttlMs,
+    now,
+  );
+  publishPetBrainSnapshot();
+
+  await desktop.submitBrainIntent("ai", result.intent.goal, {
+    priority,
+    ttlMs,
+    id: intentId,
+  });
+
+  console.info(
+    `[pet-brain:ai] structured brain: goal=${result.intent.goal} confidence=${result.intent.confidence.toFixed(2)} latency=${result.latencyMs}ms`,
+  );
+  return true;
+}
+
 async function requestSuggestion(reason: string) {
   if (inFlight || !("__TAURI_INTERNALS__" in window)) return;
   inFlight = true;
@@ -51,6 +120,11 @@ async function requestSuggestion(reason: string) {
     const settings = await desktop.getAiSettings();
     if (!settings.enabled || !settings.configured) return;
 
+    // Try structured brain (full NeuroBrainIntent) first
+    const structured = await tryStructuredBrain(reason);
+    if (structured) return;
+
+    // Fall back to legacy single-goal suggestion
     const context = await buildContext();
     const result = await desktop.requestAiBehaviorSuggestion(context);
     if (result.state !== "suggested" || !result.suggestion) return;

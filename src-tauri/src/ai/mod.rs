@@ -178,6 +178,27 @@ pub async fn test_ai_provider(state: State<'_, AiServiceState>) -> Result<AiBeha
     provider::request_suggestion(&settings, key.as_deref(), &context).await
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiApiCredentials {
+    base_url: String,
+    model: String,
+    api_key: String,
+    timeout_seconds: u64,
+}
+
+#[tauri::command]
+pub fn get_ai_api_credentials(state: State<'_, AiServiceState>) -> Result<AiApiCredentials, String> {
+    let settings = state.settings.lock().map_err(|_| "AI settings lock is poisoned")?.clone();
+    let api_key = credentials::load_api_key()?.unwrap_or_default();
+    Ok(AiApiCredentials {
+        base_url: settings.base_url,
+        model: settings.model,
+        api_key,
+        timeout_seconds: settings.timeout_seconds,
+    })
+}
+
 #[tauri::command]
 pub async fn request_ai_behavior_suggestion(
     state: State<'_, AiServiceState>,
