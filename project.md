@@ -1,7 +1,7 @@
 # FurinaPet Neuro 工程记录
 
 > 本文档记录 `furinapet-neuro` 分支上的「类人认知—运动架构」改造：目标、架构、里程碑与当前进度。
-> 基线：`main` v1.1.2（`cccf510`）。架构总纲见 **《LMC》**（详见文末「参考文档」）。
+> 基线：`main` v1.1.2（`cccf510`）。架构总纲见 **《LMC》**（[`docs/LMC.md`](docs/LMC.md)）。
 
 ## 一、项目简介
 
@@ -137,6 +137,7 @@ src/neuro/
 ## 八、参考文档
 
 - **《LMC》**（原名「造人计划」，FurinaPet 类人认知—运动架构总纲）
-  - 来源：Obsidian `sheetung的知识区/make/造人计划.md`（`C:\Users\sheetung\Documents\Obsidian\sheetung的知识区\make\造人计划.md`）
+  - 工程内副本：[`docs/LMC.md`](docs/LMC.md)
+  - 原始位置：Obsidian `sheetung的知识区/make/LMC.md`（`C:\Users\sheetung\Documents\Obsidian\sheetung的知识区\make\LMC.md`）
   - 内容：感知/大脑/小脑/脊髓反射/运动系统/身体/渲染七层架构；Level 0–6 数据分级；大脑只输出 BrainIntent、小脑输出 MotorPrimitive 的职责划分；M0–M9 双线（工程线 + 模型线）开发路线；FunctionGemma → FurinaMotorNet 蒸馏策略；Shadow 模式与 Benchmark/Replay 基建要求。
   - 本工程的 M0–M3 里程碑即按其「Agent 工程线」前四个阶段执行。
