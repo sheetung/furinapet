@@ -6,10 +6,13 @@
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.0.8",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
@@ -27,7 +30,9 @@
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "esbuild": "^0.28.2",
     "typescript": "^6.0.3",
-    "vite": "^8.0.14"
+    "vite": "^8.0.14",
+    "vitest": "^4.1.11"
   }
 }
