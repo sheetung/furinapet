@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://furinapet.dev/schemas/neuro-v1.schema.json",
+  "title": "FurinaPet neuro-system contracts, schema version 1",
+  "description": "Cross-language mirror of src/neuro/contracts/. The TypeScript declarations are the runtime source of truth; this file exists so a Python training pipeline or an external brain server can validate the same payloads.",
+  "$defs": {
+    "unit": { "type": "number", "minimum": 0, "maximum": 1 },
+    "signedUnit": { "type": "number", "minimum": -1, "maximum": 1 },
+    "targetRef": { "enum": ["none", "pointer", "user", "agent", "self"] },
+    "bodyRegion": { "enum": ["none", "face", "head", "body", "hand"] },
+    "petGoalId": { "enum": ["idle", "wander", "dock", "respond-user", "observe-agent", "celebrate", "rest"] },
+    "brainSource": { "enum": ["rule", "ai", "plugin", "user"] },
+    "socialIntent": { "enum": ["none", "greet", "complain", "tease", "comfort", "brag", "withdraw", "plead"] },
+    "motorSource": { "enum": ["reflex", "rule", "ai", "shadow"] },
+    "pointerMotion": { "enum": ["stationary", "approaching", "leaving", "passing"] },
+    "interactionType": { "enum": ["none", "hover", "click", "double-click", "long-press", "drag"] },
+    "agentState": { "enum": ["idle", "thinking", "editing", "testing", "waiting", "success", "error"] },
+    "expressionType": { "enum": ["neutral", "happy", "sad", "annoyed", "surprised", "tired"] },
+    "earPose": { "enum": ["neutral", "back", "perked"] },
+    "tailMotion": { "enum": ["still", "sway", "flick", "wag"] },
+    "gestureType": { "enum": ["wave", "cheer", "deny", "point"] },
+    "idleStyle": { "enum": ["normal", "sleepy", "alert", "sulk"] },
+
+    "motorTendency": {
+      "type": "object",
+      "required": ["approach", "avoidance", "energy", "expressiveness"],
+      "properties": {
+        "approach": { "$ref": "#/$defs/unit" },
+        "avoidance": { "$ref": "#/$defs/unit" },
+        "energy": { "$ref": "#/$defs/unit" },
+        "expressiveness": { "$ref": "#/$defs/unit" }
+      }
+    },
+
+    "emotionState": {
+      "type": "object",
+      "required": ["happiness", "affection", "curiosity", "annoyance", "fear", "boredom", "sleepiness"],
+      "properties": {
+        "happiness": { "$ref": "#/$defs/unit" },
+        "affection": { "$ref": "#/$defs/unit" },
+        "curiosity": { "$ref": "#/$defs/unit" },
+        "annoyance": { "$ref": "#/$defs/unit" },
+        "fear": { "$ref": "#/$defs/unit" },
+        "boredom": { "$ref": "#/$defs/unit" },
+        "sleepiness": { "$ref": "#/$defs/unit" }
+      }
+    },
+
+    "perceptionEvent": {
+      "type": "object",
+      "required": ["type", "at"],
+      "properties": {
+        "type": { "enum": ["touch", "drag", "agent-state", "user-idle", "pointer-move"] },
+        "at": { "type": "number" },
+        "region": { "$ref": "#/$defs/bodyRegion" },
+        "sense": { "type": "string" },
+        "streak": { "type": "integer", "minimum": 0 },
+        "intensity": { "$ref": "#/$defs/unit" },
+        "phase": { "enum": ["start", "end"] }
+      }
+    },
+
+    "worldState": {
+      "type": "object",
+      "required": ["timestamp", "pointer", "interaction", "agent", "environment"],
+      "properties": {
+        "timestamp": { "type": "number" },
+        "pointer": {
+          "type": "object",
+          "required": ["x", "y", "vx", "vy", "speed", "motion", "targetRegion", "distanceToCharacter"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "vx": { "type": "number" },
+            "vy": { "type": "number" },
+            "speed": { "type": "number", "minimum": 0 },
+            "motion": { "$ref": "#/$defs/pointerMotion" },
+            "targetRegion": { "$ref": "#/$defs/bodyRegion" },
+            "distanceToCharacter": { "$ref": "#/$defs/unit" }
+          }
+        },
+        "interaction": {
+          "type": "object",
+          "required": ["type", "clickStreak", "intensity"],
+          "properties": {
+            "type": { "$ref": "#/$defs/interactionType" },
+            "clickStreak": { "type": "integer", "minimum": 0 },
+            "intensity": { "$ref": "#/$defs/unit" }
+          }
+        },
+        "agent": {
+          "type": "object",
+          "required": ["state", "connected"],
+          "properties": {
+            "state": { "$ref": "#/$defs/agentState" },
+            "connected": { "type": "boolean" },
+            "clientName": { "type": "string" }
+          }
+        },
+        "environment": {
+          "type": "object",
+          "required": ["userIdleMs", "canMove", "canDock"],
+          "properties": {
+            "userIdleMs": { "type": "number", "minimum": 0 },
+            "canMove": { "type": "boolean" },
+            "canDock": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
+    "characterState": {
+      "type": "object",
+      "required": ["emotion", "energy", "arousal", "attention", "currentGoal", "currentMotorState"],
+      "properties": {
+        "emotion": { "$ref": "#/$defs/emotionState" },
+        "energy": { "$ref": "#/$defs/unit" },
+        "arousal": { "$ref": "#/$defs/unit" },
+        "attention": {
+          "type": "object",
+          "required": ["target", "strength"],
+          "properties": {
+            "target": { "$ref": "#/$defs/targetRef" },
+            "strength": { "$ref": "#/$defs/unit" }
+          }
+        },
+        "currentGoal": { "type": "string" },
+        "currentMotorState": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "brainIntent": {
+      "type": "object",
+      "required": ["goal", "motorTendency", "confidence"],
+      "properties": {
+        "goal": { "$ref": "#/$defs/petGoalId" },
+        "attention": {
+          "type": "object",
+          "required": ["target", "strength"],
+          "properties": {
+            "target": { "$ref": "#/$defs/targetRef" },
+            "strength": { "$ref": "#/$defs/unit" }
+          }
+        },
+        "emotionDelta": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/signedUnit" }
+        },
+        "socialIntent": { "$ref": "#/$defs/socialIntent" },
+        "motorTendency": { "$ref": "#/$defs/motorTendency" },
+        "confidence": { "$ref": "#/$defs/unit" },
+        "source": { "$ref": "#/$defs/brainSource" }
+      }
+    },
+
+    "motorPrimitive": {
+      "oneOf": [
+        { "type": "object", "required": ["type", "target", "weight"], "properties": { "type": { "const": "lookAt" }, "target": { "$ref": "#/$defs/targetRef" }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "target", "weight"], "properties": { "type": { "const": "lookAway" }, "target": { "$ref": "#/$defs/targetRef" }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "from", "strength"], "properties": { "type": { "const": "recoil" }, "from": { "$ref": "#/$defs/targetRef" }, "strength": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "direction", "weight"], "properties": { "type": { "const": "lean" }, "direction": { "enum": ["left", "right", "forward", "back"] }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "direction", "weight"], "properties": { "type": { "const": "turn" }, "direction": { "enum": ["left", "right"] }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "direction", "distance"], "properties": { "type": { "const": "step" }, "direction": { "enum": ["left", "right"] }, "distance": { "type": "number" } } },
+        { "type": "object", "required": ["type", "target", "weight"], "properties": { "type": { "const": "approach" }, "target": { "$ref": "#/$defs/targetRef" }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "from", "weight"], "properties": { "type": { "const": "retreat" }, "from": { "$ref": "#/$defs/targetRef" }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "pose", "weight"], "properties": { "type": { "const": "earPose" }, "pose": { "$ref": "#/$defs/earPose" }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "motion", "weight"], "properties": { "type": { "const": "tailMotion" }, "motion": { "$ref": "#/$defs/tailMotion" }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "expression", "intensity"], "properties": { "type": { "const": "expression" }, "expression": { "$ref": "#/$defs/expressionType" }, "intensity": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "gesture", "weight"], "properties": { "type": { "const": "gesture" }, "gesture": { "$ref": "#/$defs/gestureType" }, "weight": { "$ref": "#/$defs/unit" } } },
+        { "type": "object", "required": ["type", "style", "weight"], "properties": { "type": { "const": "idleStyle" }, "style": { "$ref": "#/$defs/idleStyle" }, "weight": { "$ref": "#/$defs/unit" } } }
+      ]
+    },
+
+    "motorPlan": {
+      "type": "object",
+      "required": ["actions", "durationMs", "confidence"],
+      "properties": {
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/motorPrimitive" } },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "confidence": { "$ref": "#/$defs/unit" },
+        "source": { "$ref": "#/$defs/motorSource" },
+        "locomotion": { "enum": ["wander", "dock"] }
+      }
+    }
+  },
+
+  "oneOf": [
+    { "$ref": "#/$defs/perceptionEvent" },
+    { "$ref": "#/$defs/worldState" },
+    { "$ref": "#/$defs/characterState" },
+    { "$ref": "#/$defs/brainIntent" },
+    { "$ref": "#/$defs/motorPlan" }
+  ]
+}
