@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   cursorPosition,
@@ -26,8 +26,17 @@ import {
 import { PetBrain } from "./pet-brain";
 import { planWanderGoal } from "./pet-brain/adapters/wander";
 import { publishPetBrainSnapshot } from "./pet-brain/runtime";
-import type { AppSettings, Reaction, ReactionEvent } from "./types";
+import { resolveRenderBackend, resolveVrmUrl } from "./motion/config";
+import type { StageSenseSample } from "./render/PetStage3D";
+import type { AppSettings, MotionReaction, ReactionEvent } from "./types";
 import "./pet.css";
+
+/**
+ * three.js and @pixiv/three-vrm are roughly 800 kB of the bundle. The sprite
+ * backend is the default, so the 3D stack is split out and only fetched once a
+ * character actually needs a skeleton.
+ */
+const PetCanvas = lazy(() => import("./PetCanvas"));
 
 const CELL_WIDTH = 192;
 const CELL_HEIGHT = 208;
@@ -38,8 +47,8 @@ const MAX_FALL_SPEED = 1250;
 const GROUNDED_Y_TOLERANCE = 2;
 const MIN_EFFECTIVE_MOTION_PX = 1;
 const MAX_STALLED_TICKS = 4;
-
-type MotionReaction = Reaction | "run-left" | "run-right";
+/** The 2D cell is 208 px tall and the 3D rigs are ~1.5 m, which fixes the scale. */
+const PIXELS_PER_METRE = CELL_HEIGHT / 1.5;
 
 interface FrameRow {
   row: number;
@@ -82,6 +91,22 @@ interface MotionState {
   fallToken: number;
 }
 
+/**
+ * High-frequency observations for the 3D backend.
+ *
+ * Kept in a ref rather than state: the render loop pulls this every frame, and
+ * routing a moving cursor through `setState` would re-render the pet tree at the
+ * cursor's sample rate for values React never displays.
+ */
+interface SenseState {
+  gazeOffsetX: number;
+  gazeOffsetY: number;
+  gazeFocalPixels: number;
+  gazeActive: boolean;
+  velocityPxPerSecond: number;
+  grounded: boolean;
+}
+
 const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 
 export function PetView() {
@@ -103,6 +128,42 @@ export function PetView() {
   const bubbleClampRef = useRef(0);
   const brainRef = useRef<PetBrain | null>(null);
   if (!brainRef.current) brainRef.current = new PetBrain();
+  const backendRef = useRef(resolveRenderBackend());
+  const vrmUrlRef = useRef(resolveVrmUrl());
+  const senseRef = useRef<SenseState>({
+    gazeOffsetX: 0,
+    gazeOffsetY: 0,
+    gazeFocalPixels: CELL_HEIGHT,
+    gazeActive: false,
+    velocityPxPerSecond: 0,
+    grounded: true,
+  });
+
+  /**
+   * The speech bubble is the only surface the pet window has, so a rig problem is
+   * reported there — but on a timer, because a stuck error bubble also permanently
+   * enlarges the window.
+   */
+  function reportRigFallback(reason: string) {
+    if (reactionTimer.current) window.clearTimeout(reactionTimer.current);
+    setMessage(reason);
+    setBubbleEpoch((value) => value + 1);
+    reactionTimer.current = window.setTimeout(() => {
+      reactionTimer.current = null;
+      setMessage("");
+    }, 6000);
+  }
+
+  const readSenses = (): StageSenseSample => {    const senses = senseRef.current;
+    return {
+      gaze: senses.gazeActive
+        ? { offsetX: senses.gazeOffsetX, offsetY: senses.gazeOffsetY, focalPixels: senses.gazeFocalPixels }
+        : null,
+      velocityPxPerSecond: senses.velocityPxPerSecond,
+      pixelsPerMetre: PIXELS_PER_METRE * (settingsRef.current?.scale ?? 1),
+      grounded: senses.grounded,
+    };
+  };
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -263,6 +324,7 @@ export function PetView() {
     let timer = 0;
     let lastLook = -1;
     let lastLookAt = 0;
+    let lastGazeAt = 0;
     let lastTick = performance.now();
     let lastAutonomousActionAt = Date.now();
 
@@ -333,6 +395,7 @@ export function PetView() {
       lastTick = now;
 
       try {
+        senseRef.current.grounded = !motionRef.current.falling;
         if (motionRef.current.dragging || motionRef.current.falling) {
           resetWander();
           return;
@@ -541,15 +604,20 @@ export function PetView() {
                 }
               }
 
+              const previousX = position.x;
               position = new PhysicalPosition(nextX, nextY);
               await petWindow.setPosition(position);
+              senseRef.current.velocityPxPerSecond = (nextX - previousX) / (elapsed / 1000);
               setLook(null);
               changeReaction(groundedWander
                 ? dx >= 0 ? "run-right" : "run-left"
                 : Math.abs(dy) > Math.abs(dx) * 1.25 ? "jumping" : dx >= 0 ? "run-right" : "run-left");
             }
+          } else {
+            senseRef.current.velocityPxPerSecond = 0;
           }
         } else {
+          senseRef.current.velocityPxPerSecond = 0;
           if (!userReactionActive) {
             const shouldFall = wander.mode === "docked" && currentSettings.gravityEnabled;
             resetWander();
@@ -563,25 +631,50 @@ export function PetView() {
           }
         }
 
-        if (wander.mode === "idle" && currentSettings.lookAtCursor && reactionRef.current === "idle" && now - lastLookAt >= 96) {
-          lastLookAt = now;
+        const spriteLookDue = wander.mode === "idle"
+          && currentSettings.lookAtCursor
+          && reactionRef.current === "idle"
+          && now - lastLookAt >= 96;
+        // The 3D backend aims continuously and is not gated on the idle sprite row:
+        // a bone chain can turn its head while walking, a 16-cell atlas cannot.
+        const gazeDue = backendRef.current !== "sprite" && currentSettings.lookAtCursor && now - lastGazeAt >= 64;
+
+        if (spriteLookDue || gazeDue) {
           const cursor = await cursorPosition();
           const petHeight = CELL_HEIGHT * currentSettings.scale * window.devicePixelRatio;
-          const origin = {
-            x: position.x + size.width / 2,
-            y: position.y + size.height - petHeight / 2,
-          };
-          if (Math.hypot(cursor.x - origin.x, cursor.y - origin.y) > Math.max(size.width, size.height) * 0.55) {
-            const cell = computeLookDirection(origin, cursor);
-            if (cell.index !== lastLook) {
-              lastLook = cell.index;
-              setLook(cell);
-            }
-          } else if (lastLook !== -1) {
-            lastLook = -1;
-            setLook(null);
+
+          if (gazeDue) {
+            lastGazeAt = now;
+            const senses = senseRef.current;
+            // Aim from the head, not the cell centre, or the character looks past
+            // the cursor by half a body height.
+            senses.gazeOffsetX = cursor.x - (position.x + size.width / 2);
+            senses.gazeOffsetY = cursor.y - (position.y + size.height - petHeight * 0.9);
+            senses.gazeFocalPixels = petHeight;
+            senses.gazeActive = Math.hypot(senses.gazeOffsetX, senses.gazeOffsetY) > petHeight * 0.22;
           }
-        } else if ((wander.mode !== "idle" || reactionRef.current !== "idle") && lastLook !== -1) {
+
+          if (spriteLookDue) {
+            lastLookAt = now;
+            const origin = {
+              x: position.x + size.width / 2,
+              y: position.y + size.height - petHeight / 2,
+            };
+            if (Math.hypot(cursor.x - origin.x, cursor.y - origin.y) > Math.max(size.width, size.height) * 0.55) {
+              const cell = computeLookDirection(origin, cursor);
+              if (cell.index !== lastLook) {
+                lastLook = cell.index;
+                setLook(cell);
+              }
+            } else if (lastLook !== -1) {
+              lastLook = -1;
+              setLook(null);
+            }
+          }
+        }
+
+        if (!currentSettings.lookAtCursor) senseRef.current.gazeActive = false;
+        if (!spriteLookDue && (wander.mode !== "idle" || reactionRef.current !== "idle") && lastLook !== -1) {
           lastLook = -1;
           setLook(null);
         }
@@ -713,6 +806,7 @@ export function PetView() {
     transform: `scale(${settings.scale})`,
   } as React.CSSProperties;
   const stageStyle = { "--pet-height": `${CELL_HEIGHT * settings.scale}px` } as React.CSSProperties;
+  const backend = backendRef.current;
 
   return (
     <div
@@ -723,7 +817,20 @@ export function PetView() {
       onContextMenu={(event) => { event.preventDefault(); void desktop.showControlCenter(); }}
     >
       {message && <div className="pet-bubble">{message}</div>}
-      <div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`} />
+      {backend === "sprite" ? (
+        <div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`} />
+      ) : (
+        <Suspense fallback={null}>
+          <PetCanvas
+            rig={backend}
+            vrmUrl={backend === "vrm" ? vrmUrlRef.current : undefined}
+            reaction={reaction}
+            readSenses={readSenses}
+            onRigFallback={reportRigFallback}
+            label={`${activeCharacter.name}：${reaction}`}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

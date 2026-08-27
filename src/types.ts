@@ -1,5 +1,8 @@
 export type Reaction = "idle" | "waving" | "jumping" | "failed" | "waiting" | "running" | "review";
 
+/** A reaction plus the two locomotion-only states the sprite sheet adds. */
+export type MotionReaction = Reaction | "run-left" | "run-right";
+
 export interface AppSettings {
   selectedCharacterId: string;
   petVisible: boolean;

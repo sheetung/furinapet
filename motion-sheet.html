@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Motion stack contact sheet</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        padding: 16px;
+        font: 12px/1.4 "Segoe UI", "Microsoft YaHei UI", sans-serif;
+        background: #0d1219;
+        color: #dbe6f5;
+      }
+      h1 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #8fbdf0; }
+      #sheet { display: flex; flex-wrap: wrap; gap: 12px; }
+      figure { margin: 0; }
+      /* Checkerboard so a transparent clear colour is obvious. */
+      .cell {
+        background-image:
+          linear-gradient(45deg, #19212e 25%, transparent 25%, transparent 75%, #19212e 75%),
+          linear-gradient(45deg, #19212e 25%, transparent 25%, transparent 75%, #19212e 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 10px 10px;
+        border: 1px solid #26344a;
+      }
+      figcaption { padding-top: 4px; color: #a9bdd8; }
+      figcaption b { color: #f2f8ff; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">contact sheet</h1>
+    <div id="sheet"></div>
+    <script type="module" src="/dev/motion-sheet.ts"></script>
+  </body>
+</html>

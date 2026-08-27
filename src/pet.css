@@ -25,6 +25,17 @@ html.pet-window, html.pet-window body, html.pet-window #root {
   will-change: background-position;
   pointer-events: none;
 }
+/* The 3D backend replaces .sprite. Height tracks --pet-height so the character
+   keeps its footing when the speech bubble grows the window. */
+.pet-canvas {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 100%;
+  height: var(--pet-height);
+  pointer-events: none;
+}
+.pet-canvas canvas { background: transparent; }
+
 .pet-bubble {
   position: absolute;
   z-index: 2;

@@ -17,6 +17,23 @@
 - 构建期自动发现角色，并在主页切换
 - 简化为“首页 / 桌宠 / 设置”的控制中心
 
+## 可选的 3D 骨骼后端
+
+除精灵图集外，桌宠还可以由骨骼驱动：连续注视（不再是 16 格查表）、两骨 IK 手臂、
+程序化呼吸与耳朵尾巴，全部经过一个统一的关节混合器和弹簧阻尼。默认仍是精灵后端，
+Pet Brain 一行未改。
+
+```js
+// 在桌宠窗口的控制台里切换，或用 ?rig=primitive 临时覆盖
+localStorage.setItem("furinapet.renderBackend", "primitive");  // "vrm" 需要模型文件
+```
+
+三个骨骼后端：`sprite`（默认）、`primitive`（无需素材的替身骨架）、`vrm`
+（把 VRM 模型放到 `public/models/pet.vrm`，见该目录下的说明）。
+
+架构、约束和调试方式见 [docs/MOTION_STACK.md](docs/MOTION_STACK.md)。
+`three` 与 `@pixiv/three-vrm` 走独立 chunk 懒加载，精灵后端的启动体积不受影响。
+
 ## 为什么更轻
 
 桌面端使用 Tauri 2，直接复用 Windows WebView2，不随应用打包 Chromium。前端只有一个 React 页面；后端只有窗口、托盘、设置、漫游和更新检查等必要模块。
@@ -57,6 +74,7 @@ pnpm desktop:dev
 
 ```powershell
 pnpm build          # 前端类型检查与构建
+pnpm test           # 动作层单元测试
 pnpm desktop:build  # 生成 Windows NSIS 安装包
 ```
 
@@ -68,10 +86,14 @@ GitHub Actions 会在 Windows 环境验证全部角色资源并编译 Tauri；�
 src/                         精简控制中心与桌宠渲染层
 src/characters/              构建期角色发现与运行时注册表
 src/core/                    方向与动画协议
+src/motion/                  骨骼动作层：小脑、IK、关节混合器、骨架适配
+src/render/                  three.js 舞台与渲染循环
 src/extensions/             编译期扩展注册表
 src-tauri/src/               Windows 原生能力与轻量内核
 characters/                  自包含角色清单与素材
+dev/                         仅开发期使用的可视化工作台
 public/assets/               芙宁娜桌宠品牌资源
+public/models/               3D 模型放置目录（不含模型文件）
 pets/furina--lingxiaotian/   Codex v2 桌宠标准包
 ```
 
