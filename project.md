@@ -235,6 +235,13 @@ src/neuro/
   - **m3 structured-brain 失败可观测**：7 个失败分支（credentials/http/empty-response/parse/json/timeout/network）加率限定 console.warn（每分类每分钟至多 1 条），AI 配错不再静默
   - **m4 生命周期句柄**：runtime.ts / ai-runtime.ts / perception store.ts 三处 bootstrap 的 listen unlisten 全部保存并导出 `dispose*()`；ai-runtime 的 agent-state 风暴合并（700ms 触发定时器替换而非堆叠）；perception store 的 beforeunload 改走统一 teardown
   - 测试 164 → **166** ✅，`tsc` 零错误，`vite build` 通过（Rust 侧无改动）
+- **2026-08-28 神经管线集成测试方案实施**（分支 feat/neuro-integration-tests，5 个新测试文件 42 个测试）：
+  - **管线集成 pipeline.test.ts（6）**：PerceptionEvent→WorldState→CharacterState→BrainIntent→MotorPlan→Reaction 全链串联，验证 face-click/double-click/idle/celebrate/annoyance-dodge 各路径的最终 Reaction
+  - **Reflex bypass reflex-bypass.test.ts（6）**：blink/startle/grip/flinch 各反射规则→MotorPlan→Reaction，source=reflex 契约验证，身体点击落回大脑
+  - **Structured brain e2e structured-brain-e2e.test.ts（12）**：mock fetch + invoke(credentials)，覆盖成功/失败回退/malformed JSON/HTTP 401/空 API key/validateAndNormalizeBrainIntent 纯函数；发现 socialIntent 解析未实现（known gap，注释标注）
+  - **契约一致性 contract-consistency.test.ts（12）**：ajv 全量 JSON Schema 校验（draft 2020-12），覆盖 PerceptionEvent 6 变体/WorldState/CharacterState/BrainIntent 全 goal+socialIntent/MotorPlan 13 原语类型+MotorSource；`ajv` 作为 devDependency 引入
+  - **Trace 完整性 trace-integrity.test.ts（6）**：recordNeuroTrace 写入完整性（goal/confidence/primitives/reaction）、reflex 条目字段、时间戳单调非递减（newest-first）、TRACE_LIMIT 50 环形缓冲、必需字段校验
+  - 测试 166 → **208** ✅，`tsc` 零错误，`vite build` 通过；方案文档 `docs/neuro-testing-plan.md` 提交入仓库
 
 ## 八、自主决策面板（Decision Inspector）
 
