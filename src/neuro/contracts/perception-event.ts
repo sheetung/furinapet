@@ -28,7 +28,7 @@ export type PerceptionEvent =
       intensity: number;
     }
   | { type: "drag"; at: number; phase: "start" | "end" }
-  | { type: "agentState"; at: number; state: BrainAgentState; connected: boolean }
+  | { type: "agentState"; at: number; state: BrainAgentState; connected: boolean; clientName?: string }
   | { type: "userIdle"; at: number; idleMs: number };
 
 export const TOUCH_SENSES: readonly PetSenseName[] = [

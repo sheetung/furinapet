@@ -26,6 +26,7 @@ import {
 import { PetBrain } from "./pet-brain";
 import { planWanderGoal } from "./pet-brain/adapters/wander";
 import { publishPetBrainSnapshot } from "./pet-brain/runtime";
+import { dispatchPetSense } from "./plugins/dom-bridge";
 import type { AppSettings, Reaction, ReactionEvent } from "./types";
 import "./pet.css";
 
@@ -683,6 +684,7 @@ export function PetView() {
     }
     brainRef.current?.interrupt();
     brainRef.current?.observeUserInteraction(Date.now());
+    dispatchPetSense("pet:dragStart");
     motionRef.current.fallToken += 1;
     motionRef.current.falling = false;
     motionRef.current.dragging = true;
@@ -695,6 +697,7 @@ export function PetView() {
       await desktop.waitForDragRelease();
     } finally {
       motionRef.current.dragging = false;
+      dispatchPetSense("pet:dragEnd");
       await settleWithGravity();
     }
   }

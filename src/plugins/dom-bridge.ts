@@ -16,6 +16,23 @@ function emitSense(name: PetSenseName, handledByPlugin: boolean) {
 }
 
 /**
+ * Dispatch a drag-lifecycle sense through plugin arbitration and Pet Brain.
+ * Used by PetView around native window dragging; tap classification above
+ * only covers click/double-click.
+ */
+export function dispatchPetSense(name: "pet:dragStart" | "pet:dragEnd") {
+  void (async () => {
+    let handled = false;
+    try {
+      handled = await desktop.publishPetEvent(name);
+    } catch {
+      // Plugin host unavailable; the sense is still reported locally.
+    }
+    emitSense(name, handled);
+  })();
+}
+
+/**
  * Pet-window sensor bridge.
  *
  * Native dragging can consume WebView pointerup/click events on Windows, so
