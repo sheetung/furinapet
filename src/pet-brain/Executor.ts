@@ -72,14 +72,19 @@ export class PetActionExecutor {
   }
 }
 
-export function waitForAction(milliseconds: number, signal: AbortSignal) {
+/**
+ * Wait for an action's duration. The signal is optional: a missing signal
+ * means "run to completion" (used by the reflex fast path), while an aborted
+ * signal resolves immediately. Never throws on a missing signal.
+ */
+export function waitForAction(milliseconds: number, signal?: AbortSignal) {
   return new Promise<void>((resolve) => {
-    if (signal.aborted || milliseconds <= 0) {
+    if (signal?.aborted || milliseconds <= 0) {
       resolve();
       return;
     }
     const timer = window.setTimeout(resolve, milliseconds);
-    signal.addEventListener("abort", () => {
+    signal?.addEventListener("abort", () => {
       window.clearTimeout(timer);
       resolve();
     }, { once: true });
