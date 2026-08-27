@@ -73,6 +73,46 @@ describe("brain intent contract", () => {
     });
     expect(intent.confidence).toBe(0.5);
   });
+
+  it("preserves valid socialIntent", () => {
+    const intent = normalizeBrainIntent({
+      goal: "celebrate",
+      motorTendency: { ...NEUTRAL_MOTOR_TENDENCY },
+      confidence: 0.8,
+      socialIntent: "brag",
+    });
+    expect(intent.socialIntent).toBe("brag");
+  });
+
+  it("rejects invalid socialIntent", () => {
+    const intent = normalizeBrainIntent({
+      goal: "idle",
+      motorTendency: { ...NEUTRAL_MOTOR_TENDENCY },
+      confidence: 0.5,
+      socialIntent: "attack" as any,
+    });
+    expect(intent.socialIntent).toBeUndefined();
+  });
+
+  it("preserves valid source", () => {
+    const intent = normalizeBrainIntent({
+      goal: "observe-agent",
+      motorTendency: { ...NEUTRAL_MOTOR_TENDENCY },
+      confidence: 0.7,
+      source: "ai",
+    });
+    expect(intent.source).toBe("ai");
+  });
+
+  it("rejects invalid source", () => {
+    const intent = normalizeBrainIntent({
+      goal: "idle",
+      motorTendency: { ...NEUTRAL_MOTOR_TENDENCY },
+      confidence: 0.5,
+      source: "unknown" as any,
+    });
+    expect(intent.source).toBeUndefined();
+  });
 });
 
 describe("motor plan contract", () => {
@@ -99,6 +139,15 @@ describe("motor plan contract", () => {
     expect(bodyRegionAt(0.4)).toBe("head");
     expect(bodyRegionAt(0.7)).toBe("body");
     expect(bodyRegionAt(0.95)).toBe("hand");
+  });
+
+  it("accepts optional source field", () => {
+    const plan = {
+      ...emptyMotorPlan(),
+      actions: [{ type: "lookAt" as const, target: "pointer" as const, weight: 0.5 }],
+      source: "reflex" as const,
+    };
+    expect(plan.source).toBe("reflex");
   });
 });
 

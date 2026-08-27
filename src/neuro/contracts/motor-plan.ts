@@ -9,6 +9,14 @@
 import type { TargetRef } from "./character-state";
 import type { BodyRegion } from "./perception-event";
 
+/**
+ * Which decision layer produced this motor plan. Essential for Shadow mode
+ * where rule and AI plans run in parallel and need to be distinguished.
+ */
+export type MotorSource = "reflex" | "rule" | "ai" | "shadow";
+
+export const MOTOR_SOURCES: readonly MotorSource[] = ["reflex", "rule", "ai", "shadow"];
+
 export type ExpressionType =
   | "neutral"
   | "happy"
@@ -46,6 +54,8 @@ export interface MotorPlan {
   actions: MotorPrimitive[];
   durationMs: number;
   confidence: number;
+  /** Which decision layer produced this plan. Useful for Shadow mode tracing. */
+  source?: MotorSource;
   /**
    * Locomotion pass-through: wander/dock are executed by PetView's movement
    * loop, not the reaction executor. The backend forwards these untouched.
