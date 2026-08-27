@@ -235,7 +235,7 @@ src/neuro/
   - **m3 structured-brain 失败可观测**：7 个失败分支（credentials/http/empty-response/parse/json/timeout/network）加率限定 console.warn（每分类每分钟至多 1 条），AI 配错不再静默
   - **m4 生命周期句柄**：runtime.ts / ai-runtime.ts / perception store.ts 三处 bootstrap 的 listen unlisten 全部保存并导出 `dispose*()`；ai-runtime 的 agent-state 风暴合并（700ms 触发定时器替换而非堆叠）；perception store 的 beforeunload 改走统一 teardown
   - 测试 164 → **166** ✅，`tsc` 零错误，`vite build` 通过（Rust 侧无改动）
-- **2026-08-28 神经管线集成测试方案实施**（分支 feat/neuro-integration-tests，5 个新测试文件 42 个测试）：
+- **2026-08-28 神经管线集成测试方案实施**（PR #15 已合入：`598b08a` → merge `ddcaa8d`，分支已删；5 个新测试文件 42 个测试）：
   - **管线集成 pipeline.test.ts（6）**：PerceptionEvent→WorldState→CharacterState→BrainIntent→MotorPlan→Reaction 全链串联，验证 face-click/double-click/idle/celebrate/annoyance-dodge 各路径的最终 Reaction
   - **Reflex bypass reflex-bypass.test.ts（6）**：blink/startle/grip/flinch 各反射规则→MotorPlan→Reaction，source=reflex 契约验证，身体点击落回大脑
   - **Structured brain e2e structured-brain-e2e.test.ts（12）**：mock fetch + invoke(credentials)，覆盖成功/失败回退/malformed JSON/HTTP 401/空 API key/validateAndNormalizeBrainIntent 纯函数；发现 socialIntent 解析未实现（known gap，注释标注）
