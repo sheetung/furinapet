@@ -18,20 +18,86 @@ Neuro 改造在 Pet Brain 之上加一层**神经系统**，把「感知 → 认
 ## 二、目标架构
 
 ```text
-PerceptionEvent (L1)
-      ↓
-   WorldState (L2)          ← 感知 Reducer，事件驱动，无 AI
-      ↓
-CharacterState (L3)         ← 确定性情绪/能量/注意力（七维情绪）
-      ↓
-NeuroBrainIntent (L4)       ← 大脑输出：goal + attention + emotionDelta + motorTendency
-      ↓                       （大脑禁止输出动画/坐标/帧；AI 优先级封顶 0.82）
-   MotorPlan (L5)           ← 小脑输出：13 个 MotorPrimitive（lookAt/recoil/earPose…）
-      ↓
-LegacySpriteBackend         ← MotorPlan → 现有 v2 Reaction（8×11 图集）
-      ↓
-   PetView 渲染              ← wander/dock 仍由 PetView 运动循环执行（pass-through）
+┌─────────────────────────────────────────────────────────────┐
+│                      外部环境 Environment                    │
+│ 鼠标 / 点击 / 拖拽 / 用户语言 / 语音 / 屏幕 / 时间 / 窗口等 │
+└──────────────────────────┬──────────────────────────────────
+                           ↓
+                 ┌──────────────────┐
+                 │   Perception     │
+                 │     感知层        │
+                 │  PerceptionEvent │
+                 │  WorldState      │
+                 └────────┬─────────
+                          ↓
+                    World State
+                          │
+        ┌─────────────────┼─────────────────
+        ↓                                   ↓
+┌────────────────                  ┌────────────────┐
+│     Brain      │                  │     Reflex     │
+│      大脑       │                  │    脊髓反射     │
+│                │                  │                │
+│语言/情绪/记忆    │                  │点击/碰撞/极限    │
+│人格/理解/目标    │                  │即时安全响应      │
+│                │                  │                │
+│ NeuroBrainIntent│                  │ MotorPlan      │
+│ source: rule/ai │                  │ source: reflex │
+└───────┬────────┘                  └───────┬────────┘
+        │                                   │
+        ↓                                   │
+ Character Intent                           │
+        │                                   │
+        ↓                                   │
+┌────────────────┐                          │
+│   Cerebellum   │                          │
+│      小脑       │                          │
+│                │                          │
+│动作策略/协调     │                          │
+│Motor Primitive │                          │
+│ 13 个原语       │                          │
+└───────────────┘                          │
+        │                                   │
+        └────────────────┬──────────────────┘
+                         ↓
+                 ┌────────────────┐
+                 │ Motion Engine  │
+                 │    运动系统      │
+                 │                │
+                 │ IK / LookAt    │
+                 │ Reach / Mixer  │
+                 │ Procedural     │
+                 └───────┬────────┘
+                         ↓
+                 ┌────────────────┐
+                 │      Body      │
+                 │     身体层      │
+                 │                │
+                 │ Joint Limit    │
+                 │ Spring/Damping │
+                 │ Skeleton       │
+                 └───────┬────────┘
+                         ↓
+                 ┌────────────────┐
+                 │    Renderer    │
+                 │     渲染器      │
+                 │                │
+                 │ Sprite Atlas   │
+                 │ (当前 v2 8×11) │
+                 └────────────────┘
 ```
+
+### 当前实现映射
+
+| LMC 层 | 工程实现 | 状态 |
+|--------|---------|------|
+| Perception | `src/neuro/perception/`（reducer + store） | ✅ M1 |
+| Brain | `src/neuro/brain/`（structured-brain）+ `src/pet-brain/`（legacy） | ✅ M5 |
+| Reflex | `src/neuro/reflex/`（blink/startle/flinch/grip） | ✅ M4 |
+| Cerebellum | `src/neuro/cerebellum/`（rule-cerebellum） | ✅ M3 |
+| Motion Engine | `src/neuro/motion/`（legacy-sprite-backend） | ✅ M3（sprite 阶段隐式） |
+| Body + Renderer | PetView + v2 sprite atlas | ✅ 既有 |
+| Motion Engine（rigged） | IK / VRM rig / JointMixer |  M6+ |
 
 核心原则（摘自《LMC》）：
 
@@ -74,7 +140,7 @@ src/neuro/
 │  ├─ character-store.ts    # 确定性情绪累加器（observe + tick）
 │  ├─ character-adapter.ts  # PetBlackboard + CharacterStore → CharacterState (L3)
 │  └─ character-store.test.ts     # 11 tests ✅
-├─ reflex/               # M4 ✅
+─ reflex/               # M4 ✅
 │  ├─ reflex.ts             # 脊髓反射弧（blink/startle/flinch/grip → MotorPlan）
 │  └─ reflex.test.ts        # 20 tests ✅
 ├─ brain/                # M5 ✅
@@ -85,7 +151,7 @@ src/neuro/
 ├─ cerebellum/           # M3 ✅
 │  ├─ rule-cerebellum.ts  # synthesizeBrainIntent + planMotor（W+C+I → MotorPlan）
 │  └─ rule-cerebellum.test.ts   # 27 tests ✅
-├─ motion/               # M3 ✅
+─ motion/               # M3 ✅
 │  ├─ legacy-sprite-backend.ts  # MotorPlan → ReactionDirective（替代旧映射）
 │  └─ legacy-sprite-backend.test.ts  # 23 tests ✅
 └─ trace/                # M3 ✅
@@ -142,7 +208,118 @@ src/neuro/
   - `vitest run` **131 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
   - 下一站 M6+（FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body）
 
-## 八、参考文档
+## 八、自主决策面板（Decision Inspector）
+
+### 当前状态
+
+控制中心「自主」页面已有实时面板，直接读取 Pet Brain 快照（`furinapet:brain-snapshot`），展示 Goal、Mood、Energy、Agent 状态、Planner 评分、当前动作计划。
+
+### 目标：LMC 架构可视化交互面板
+
+将自主页面升级为 LMC 架构的可视化交互面板，每个模块框内显示当前执行状态，点击展开详情。
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                      外部环境 Environment                    │
+│ 鼠标 / 点击 / 拖拽 / 用户语言 / 语音 / 屏幕 / 时间 / 窗口等 │
+└──────────────────────────┬──────────────────────────────────┘
+                           ↓
+                 ┌──────────────────┐
+                 │   Perception     │
+                 │     感知层        │
+                 │  PerceptionEvent │  ← 点击展开：最近事件列表
+                 │  WorldState      │     （region/streak/intensity）
+                 └────────┬─────────
+                          ↓
+                    World State
+                          │
+        ┌─────────────────┼─────────────────
+        ↓                                   ↓
+┌────────────────                  ┌────────────────┐
+│     Brain      │                  │     Reflex     │
+│      大脑       │                  │    脊髓反射     │
+│                │                  │                │
+│语言/情绪/记忆    │                  │点击/碰撞/极限    │
+│人格/理解/目标    │                  │即时安全响应      │
+│                │                  │                │
+│ NeuroBrainIntent│                  │ MotorPlan      │
+│ source: rule/ai │                  │ source: reflex │
+└───────┬────────┘                  └───────┬────────┘
+        │  点击展开：                         │  点击展开：
+        │  - 当前 goal                       │  - 最近 reflex 触发
+        │  - SocialIntent                    │  - blink/startle/flinch/grip
+        │  - confidence                      │  - 触发时间 + region
+        │  - emotionDelta                    │  - MotorPlan 内容
+        ↓                                   │
+ Character Intent                           │
+        │                                   │
+        ↓                                   │
+────────────────┐                          │
+│   Cerebellum   │                          │
+│      小脑       │                          │
+│                │                          │
+│动作策略/协调     │                          │
+│Motor Primitive │                          │
+│ 13 个原语       │                          │
+└───────┬────────┘                          │
+        │  点击展开：                         │
+        │  - 当前 MotorPlan                  │
+        │  - 各 primitive weight             │
+        │  - source: rule/ai                 │
+        ────────────────┬──────────────────┘
+                         ↓
+                 ┌────────────────┐
+                 │ Motion Engine  │
+                 │    运动系统      │
+                 │                │
+                 │ IK / LookAt    │
+                 │ Reach / Mixer  │
+                 │ Procedural     │
+                 ───────┬────────┘
+                         │  点击展开：
+                         │  - 当前 sprite reaction
+                         │  - durationMs
+                         │  - fallback 链
+                         ↓
+                 ┌────────────────┐
+                 │      Body      │
+                 │     身体层      │
+                 │                │
+                 │ Joint Limit    │
+                 │ Spring/Damping │
+                 │ Skeleton       │
+                 ───────┬────────┘
+                         ↓
+                 ┌────────────────┐
+                 │    Renderer    │
+                 │     渲染器      │
+                 │                │
+                 │ Sprite Atlas   │
+                 │ (当前 v2 8×11) │
+                 └────────────────┘
+```
+
+### 数据来源
+
+| 面板模块 | 数据来源 |
+|---------|---------|
+| Environment | `getWorldState()` 的 environment 字段 |
+| Perception | `getWorldState()` + `getNeuroTrace()` 最近事件 |
+| Brain | `getPetBrain().snapshot()` + `getNeuroTrace()` AI 条目 |
+| Reflex | `getNeuroTrace()` source="reflex" 条目 |
+| Cerebellum | `getNeuroTrace()` 最近 MotorPlan primitives |
+| Motion Engine | `getNeuroTrace()` reaction + durationMs |
+| Body + Renderer | 当前 sprite 状态（PetView） |
+
+### 实现计划
+
+1. 在 `src/components/` 新增 `DecisionInspector.tsx`（或扩展现有 BrainNavigation）
+2. 每层模块框从 `furinapet:brain-snapshot` 事件获取实时数据
+3. 框内显示当前状态摘要（如 Brain 框显示当前 goal + source）
+4. 点击模块弹出侧边抽屉，展示该层的详细决策日志（从 neuro-trace 过滤）
+5. 活跃模块高亮（如 reflex 触发时 Reflex 框闪烁）
+
+## 九、参考文档
 
 - **《LMC》**（原名「造人计划」，FurinaPet 类人认知—运动架构总纲）
   - 工程内副本：[`docs/LMC.md`](docs/LMC.md)
