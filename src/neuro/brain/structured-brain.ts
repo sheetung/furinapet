@@ -11,7 +11,7 @@
  * Later, FunctionGemma/MotorNet can replace this provider transparently.
  */
 
-import type { NeuroBrainIntent, EmotionState, TargetRef } from "../contracts";
+import type { NeuroBrainIntent, EmotionState, TargetRef, SocialIntent } from "../contracts";
 import { normalizeBrainIntent, NEUTRAL_MOTOR_TENDENCY } from "../contracts";
 import type { CharacterState } from "../contracts";
 import type { WorldState } from "../contracts";
@@ -38,6 +38,7 @@ You MUST respond with a single JSON object (no markdown, no explanation) matchin
   "goal": one of ["idle","wander","dock","respond-user","observe-agent","celebrate","rest"],
   "attention": { "target": one of ["none","pointer","user","agent","self"], "strength": 0..1 } | null,
   "emotionDelta": { "happiness": number, "affection": number, "curiosity": number, "annoyance": number, "fear": number, "boredom": number, "sleepiness": number } | null,
+  "socialIntent": one of ["none","greet","complain","tease","comfort","brag","withdraw","plead"] | null,
   "motorTendency": { "approach": 0..1, "avoidance": 0..1, "energy": 0..1, "expressiveness": 0..1 },
   "confidence": 0..1
 }
@@ -46,6 +47,7 @@ Rules:
 - goal: what the character wants to do RIGHT NOW.
 - attention: who/what the character is focused on. null = no specific focus.
 - emotionDelta: small adjustments to emotions (typically -0.15 to +0.15). null = no change.
+- socialIntent: how the character wants to relate to the user right now. null = not relevant.
 - motorTendency: how the character physically expresses the intent.
 - confidence: how sure you are about this decision (0.5-1.0).
 - NEVER output animation names, coordinates, or joint data.
@@ -282,6 +284,11 @@ export function validateAndNormalizeBrainIntent(value: unknown): NeuroBrainInten
       }
     }
     partial.emotionDelta = delta;
+  }
+
+  // socialIntent (optional)
+  if (typeof obj.socialIntent === "string") {
+    partial.socialIntent = obj.socialIntent as SocialIntent;
   }
 
   return normalizeBrainIntent(partial);

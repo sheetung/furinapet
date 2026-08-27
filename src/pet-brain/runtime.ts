@@ -9,6 +9,8 @@ import type { BodyRegion } from "../neuro/contracts";
 import { getNeuroTrace, recordNeuroTrace } from "../neuro/trace/neuro-trace";
 import { PET_SENSE_EVENT } from "../plugins/dom-bridge";
 import { getPetBrain, waitForAction } from "./index";
+import { requestAiPrimaryDecision } from "./ai-runtime";
+import { arbitrateDecision } from "./arbitration";
 import type {
   BrainAgentState,
   BrainAgentStateEvent,
@@ -107,6 +109,67 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
     await waitForAction(directive.durationMs, signal);
   }, { force });
   publishPetBrainSnapshot();
+}
+
+/**
+ * B1 Brain-as-Primary decision: try AI first, fall back to rule planner.
+ * Click events use the synchronous fast-path (handlePetSense), so this
+ * is only called for non-click sense events and agent state changes.
+ */
+async function decidePlan(context: BrainContext): Promise<PetActionPlan> {
+  const brain = getPetBrain();
+  const now = context.now;
+
+  // Tick blackboard and always compute rule plan (serves as fallback + action source for AI)
+  brain.blackboard.tick(now, context.userReactionActive || !context.canMove);
+  const activeIntents = brain.blackboard.getActiveIntents(now);
+  const rulePlan = brain.planner.plan(context, brain.blackboard);
+
+  // Try AI primary decision
+  const aiResult = await requestAiPrimaryDecision();
+
+  // Record AI suggestion trace (even if rule wins, for debugging)
+  if (aiResult) {
+    brain.recordAiSuggestion(
+      `ai-primary-${now}`,
+      aiResult.intent.goal,
+      aiResult.intent.confidence,
+      5000,
+      now,
+    );
+  }
+
+  // Arbitrate: AI vs pending intents (rule plan is always the fallback)
+  const { plan, source } = arbitrateDecision(aiResult, rulePlan, activeIntents, brain.blackboard, now);
+
+  // Consume matching intents (the plan satisfies them regardless of source)
+  const matchingIntents = activeIntents.filter((i) => i.goal === plan.goal);
+  for (const intent of matchingIntents) {
+    brain.blackboard.consumeIntent(intent.id);
+  }
+
+  // Mark AI suggestion accepted/rejected for trace
+  if (aiResult) {
+    if (source === "ai") {
+      brain.blackboard.markAiSuggestionAccepted(`ai-primary-${now}`, plan, now);
+    }
+    recordNeuroTrace({
+      t: now,
+      goal: aiResult.intent.goal,
+      confidence: aiResult.intent.confidence,
+      motorTendency: aiResult.intent.motorTendency,
+      primitives: [],
+      reaction: "idle" as never,
+      durationMs: 0,
+      source: "ai",
+    });
+    console.info(
+      `[pet-brain:ai] decision: goal=${aiResult.intent.goal} confidence=${aiResult.intent.confidence.toFixed(2)} winner=${source} latency=${aiResult.latencyMs}ms`,
+    );
+  }
+
+  brain.blackboard.recordDecision(plan);
+  return plan;
 }
 
 function handlePetSense(detail: PetSenseEventDetail) {
@@ -212,8 +275,11 @@ function handleAgentState(payload: BrainAgentStateEvent) {
   brain.observeAgentState(payload.state, now);
 
   if (payload.state === "idle") brain.interrupt();
-  const plan = brain.plan(immediateContext(now, payload.state));
-  void executeReactionPlan(plan, payload.state === "idle" || payload.state === "success" || payload.state === "error");
+  const context = immediateContext(now, payload.state);
+  // B1: AI primary decision for agent state changes (non-latency-sensitive)
+  void decidePlan(context).then((plan) => {
+    void executeReactionPlan(plan, payload.state === "idle" || payload.state === "success" || payload.state === "error");
+  });
 }
 
 function handleExternalIntent(payload: BrainIntentEvent) {
