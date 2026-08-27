@@ -1,4 +1,5 @@
 import type { BrainIntentEvent, PetGoalId } from "../types";
+import { SOURCE_CONFIDENCE_CAP } from "../../neuro/contracts";
 
 const ALLOWED_AI_GOALS = new Set<PetGoalId>([
   "idle",
@@ -43,7 +44,7 @@ export function normalizeAiBehaviorSuggestion(value: unknown): BrainIntentEvent 
     source: "ai",
     goal,
     // Keep AI below explicit user/system intent priority by construction.
-    priority: Math.min(0.82, 0.5 + confidence * 0.32),
+    priority: Math.min(SOURCE_CONFIDENCE_CAP.ai, 0.5 + confidence * 0.32),
     ttlMs,
     id,
   };

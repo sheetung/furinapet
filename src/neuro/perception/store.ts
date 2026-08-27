@@ -175,19 +175,22 @@ export function senseToPerceptionEvent(detail: PetSenseEventDetail): PerceptionE
 }
 
 let bootstrapped = false;
+let teardown: (() => void) | null = null;
 
 /** Install the perception pipeline in the pet window. Idempotent. */
 export function bootstrapNeuroPerception() {
   if (bootstrapped || !("__TAURI_INTERNALS__" in window)) return;
   bootstrapped = true;
 
-  window.addEventListener(PET_SENSE_EVENT, (event) => {
+  const onSense = (event: Event) => {
     const detail = (event as CustomEvent<PetSenseEventDetail>).detail;
     if (!detail) return;
     const perception = senseToPerceptionEvent(detail);
     if (perception) getWorldStateStore().dispatch(perception);
-  });
+  };
+  window.addEventListener(PET_SENSE_EVENT, onSense);
 
+  let stopAgentStateListener: (() => void) | null = null;
   void listen<BrainAgentStateEvent>("pet-brain-agent-state", (event) => {
     getWorldStateStore().dispatch({
       type: "agentState",
@@ -196,14 +199,31 @@ export function bootstrapNeuroPerception() {
       connected: event.payload.state !== "idle",
       ...(event.payload.clientName ? { clientName: event.payload.clientName } : {}),
     });
+  }).then((unlisten) => {
+    if (!bootstrapped) unlisten();
+    else stopAgentStateListener = unlisten;
   }).catch((error) => console.error("[neuro] agent state perception failed", error));
 
   const pointerTimer = window.setInterval(() => void samplePointer(), POINTER_SAMPLE_MS);
   const tickTimer = window.setInterval(() => void tickEnvironment(), TICK_MS);
   void tickEnvironment();
 
-  window.addEventListener("beforeunload", () => {
+  const onBeforeUnload = () => teardown?.();
+  window.addEventListener("beforeunload", onBeforeUnload);
+
+  teardown = () => {
+    window.removeEventListener(PET_SENSE_EVENT, onSense);
+    window.removeEventListener("beforeunload", onBeforeUnload);
     window.clearInterval(pointerTimer);
     window.clearInterval(tickTimer);
-  });
+    stopAgentStateListener?.();
+    stopAgentStateListener = null;
+  };
+}
+
+/** Tear down the perception pipeline (samplers + listeners). Test/HMR safety. */
+export function disposeNeuroPerception() {
+  teardown?.();
+  teardown = null;
+  bootstrapped = false;
 }
