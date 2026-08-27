@@ -180,7 +180,9 @@ async function executeReflex(reflex: ReturnType<typeof evaluateReflex>, at: numb
     durationMs: directive.durationMs,
   });
   await desktop.react(directive.reaction);
-  await waitForAction(directive.durationMs, undefined as unknown as AbortSignal);
+  // Reflex runs to completion: a never-aborting signal keeps waitForAction valid
+  // (waitForAction reads signal.aborted — passing undefined throws TypeError).
+  await waitForAction(directive.durationMs, new AbortController().signal);
   publishPetBrainSnapshot();
 }
 

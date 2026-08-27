@@ -76,6 +76,22 @@ describe("character store", () => {
     expect(store.getArousal()).toBeLessThan(EMOTION_DYNAMICS.arousalBaseline + 0.15);
   });
 
+  it("arouses only for on-body pointer activity (regression: arousal pinning)", () => {
+    // The 125 ms sampler used to add +0.01 arousal per sample unconditionally
+    // (+4.8/min vs max decay 0.34/min), pinning arousal at 1.0 forever. Only
+    // pointer movement over the pet's body may stimulate it now.
+    const store = new CharacterStore();
+    const baseline = store.getArousal();
+    store.observe({ type: "pointer", at: 1000, x: 1200, y: 1200, region: "none" });
+    expect(store.getArousal()).toBeCloseTo(baseline);
+
+    store.observe({ type: "pointer", at: 1125, x: 500, y: 500, region: "face" });
+    expect(store.getArousal()).toBeCloseTo(baseline + 0.01);
+
+    store.observe({ type: "pointer", at: 1250, x: 520, y: 510, region: "body" });
+    expect(store.getArousal()).toBeCloseTo(baseline + 0.02);
+  });
+
   it("clamps everything into 0..1 under extreme input", () => {
     const store = new CharacterStore();
     for (let index = 0; index < 200; index += 1) store.observe(click(1000 + index, 20));

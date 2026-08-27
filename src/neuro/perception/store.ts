@@ -56,9 +56,17 @@ class WorldStateStore {
 
   dispatch(event: PerceptionEvent) {
     const result = reducePerceptionEvent(this.world, this.memory, event, this.geometry);
+    // Stationary pointer samples still refresh WorldState (velocity, region)
+    // but must not stimulate the character: the sampler fires ~8×/s, so
+    // observing every sample pins arousal at 1.0 regardless of gating in the
+    // character store.
+    const pointerMoved =
+      event.type !== "pointer" ||
+      result.world.pointer.x !== this.world.pointer.x ||
+      result.world.pointer.y !== this.world.pointer.y;
     this.world = result.world;
     this.memory = result.memory;
-    getCharacterStore().observe(event);
+    if (pointerMoved) getCharacterStore().observe(event);
   }
 
   tick(now: number, input: { canMove: boolean; canDock: boolean }) {

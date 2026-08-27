@@ -79,7 +79,11 @@ export class CharacterStore {
         break;
       }
       case "pointer": {
-        arousalDelta = 0.01;
+        // On-body pointer activity is mildly stimulating; movement elsewhere
+        // on the screen is ambient noise. The sampler fires ~8×/s, so an
+        // ungated delta here would accumulate far faster than arousal can
+        // decay and pin it at 1.0.
+        arousalDelta = event.region === "none" ? 0 : 0.01;
         break;
       }
       default:
