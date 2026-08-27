@@ -1,17 +1,51 @@
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { desktop } from "../api";
+import type { BodyRegion } from "../neuro/contracts";
+import { regionAtPointer } from "../neuro/perception/perception-reducer";
 import type { PetSenseEventDetail, PetSenseName } from "../pet-brain";
 
 const TAP_MOVE_THRESHOLD = 8;
 const DOUBLE_TAP_WINDOW_MS = 360;
 export const PET_SENSE_EVENT = "furinapet:pet-sense";
 
-function emitSense(name: PetSenseName, handledByPlugin: boolean) {
+function pointerScale(): number {
+  return Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
+    ? window.devicePixelRatio
+    : 1;
+}
+
+/**
+ * Resolve the body region for a tap from its physical screen position.
+ *
+ * Region is resolved at pointerdown time, when the pointer is guaranteed to
+ * be on the pet. By the time the classified tap is dispatched (360 ms double-
+ * tap window later) the pointer may already have moved away, so the sampler's
+ * `targetRegion` would be stale — usually "none" — and region-dependent
+ * reflexes (blink on face/head) would never fire.
+ */
+async function regionForPointer(pointer: { x: number; y: number }): Promise<BodyRegion | undefined> {
+  try {
+    const petWindow = getCurrentWindow();
+    const [position, size] = await Promise.all([petWindow.outerPosition(), petWindow.outerSize()]);
+    return regionAtPointer(pointer, {
+      x: position.x,
+      y: position.y,
+      width: size.width,
+      height: size.height,
+    });
+  } catch {
+    // Window hidden or closing; the sense is still reported without a region.
+    return undefined;
+  }
+}
+
+function emitSense(name: PetSenseName, handledByPlugin: boolean, region?: BodyRegion) {
   const detail: PetSenseEventDetail = {
     name,
     at: Date.now(),
     handledByPlugin,
   };
+  if (region !== undefined) detail.region = region;
   window.dispatchEvent(new CustomEvent<PetSenseEventDetail>(PET_SENSE_EVENT, { detail }));
 }
 
@@ -47,29 +81,29 @@ export function installPetDomBridge(): () => void {
   let lastTapAt = 0;
   let lastDoubleDispatchAt = 0;
 
-  const dispatch = async (name: "pet:clicked" | "pet:doubleClicked") => {
+  const dispatch = async (name: "pet:clicked" | "pet:doubleClicked", region?: BodyRegion) => {
     try {
       const handled = await desktop.publishPetEvent(name);
-      emitSense(name, handled);
+      emitSense(name, handled, region);
     } catch (error) {
       console.error(`[plugin-host] ${name} dispatch failed`, error);
-      emitSense(name, false);
+      emitSense(name, false, region);
     }
   };
 
-  const dispatchDoubleTap = () => {
+  const dispatchDoubleTap = (region?: BodyRegion) => {
     const now = Date.now();
     if (now - lastDoubleDispatchAt < 450) return;
     lastDoubleDispatchAt = now;
     window.clearTimeout(singleTapTimer);
     lastTapAt = 0;
-    void dispatch("pet:doubleClicked");
+    void dispatch("pet:doubleClicked", region);
   };
 
-  const registerTap = () => {
+  const registerTap = (region?: BodyRegion) => {
     const now = Date.now();
     if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
-      dispatchDoubleTap();
+      dispatchDoubleTap(region);
       return;
     }
 
@@ -77,7 +111,7 @@ export function installPetDomBridge(): () => void {
     window.clearTimeout(singleTapTimer);
     singleTapTimer = window.setTimeout(() => {
       lastTapAt = 0;
-      void dispatch("pet:clicked");
+      void dispatch("pet:clicked", region);
     }, DOUBLE_TAP_WINDOW_MS);
   };
 
@@ -85,9 +119,7 @@ export function installPetDomBridge(): () => void {
     if (disposed || event.button !== 0) return;
 
     const token = ++gestureToken;
-    const scale = Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
-      ? window.devicePixelRatio
-      : 1;
+    const scale = pointerScale();
     const startPointer = {
       x: event.screenX * scale,
       y: event.screenY * scale,
@@ -95,6 +127,7 @@ export function installPetDomBridge(): () => void {
     const petWindow = getCurrentWindow();
 
     void (async () => {
+      const tapRegion = await regionForPointer(startPointer);
       let startWindow: { x: number; y: number } | null = null;
       try {
         const position = await petWindow.outerPosition();
@@ -142,7 +175,7 @@ export function installPetDomBridge(): () => void {
       if (distances.length === 0) return;
 
       const moved = pointerDistance ?? windowDistance ?? Number.POSITIVE_INFINITY;
-      if (moved <= TAP_MOVE_THRESHOLD) registerTap();
+      if (moved <= TAP_MOVE_THRESHOLD) registerTap(tapRegion);
     })();
   };
 
@@ -151,7 +184,10 @@ export function installPetDomBridge(): () => void {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    dispatchDoubleTap();
+    const scale = pointerScale();
+    void regionForPointer({ x: event.screenX * scale, y: event.screenY * scale }).then(
+      (region) => dispatchDoubleTap(region),
+    );
   };
 
   window.addEventListener("pointerdown", onPointerDown, true);

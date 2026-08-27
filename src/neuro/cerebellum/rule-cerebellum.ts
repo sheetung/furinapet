@@ -51,13 +51,13 @@ export function planMotor(
 
   switch (action.type) {
     case "idle":
-      return { actions: [{ type: "idleStyle", style: "normal", weight: 0.6 }], durationMs: action.durationMs ?? 1200, confidence };
+      return { actions: [{ type: "idleStyle", style: "normal", weight: 0.6 }], durationMs: action.durationMs ?? 1200, confidence, source: "rule" };
     case "wander":
-      return { actions: [], durationMs: 0, confidence, locomotion: "wander" };
+      return { actions: [], durationMs: 0, confidence, source: "rule", locomotion: "wander" };
     case "dock":
-      return { actions: [], durationMs: 0, confidence, locomotion: "dock" };
+      return { actions: [], durationMs: 0, confidence, source: "rule", locomotion: "dock" };
     case "wait":
-      return { actions: [], durationMs: action.durationMs, confidence };
+      return { actions: [], durationMs: action.durationMs, confidence, source: "rule" };
     case "rest":
       return {
         actions: [
@@ -66,6 +66,7 @@ export function planMotor(
         ],
         durationMs: action.durationMs,
         confidence,
+        source: "rule",
       };
     case "observe": {
       const agentState = world.agent.state;
@@ -82,7 +83,7 @@ export function planMotor(
       if (character.emotion.curiosity > 0.6) {
         actions = [...actions, { type: "earPose", pose: "perked", weight: 0.4 }];
       }
-      return { actions, durationMs: action.durationMs, confidence };
+      return { actions, durationMs: action.durationMs, confidence, source: "rule" };
     }
     case "respond": {
       // Sustained head touching with high annoyance: dodge instead of
@@ -100,6 +101,7 @@ export function planMotor(
           ],
           durationMs: 2200,
           confidence,
+          source: "rule",
         };
       }
 
@@ -116,6 +118,7 @@ export function planMotor(
           ],
           durationMs: 2200,
           confidence,
+          source: "rule",
         };
       }
       if (action.intensity === "normal") {
@@ -127,6 +130,7 @@ export function planMotor(
           ],
           durationMs: 1900,
           confidence,
+          source: "rule",
         };
       }
       return {
@@ -137,6 +141,7 @@ export function planMotor(
         ],
         durationMs: 1700,
         confidence,
+        source: "rule",
       };
     }
     case "celebrate": {
@@ -149,6 +154,7 @@ export function planMotor(
           ],
           durationMs: 2800,
           confidence,
+          source: "rule",
         };
       }
       return {
@@ -158,6 +164,7 @@ export function planMotor(
         ],
         durationMs: 2200,
         confidence,
+        source: "rule",
       };
     }
   }

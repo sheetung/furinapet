@@ -12,9 +12,10 @@
     "brainSource": { "enum": ["rule", "ai", "plugin", "user"] },
     "socialIntent": { "enum": ["none", "greet", "complain", "tease", "comfort", "brag", "withdraw", "plead"] },
     "motorSource": { "enum": ["reflex", "rule", "ai", "shadow"] },
-    "pointerMotion": { "enum": ["stationary", "approaching", "leaving", "passing"] },
+    "pointerMotion": { "enum": ["stationary", "approaching", "retreating", "tangential"] },
     "interactionType": { "enum": ["none", "hover", "click", "double-click", "long-press", "drag"] },
     "agentState": { "enum": ["idle", "thinking", "editing", "testing", "waiting", "success", "error"] },
+    "petSenseName": { "enum": ["pet:clicked", "pet:doubleClicked", "pet:dragStart", "pet:dragEnd"] },
     "expressionType": { "enum": ["neutral", "happy", "sad", "annoyed", "surprised", "tired"] },
     "earPose": { "enum": ["neutral", "back", "perked"] },
     "tailMotion": { "enum": ["still", "sway", "flick", "wag"] },
@@ -47,17 +48,70 @@
     },
 
     "perceptionEvent": {
-      "type": "object",
-      "required": ["type", "at"],
-      "properties": {
-        "type": { "enum": ["touch", "drag", "agent-state", "user-idle", "pointer-move"] },
-        "at": { "type": "number" },
-        "region": { "$ref": "#/$defs/bodyRegion" },
-        "sense": { "type": "string" },
-        "streak": { "type": "integer", "minimum": 0 },
-        "intensity": { "$ref": "#/$defs/unit" },
-        "phase": { "enum": ["start", "end"] }
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "at", "x", "y", "region"],
+          "properties": {
+            "type": { "const": "pointer" },
+            "at": { "type": "number" },
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "region": { "$ref": "#/$defs/bodyRegion" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "at", "motion", "region"],
+          "properties": {
+            "type": { "const": "pointerApproach" },
+            "at": { "type": "number" },
+            "motion": { "$ref": "#/$defs/pointerMotion" },
+            "region": { "$ref": "#/$defs/bodyRegion" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "at", "sense", "region", "streak", "intensity"],
+          "properties": {
+            "type": { "const": "touch" },
+            "at": { "type": "number" },
+            "sense": { "$ref": "#/$defs/petSenseName" },
+            "region": { "$ref": "#/$defs/bodyRegion" },
+            "streak": { "type": "integer", "minimum": 0 },
+            "intensity": { "$ref": "#/$defs/unit" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "at", "phase"],
+          "properties": {
+            "type": { "const": "drag" },
+            "at": { "type": "number" },
+            "phase": { "enum": ["start", "end"] }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "at", "state", "connected"],
+          "properties": {
+            "type": { "const": "agentState" },
+            "at": { "type": "number" },
+            "state": { "$ref": "#/$defs/agentState" },
+            "connected": { "type": "boolean" },
+            "clientName": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "at", "idleMs"],
+          "properties": {
+            "type": { "const": "userIdle" },
+            "at": { "type": "number" },
+            "idleMs": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
     },
 
     "worldState": {

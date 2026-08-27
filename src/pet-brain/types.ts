@@ -1,3 +1,5 @@
+import type { BodyRegion, WorldState } from "../neuro/contracts";
+import type { PerceptionLogEntry } from "../neuro/perception/perception-reducer";
 import type { NeuroCharacterSnapshot } from "../neuro/character/character-adapter";
 import type { NeuroTraceEntry } from "../neuro/trace/neuro-trace";
 
@@ -29,6 +31,12 @@ export interface PetSenseEventDetail {
   name: PetSenseName;
   at: number;
   handledByPlugin: boolean;
+  /**
+   * Body region the tap landed on, resolved from the real pointerdown
+   * position. Absent when the region could not be resolved (window hidden);
+   * consumers fall back to the sampled pointer region.
+   */
+  region?: BodyRegion;
 }
 
 export interface BrainAgentStateEvent {
@@ -152,4 +160,8 @@ export interface PetBrainSnapshot {
   character?: NeuroCharacterSnapshot;
   /** Recent neuro pipeline decisions (intent → motor plan → reaction). */
   neuroTrace?: NeuroTraceEntry[];
+  /** Pet-window WorldState at snapshot time (LMC Environment/Perception layers). */
+  world?: WorldState;
+  /** Recent perception events, newest first (LMC Perception drawer). */
+  perceptionLog?: PerceptionLogEntry[];
 }

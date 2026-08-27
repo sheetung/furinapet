@@ -131,26 +131,28 @@ src/neuro/
 │  ├─ brain-intent.ts       # L4: NeuroBrainIntent + MotorTendency
 │  ├─ motor-plan.ts         # L5: 13 个 MotorPrimitive + MotorPlan
 │  ├─ index.ts              # barrel + NEURO_SCHEMA_VERSION
-│  └─ contracts.test.ts     # 11 tests ✅
+│  └─ contracts.test.ts     # 16 tests ✅
 ├─ perception/           # M1 ✅
 │  ├─ perception-reducer.ts # 纯函数 reducer（事件 + 记忆 → WorldState）
-│  ├─ store.ts              # pet 窗口单例 store + bootstrapNeuroPerception()
-│  └─ perception-reducer.test.ts  # 9 tests ✅
+│  ├─ store.ts              # pet 窗口单例 store + bootstrapNeuroPerception()（P0 修复静止采样门控）
+│  ├─ perception-reducer.test.ts  # 9 tests ✅
+│  └─ store.test.ts              # 3 tests ✅（dispatch 边界/arousal 回归守卫）
 ├─ character/            # M2 ✅
 │  ├─ character-store.ts    # 确定性情绪累加器（observe + tick）
 │  ├─ character-adapter.ts  # PetBlackboard + CharacterStore → CharacterState (L3)
-│  └─ character-store.test.ts     # 11 tests ✅
-─ reflex/               # M4 ✅
+│  └─ character-store.test.ts     # 12 tests ✅
+─ reflex/               # M4 ✅（P1 起全标 source: "reflex"）
 │  ├─ reflex.ts             # 脊髓反射弧（blink/startle/flinch/grip → MotorPlan）
-│  └─ reflex.test.ts        # 20 tests ✅
+│  └─ reflex.test.ts        # 21 tests ✅
 ├─ brain/                # M5 ✅
 │  ├─ structured-brain.ts   # StructuredBrainProvider（OpenAI-compatible → full NeuroBrainIntent）
 │  └─ structured-brain.test.ts  # 19 tests ✅
-├─ schemas/              # M5 ✅（借鉴 PR #9）
-│  └─ neuro-v1.schema.json  # 跨语言契约验证（JSON Schema 2020-12）
+├─ schemas/              # M5 ✅（借鉴 PR #9）+ P1 防漂移守卫
+│  ├─ neuro-v1.schema.json  # 跨语言契约验证（JSON Schema 2020-12，P1 对齐感知层 6 变体）
+│  └─ schema-consistency.test.ts  # 11 tests ✅（schema ↔ TS 枚举/变体/required 防漂移）
 ├─ cerebellum/           # M3 ✅
 │  ├─ rule-cerebellum.ts  # synthesizeBrainIntent + planMotor（W+C+I → MotorPlan）
-│  └─ rule-cerebellum.test.ts   # 27 tests ✅
+│  └─ rule-cerebellum.test.ts   # 28 tests ✅
 ─ motion/               # M3 ✅
 │  ├─ legacy-sprite-backend.ts  # MotorPlan → ReactionDirective（替代旧映射）
 │  └─ legacy-sprite-backend.test.ts  # 23 tests ✅
@@ -207,12 +209,34 @@ src/neuro/
     - `neuro-v1.schema.json`：跨语言契约验证（JSON Schema 2020-12），供 Python 训练管线或远程 Brain Server 使用
   - `vitest run` **131 tests 全绿** ✅，`tsc --noEmit` 零错误 ✅
   - 下一站 M6+（FunctionGemma Shadow → 蒸馏 FurinaMotorNet → Rigged Body）
+- **2026-08-27 架构审查**（fullstack 代码审查）：按 project.md 核对框架与通信协议一致性。发现 1 Critical + 3 Major + 5 Minor：反射 AbortSignal 崩溃、arousal 钉死、schema 感知层脱节、MotorSource 空转、优先级封顶三处硬编码、快照 CustomEvent 死通道等。报告：`outputs/neuro-review-report.md`（本机 workspace）。L4/L5 契约、事件通道、Tauri 命令注册、凭证结构全部一致 ✅。
+- **2026-08-27 P0 修复完成**（PR #12 `e8e5f77`，已合入）：
+  - **C1 反射 AbortSignal 崩溃**：`executeReflex` 曾传 `undefined as unknown as AbortSignal` → `waitForAction` 首行读 `signal.aborted` 抛 TypeError → 反射后 `publishPetBrainSnapshot()` 永不执行。修复：传真实 never-aborting signal + `waitForAction` 容忍缺失 signal（防御纵深）
+  - **M3 arousal 钉死**：125ms 采样每事件 +0.01（+4.8/min）vs 衰减上限 0.34/min → arousal 恒 1.0。双层修复：`dispatch()` 仅指针位置实际变化才转发 observe（静止采样仍刷新 WorldState）；character-store 仅 `region !== "none"` 计入
+  - 测试 131 → **141** ✅（waitForAction 信号契约 ×6、dispatch 边界 ×3、on-body 门控 ×1）
+  - 本地环境：VS Build Tools 2022 + Windows SDK 已装，`cargo check` 本地可跑（此前 link.exe 解析到 Git GNU link 导致失败）
+- **2026-08-27 P1 修复完成**（schema 对齐 + MotorSource 接线）：
+  - **M1 schema 感知层对齐**：`perceptionEvent` 从宽松单对象改为 **6 变体 discriminated union**（原 type 枚举 kebab 命名漂移 + 缺 pointer/pointerApproach）；`pointerMotion` 修正 leaving/passing → **retreating/tangential**；`sense` 从自由字符串收紧为 petSenseName 枚举（4 值）
+  - **M2 MotorSource 全链路接线**（原为纸面协议，Shadow 模式前提）：`reflex.ts` 4 反射全标 `source: "reflex"`；`planMotor` 全部 11 分支标 `source: "rule"`；`ai-runtime.ts` AI trace 标 `source: "ai"`；`NeuroTraceEntry` 新增 `source?: MotorSource` 字段，`runtime.ts` 两处 trace 记录透传
+  - 新增 `schema-consistency.test.ts` **11 条防漂移测试**（枚举逐值比对 + 变体覆盖 + required 对齐），schema 与 TS 再漂移会直接红
+  - reflex/cerebellum 测试补 source 断言 ×2
+  - 测试 141 → **154** ✅，`tsc` 零错误，`pnpm build` + `cargo check` 通过
+- **2026-08-27 点击部位丢失修复**（region 传递链）：实测发现不同部位点击无差异化反应。根因：`dom-bridge emitSense` 丢弃点击坐标 → `buildReflexEvent` 回退到 125ms 采样器的过期 `targetRegion`（点击派发延迟 360ms 双击窗口，指针早已移开，恒为 "none"）→ blink（要求 face/head）永不命中 → 全部点击走大脑路径渲染同一动画。修复：`PetSenseEventDetail` 新增 `region?: BodyRegion`；dom-bridge 在 pointerdown 时刻用 `regionAtPointer` 解析真实部位随事件下发（双击路径同样处理）；`buildReflexEvent`/`senseToPerceptionEvent` 优先使用 `detail.region`。测试 154 → **161** ✅（runtime buildReflexEvent ×4 + store sense 映射 ×3）
+- **2026-08-27 M-Panel 完成**（LMC 自主决策面板，project.md 第八节）：
+  - **数据管线扩展**：`publishPetBrainSnapshot` 快照新增 `world: WorldState` + `perceptionLog`（最近 30 条感知事件，pointer 节流 1 条/秒，touch/drag/agentState 全量）；`NeuroTraceEntry` 新增 `reflex?: ReflexName` + `region?: BodyRegion`（executeReflex 记录反射名与触发部位）
+  - **新增 `src/components/DecisionInspector.tsx`**（~600 行）：七层架构图（Environment → Perception → Brain|Reflex 并行 → Cerebellum → Motion → Body → Renderer），每层框内显示当前执行状态摘要（鼠标运动/目标区域/连点/goal/source/原语序列/当前 reaction 等）；点击任意层弹出右侧抽屉展示该层详情（Planner 评分/动作计划/情绪七维/AI 建议/大脑输出轨迹/反射触发历史/感知事件日志/MotorTendency/legacy 映射表/13 原语词汇表）；新决策流经时对应层闪烁高亮（reflex → Reflex 框，rule/ai → Brain 框，全部 → Cerebellum/Motion 框）；Esc/遮罩关闭抽屉
+  - **`src/pet-brain/labels.ts`** 抽取共享中文标签（goalLabel/moodLabel/agentStateLabel 等 9 个），BrainNavigation 与 DecisionInspector 共用
+  - BrainNavigation 旧平铺面板（Planner 评分/动作计划/AI 建议/情绪/Neuro Trace 五个 panel）全部折叠进对应层的抽屉，六格实时统计条保留
+  - 感知日志测试 ×3（touch/drag 即时记录、pointer 节流、30 条上限），测试 161 → **164** ✅，`tsc` 零错误
+  - 验证方式切换：`pnpm tauri dev` 热更新迭代（免打包），最终发布前再打 NSIS 包实测
 
 ## 八、自主决策面板（Decision Inspector）
 
-### 当前状态
+### 当前状态（✅ 2026-08-27 已实现）
 
-控制中心「自主」页面已有实时面板，直接读取 Pet Brain 快照（`furinapet:brain-snapshot`），展示 Goal、Mood、Energy、Agent 状态、Planner 评分、当前动作计划。
+LMC 架构可视化交互面板已上线（`src/components/DecisionInspector.tsx`）：自主页面显示七层管线图，每层框内实时状态摘要，点击弹侧边抽屉，新决策流经时闪烁。数据经 `furinapet:brain-snapshot` 快照传递：`world`（WorldState）、`perceptionLog`（感知事件日志）、`neuroTrace`（含 reflex 名/部位/source）、`character`（情绪）+ 旧有字段。旧平铺面板内容全部折叠进各层抽屉。
+
+> 历史状态：控制中心「自主」页面原有实时面板，直接读取 Pet Brain 快照（`furinapet:brain-snapshot`），展示 Goal、Mood、Energy、Agent 状态、Planner 评分、当前动作计划——现已升级为下述 LMC 面板。
 
 ### 目标：LMC 架构可视化交互面板
 

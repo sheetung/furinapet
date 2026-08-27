@@ -90,6 +90,7 @@ async function tryStructuredBrain(reason: string): Promise<boolean> {
     primitives: [],
     reaction: "idle" as never,
     durationMs: 0,
+    source: "ai",
   });
 
   getPetBrain().recordAiSuggestion(

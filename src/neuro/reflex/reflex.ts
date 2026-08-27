@@ -48,7 +48,7 @@ function blink(event: Extract<PerceptionEvent, { type: "touch" }>): ReflexResult
 
   return {
     name: "blink",
-    plan: { actions, durationMs: 380, confidence: 1 },
+    plan: { actions, durationMs: 380, confidence: 1, source: "reflex" },
   };
 }
 
@@ -65,6 +65,7 @@ function startle(event: Extract<PerceptionEvent, { type: "touch" }>): ReflexResu
       ],
       durationMs: 550,
       confidence: 1,
+      source: "reflex",
     },
   };
 }
@@ -81,6 +82,7 @@ function grip(event: Extract<PerceptionEvent, { type: "drag" }>): ReflexResult |
       ],
       durationMs: 450,
       confidence: 1,
+      source: "reflex",
     },
   };
 }
@@ -101,6 +103,7 @@ function flinch(event: Extract<PerceptionEvent, { type: "touch" }>): ReflexResul
       ],
       durationMs: 500,
       confidence: 1,
+      source: "reflex",
     },
   };
 }

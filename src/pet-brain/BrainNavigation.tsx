@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { createPortal } from "react-dom";
 import { desktop, type AiBehaviorSuggestion, type AiSettingsSnapshot } from "../api";
+import { DecisionInspector } from "../components/DecisionInspector";
 import type { AppSettings, SettingsPatch } from "../types";
 import {
   PET_BRAIN_SNAPSHOT_EVENT,
   PET_BRAIN_SNAPSHOT_REQUEST_EVENT,
 } from "./runtime";
-import type { AiSuggestionTrace, PetBrainSnapshot, PetSemanticAction } from "./types";
+import { agentStateLabel, goalLabel, moodLabel } from "./labels";
+import type { PetBrainSnapshot } from "./types";
 
 type FormState = {
   enabled: boolean;
@@ -227,10 +229,6 @@ export function BrainNavigation() {
 
   if (!active || !host) return null;
 
-  const decision = brainSnapshot?.lastDecision ?? null;
-  const executor = brainSnapshot?.executor;
-  const topScore = decision?.candidates[0]?.score ?? 1;
-
   return createPortal(
     <section className="page brain-page">
       <style>{`
@@ -372,9 +370,9 @@ export function BrainNavigation() {
       <div className="brain-card">
         <div className="brain-card-head">
           <div>
-            <span className="brain-kicker">Decision Inspector</span>
-            <h3>自主决策实时面板</h3>
-            <p>直接读取宠物 WebView 中正在运行的 Pet Brain，而不是控制中心的副本。</p>
+            <span className="brain-kicker">Decision Inspector · LMC</span>
+            <h3>LMC 架构实时面板</h3>
+            <p>七层管线可视化：Environment → Perception → Brain / Reflex → Cerebellum → Motion → Body → Renderer。点击任意层展开该层决策详情，新决策流经时对应层会闪烁。</p>
           </div>
           <span className={`brain-badge ${brainSnapshot ? "live" : "warn"}`}>{brainSnapshot ? "实时" : "等待桌宠"}</span>
         </div>
@@ -386,87 +384,11 @@ export function BrainNavigation() {
                 <LiveStat label="Mood" value={moodLabel(brainSnapshot.mood)} />
                 <div className="brain-live-stat"><small>Energy</small><strong>{Math.round(brainSnapshot.energy * 100)}%</strong><div className="brain-energy-track"><i style={{ width: `${Math.round(brainSnapshot.energy * 100)}%` }} /></div></div>
                 <LiveStat label="Agent" value={agentStateLabel(brainSnapshot.agentState)} />
-                <LiveStat label="Executor" value={executor?.running ? `${goalLabel(executor.goal ?? "idle")} · #${executor.actionIndex + 1}` : "空闲"} />
+                <LiveStat label="Executor" value={brainSnapshot.executor?.running ? `${goalLabel(brainSnapshot.executor.goal ?? "idle")} · #${brainSnapshot.executor.actionIndex + 1}` : "空闲"} />
                 <LiveStat label="Pending Intent" value={String(brainSnapshot.pendingIntentCount)} />
               </div>
 
-              <div className="brain-inspector-grid">
-                <div className="brain-panel">
-                  <div className="brain-panel-title"><strong>Planner 评分</strong><small>{decision ? `${relativeTime(decision.at)}更新` : "暂无决策"}</small></div>
-                  {decision?.candidates.length ? (
-                    <div className="brain-score-list">
-                      {decision.candidates.map((candidate) => (
-                        <div className="brain-score-row" key={candidate.goal} title={candidate.reason}>
-                          <span className={`brain-score-name ${candidate.goal === decision.goal ? "winner" : ""}`}>{candidate.goal === decision.goal ? "● " : ""}{goalLabel(candidate.goal)}</span>
-                          <span className="brain-score-track"><i style={{ width: `${Math.round((candidate.score / Math.max(0.01, topScore)) * 100)}%` }} /></span>
-                          <span className="brain-score-value">{candidate.score.toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <div className="brain-empty">等待下一次 Planner 决策…</div>}
-                  {decision && <p className="brain-decision-reason"><strong>胜出原因：</strong>{reasonLabel(decision.reason)}</p>}
-                </div>
-
-                <div className="brain-panel">
-                  <div className="brain-panel-title"><strong>当前动作计划</strong><small>{decision ? `${Math.round(decision.score * 100)}%` : "—"}</small></div>
-                  {decision?.actions.length ? (
-                    <div className="brain-action-flow">
-                      {decision.actions.map((action, index) => <span className="brain-action-chip" key={`${action.type}-${index}`}>{actionLabel(action)}</span>)}
-                    </div>
-                  ) : <div className="brain-empty">暂无动作计划</div>}
-                  {brainSnapshot.history.length > 0 && <p className="brain-decision-reason"><strong>最近 Goal：</strong>{brainSnapshot.history.slice(0, 5).map((item) => goalLabel(item.goal)).join(" → ")}</p>}
-                </div>
-              </div>
-
-              <div className="brain-panel" style={{ marginTop: 12 }}>
-                <div className="brain-panel-title"><strong>最近 AI 建议</strong><small>最多保留 8 条</small></div>
-                {brainSnapshot.aiSuggestions.length ? (
-                  <div className="brain-ai-traces">
-                    {brainSnapshot.aiSuggestions.map((trace) => <AiTraceRow key={trace.id} trace={trace} />)}
-                  </div>
-                ) : <div className="brain-empty">运行中的 AI Adviser 还没有产生建议。</div>}
-              </div>
-
-              {brainSnapshot.character && (
-                <div className="brain-panel" style={{ marginTop: 12 }}>
-                  <div className="brain-panel-title">
-                    <strong>情绪状态 · Neuro</strong>
-                    <small>{`arousal ${Math.round(brainSnapshot.character.arousal * 100)}% · 注意力 ${attentionLabel(brainSnapshot.character.attention.target)} ${Math.round(brainSnapshot.character.attention.strength * 100)}% · 派生 ${moodLabel(brainSnapshot.character.derivedMood)}`}</small>
-                  </div>
-                  <div className="brain-score-list">
-                    {EMOTION_LABELS.map(({ key, label }) => {
-                      const value = brainSnapshot.character!.emotion[key];
-                      return (
-                        <div className="brain-score-row" key={key}>
-                          <span className="brain-score-name">{label}</span>
-                          <span className="brain-score-track"><i style={{ width: `${Math.round(value * 100)}%` }} /></span>
-                          <span className="brain-score-value">{value.toFixed(2)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {brainSnapshot.neuroTrace && brainSnapshot.neuroTrace.length > 0 && (
-                <div className="brain-panel" style={{ marginTop: 12 }}>
-                  <div className="brain-panel-title"><strong>Neuro Trace</strong><small>intent → motor plan → reaction · 最近 {brainSnapshot.neuroTrace.length} 条</small></div>
-                  <div className="brain-ai-traces">
-                    {brainSnapshot.neuroTrace.map((entry) => (
-                      <div className="brain-ai-trace" key={`${entry.t}-${entry.goal}`}>
-                        <time>{relativeTime(entry.t)}</time>
-                        <div>
-                          <strong>{goalLabel(entry.goal)} → {entry.reaction ?? "—"} · {entry.durationMs}ms</strong>
-                          <small title={`avoid ${entry.motorTendency.avoidance.toFixed(2)} / approach ${entry.motorTendency.approach.toFixed(2)} / energy ${entry.motorTendency.energy.toFixed(2)} / express ${entry.motorTendency.expressiveness.toFixed(2)}`}>
-                            {entry.primitives.length ? entry.primitives.join(" → ") : "（无动作）"}
-                          </small>
-                        </div>
-                        <span className="brain-ai-status accepted">{Math.round(entry.confidence * 100)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <DecisionInspector snapshot={brainSnapshot} />
             </>
           ) : <div className="brain-empty">正在请求宠物窗口的 Brain Snapshot…</div>}
         </div>
@@ -538,112 +460,4 @@ export function BrainNavigation() {
 
 function LiveStat({ label, value }: { label: string; value: string }) {
   return <div className="brain-live-stat"><small>{label}</small><strong title={value}>{value}</strong></div>;
-}
-
-const EMOTION_LABELS: { key: keyof import("../neuro/contracts").EmotionState; label: string }[] = [
-  { key: "happiness", label: "开心" },
-  { key: "affection", label: "亲密" },
-  { key: "curiosity", label: "好奇" },
-  { key: "annoyance", label: "烦躁" },
-  { key: "fear", label: "紧张" },
-  { key: "boredom", label: "无聊" },
-  { key: "sleepiness", label: "困倦" },
-];
-
-function attentionLabel(target: string) {
-  const labels: Record<string, string> = { pointer: "鼠标", user: "用户", agent: "Agent", self: "自己", none: "无" };
-  return labels[target] ?? target;
-}
-
-function AiTraceRow({ trace }: { trace: AiSuggestionTrace }) {
-  return (
-    <div className="brain-ai-trace">
-      <time>{relativeTime(trace.at)}</time>
-      <div><strong>AI → {goalLabel(trace.goal)} · {Math.round(trace.confidence * 100)}%</strong><small title={trace.reason}>{trace.reason}</small></div>
-      <span className={`brain-ai-status ${trace.status}`}>{traceStatusLabel(trace.status)}</span>
-    </div>
-  );
-}
-
-function actionLabel(action: PetSemanticAction) {
-  switch (action.type) {
-    case "idle": return `idle${action.durationMs ? ` · ${action.durationMs}ms` : ""}`;
-    case "wander": return "wander";
-    case "dock": return "dock";
-    case "observe": return `observe · ${action.durationMs}ms`;
-    case "respond": return `respond · ${action.intensity}`;
-    case "celebrate": return `celebrate · ${action.intensity}`;
-    case "rest": return `rest · ${action.durationMs}ms`;
-    case "wait": return `wait · ${action.durationMs}ms`;
-  }
-}
-
-function goalLabel(goal: string) {
-  switch (goal) {
-    case "idle": return "空闲";
-    case "wander": return "漫步";
-    case "dock": return "窗口停靠";
-    case "respond-user": return "回应用户";
-    case "observe-agent": return "观察 Agent";
-    case "celebrate": return "庆祝";
-    case "rest": return "休息";
-    default: return goal;
-  }
-}
-
-function moodLabel(mood: string) {
-  switch (mood) {
-    case "happy": return "开心";
-    case "focused": return "专注";
-    case "tired": return "疲惫";
-    default: return "平常";
-  }
-}
-
-function agentStateLabel(state: string) {
-  switch (state) {
-    case "thinking": return "思考中";
-    case "editing": return "编辑中";
-    case "testing": return "测试中";
-    case "waiting": return "等待中";
-    case "success": return "成功";
-    case "error": return "错误";
-    default: return "空闲";
-  }
-}
-
-function traceStatusLabel(status: AiSuggestionTrace["status"]) {
-  switch (status) {
-    case "accepted": return "已采纳";
-    case "rejected": return "未采纳";
-    default: return "等待决策";
-  }
-}
-
-function reasonLabel(reason: string) {
-  return reason
-    .replace("baseline calm state", "基础平静状态")
-    .replace("recent user interaction", "最近有用户互动")
-    .replace("repeated user interaction", "连续用户互动")
-    .replace("agent error needs attention", "Agent 出错，需要关注")
-    .replace("agent inactive", "Agent 当前未工作")
-    .replace("agent completed work", "Agent 已完成任务")
-    .replace("high user engagement", "用户互动强度较高")
-    .replace("energy recovery", "恢复能量")
-    .replace("autonomous exploration tendency", "自主漫步倾向")
-    .replace("window exploration tendency", "窗口探索倾向")
-    .replace("system intent", "系统 Intent")
-    .replace("user intent", "用户 Intent")
-    .replace("agent intent", "Agent Intent")
-    .replace("plugin intent", "插件 Intent")
-    .replace("ai intent", "AI 建议 Intent");
-}
-
-function relativeTime(timestamp: number) {
-  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-  if (seconds < 2) return "刚刚";
-  if (seconds < 60) return `${seconds} 秒前`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟前`;
-  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }

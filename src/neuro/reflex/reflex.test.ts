@@ -198,3 +198,23 @@ describe("priority", () => {
     expect(result!.name).toBe("flinch");
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  MotorSource tagging                                                */
+/* ------------------------------------------------------------------ */
+
+describe("motor source tagging", () => {
+  it("tags every reflex plan with source: reflex", () => {
+    const cases: PerceptionEvent[] = [
+      touch({ sense: "pet:clicked", region: "face" }),      // blink
+      touch({ sense: "pet:doubleClicked", region: "body" }), // startle
+      touch({ sense: "pet:clicked", region: "face", streak: 8 }), // flinch
+      drag("start"),                                        // grip
+    ];
+    for (const event of cases) {
+      const result = evaluateReflex(event);
+      expect(result, `reflex should fire for ${JSON.stringify(event)}`).not.toBeNull();
+      expect(result!.plan.source).toBe("reflex");
+    }
+  });
+});
