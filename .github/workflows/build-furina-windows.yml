@@ -161,8 +161,8 @@ jobs:
             if ($required -notin $names) { throw "MCP tool missing: $required" }
           }
 
-      - name: Upload PR test installer
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+      - name: Upload installer artifact
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: furinapet-agent-mcp-windows-${{ github.run_number }}
