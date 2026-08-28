@@ -278,6 +278,12 @@ src/neuro/
   - **skeletal-motion-backend.test.ts（新，11 tests）**：空 plan → idle、recoil/lookAt/gesture/earPose/tailMotion 解析、优先级排序、update pose 应用、动画状态追踪、stop/dispose
   - 测试 280 → **291** ✅，`tsc` 零错误，`vite build` 通过
 
+- **2026-08-28 双后端管理器**（`dd2d32a`）：
+  - **backend-manager.ts（新）**：统一 API 管理 Legacy/Skeletal 后端切换 — setMotionBackend()/getMotionBackendType()/resolveMotorPlan()/updateMotionBackend()/getSkeletalBackend()/disposeMotionBackends()
+  - **backend-manager.test.ts（新，12 tests）**：后端切换、双后端 MotorPlan 解析、update 生命周期、cleanup/dispose
+  - **SkeletalAnimationDemo.tsx（新）**：S1-S4 全链路可视化 Demo（MotorPlan → SkeletalMotionBackend → AnimationPlayer → Skeleton → Three.js Renderer）、7 个预设动作按钮、实时动画状态显示
+  - 测试 291 → **303** ✅，`tsc` 零错误，`vite build` 通过
+
 ## 八、自主决策面板（Decision Inspector）
 
 ### 当前状态（✅ 2026-08-27 已实现）
