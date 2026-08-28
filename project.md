@@ -491,7 +491,7 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | **S1** | **基础骨骼 MVP**：Three.js 场景 + 正交相机；角色拆件（head/body/arms/legs/ears/tail/eyes）；骨骼层级 JSON 定义；基础骨骼变换（rotation/position/scale）；单关节动画验证 | ✅ `35ba47f` |
-| **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ S2 |
+| **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ `44950dc` |
 | **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ⬜ |
 | **S4** | **LMC 集成**：替换 LegacySpriteBackend 为 SkeletalMotionBackend；MotorPlan → Pose Resolver → Bone System 全链路；Reflex 层直接操控骨骼（即时反应）；性能优化 | ⬜ |
 
