@@ -336,6 +336,12 @@ export function bootstrapPetBrainRuntime() {
     disposers.push(agentState, intent, snapshotRequest);
   })().catch((error) => console.error("[pet-brain] bridge registration failed", error));
 
+  // B1 Brain-as-Primary: AI is event-driven, not polling.
+  // AI decisions are triggered by:
+  //   1. Agent state changes → handleAgentState → decidePlan (with AI)
+  //   2. User clicks → fast-path (no AI, snappy response)
+  // When nothing changes, the brain sleeps (per LMC.md §3).
+
   publishPetBrainSnapshot();
 }
 

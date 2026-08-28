@@ -1,9 +1,7 @@
-import { listen } from "@tauri-apps/api/event";
 import { desktop, type AiBehaviorContext } from "../api";
 import { normalizeAiBehaviorSuggestion } from "./adapters/ai";
 import { getPetBrain } from "./index";
-import { PET_BRAIN_AGENT_STATE_EVENT, publishPetBrainSnapshot } from "./runtime";
-import type { BrainAgentStateEvent } from "./types";
+import { publishPetBrainSnapshot } from "./runtime";
 import { buildCharacterState } from "../neuro/character/character-adapter";
 import { requestStructuredBrain, type BrainProviderContext, type StructuredBrainResult } from "../neuro/brain/structured-brain";
 import { SOURCE_CONFIDENCE_CAP } from "../neuro/contracts";
@@ -186,31 +184,13 @@ async function requestSuggestion(reason: string) {
 }
 
 export function bootstrapAiSuggestionRuntime() {
+  // B1 Brain-as-Primary: AI decisions are now triggered on-demand by
+  // runtime.ts decidePlan() via requestAiPrimaryDecision(). The old periodic
+  // suggestion timers (startup + idle check) are disabled to avoid competing
+  // for the shared inFlight lock. Agent state changes are handled directly
+  // in runtime.ts handleAgentState → decidePlan.
   if (bootstrapped || !("__TAURI_INTERNALS__" in window)) return;
   bootstrapped = true;
-
-  startupTimer = window.setTimeout(() => void requestSuggestion("startup"), STARTUP_DELAY_MS);
-  idleCheckTimer = window.setInterval(() => {
-    const snapshot = getPetBrain().snapshot();
-    const lastInteraction = snapshot.lastUserInteractionAt;
-    if (lastInteraction === null || Date.now() - lastInteraction >= 30_000) {
-      void requestSuggestion("idle");
-    }
-  }, IDLE_CHECK_MS);
-
-  void listen<BrainAgentStateEvent>(PET_BRAIN_AGENT_STATE_EVENT, (event) => {
-    if (event.payload.state !== "idle") {
-      // Coalesce agent-state storms: replace any pending trigger timer.
-      window.clearTimeout(agentTriggerTimer);
-      agentTriggerTimer = window.setTimeout(
-        () => void requestSuggestion(`agent-${event.payload.state}`),
-        700,
-      );
-    }
-  }).then((unlisten) => {
-    if (!bootstrapped) unlisten();
-    else stopListening = unlisten;
-  }).catch((error) => console.error("[pet-brain:ai] agent trigger bridge failed", error));
 }
 
 /** Tear down the AI suggestion runtime (timers + event bridge). Test/HMR safety. */
