@@ -6,11 +6,12 @@
  */
 
 import type { MotorPlan } from "../contracts/motor-plan";
-import type { ReactionDirective } from "./motion-backend";
+import type { ReactionDirective, SkeletalReaction } from "./motion-backend";
 import { reactionForMotorPlan as legacyResolve } from "./legacy-sprite-backend";
 import { SkeletalMotionBackend } from "./skeletal-motion-backend";
 import { Skeleton } from "./skeleton";
 import type { BoneConfig } from "./skeleton";
+import type { Reaction } from "../../types";
 
 export type BackendType = "legacy" | "skeletal";
 
@@ -92,4 +93,19 @@ export function disposeMotionBackends(): void {
     skeletalBackend.dispose();
     skeletalBackend = null;
   }
+}
+
+/**
+ * Check if a reaction is a legacy string reaction (vs skeletal object)
+ */
+export function isLegacyReaction(reaction: ReactionDirective["reaction"]): reaction is Reaction {
+  return typeof reaction === "string";
+}
+
+/**
+ * Get legacy reaction string for trace compatibility
+ * Returns null if the reaction is skeletal (not a string)
+ */
+export function getLegacyReactionForTrace(reaction: ReactionDirective["reaction"]): Reaction | null {
+  return isLegacyReaction(reaction) ? reaction : null;
 }

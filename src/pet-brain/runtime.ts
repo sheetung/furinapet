@@ -3,7 +3,7 @@ import { desktop } from "../api";
 import { buildCharacterState, characterSnapshot } from "../neuro/character/character-adapter";
 import { planMotor, synthesizeBrainIntent } from "../neuro/cerebellum/rule-cerebellum";
 import { evaluateReflex } from "../neuro/reflex/reflex";
-import { reactionForMotorPlan } from "../neuro/motion/legacy-sprite-backend";
+import { resolveMotorPlan, isLegacyReaction, getLegacyReactionForTrace } from "../neuro/motion/backend-manager";
 import { getPerceptionLog, getWorldState } from "../neuro/perception/store";
 import type { BodyRegion } from "../neuro/contracts";
 import { getNeuroTrace, recordNeuroTrace } from "../neuro/trace/neuro-trace";
@@ -93,7 +93,7 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
     if (action.type === "wander" || action.type === "dock") return;
 
     const motorPlan = planMotor(intent, character, world, action);
-    const directive = reactionForMotorPlan(motorPlan, actionFallbackDuration(action));
+    const directive = resolveMotorPlan(motorPlan, actionFallbackDuration(action));
     if (!directive || signal.aborted) return;
     recordNeuroTrace({
       t: Date.now(),
@@ -101,11 +101,15 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
       confidence: intent.confidence,
       motorTendency: intent.motorTendency,
       primitives: motorPlan.actions.map((primitive) => primitive.type),
-      reaction: directive.reaction,
+      reaction: getLegacyReactionForTrace(directive.reaction) as never,
       durationMs: directive.durationMs,
       source: motorPlan.source,
     });
-    await desktop.react(directive.reaction);
+    // Legacy backend: call desktop.react() for sprite atlas animation
+    // Skeletal backend: skip (skeletal renderer handles animation separately)
+    if (isLegacyReaction(directive.reaction)) {
+      await desktop.react(directive.reaction);
+    }
     await waitForAction(directive.durationMs, signal);
   }, { force });
   publishPetBrainSnapshot();
@@ -248,7 +252,7 @@ async function executeReflex(
   region?: BodyRegion,
 ) {
   if (!reflex) return;
-  const directive = reactionForMotorPlan(reflex.plan, reflex.plan.durationMs);
+  const directive = resolveMotorPlan(reflex.plan, reflex.plan.durationMs);
   if (!directive) return;
   recordNeuroTrace({
     t: at,
@@ -256,13 +260,17 @@ async function executeReflex(
     confidence: 1,
     motorTendency: { approach: 0, avoidance: 0, energy: 0, expressiveness: 0 },
     primitives: reflex.plan.actions.map((p) => p.type),
-    reaction: directive.reaction,
+    reaction: getLegacyReactionForTrace(directive.reaction) as never,
     durationMs: directive.durationMs,
     source: reflex.plan.source,
     reflex: reflex.name,
     ...(region !== undefined ? { region } : {}),
   });
-  await desktop.react(directive.reaction);
+  // Legacy backend: call desktop.react() for sprite atlas animation
+  // Skeletal backend: skip (skeletal renderer handles animation separately)
+  if (isLegacyReaction(directive.reaction)) {
+    await desktop.react(directive.reaction);
+  }
   // Reflex runs to completion: a never-aborting signal keeps waitForAction valid
   // (waitForAction reads signal.aborted — passing undefined throws TypeError).
   await waitForAction(directive.durationMs, new AbortController().signal);
