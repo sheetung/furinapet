@@ -254,6 +254,19 @@ src/neuro/
   - Click fast-path 保留：user intents priority 0.9/0.97 > AI cap 0.82 → 直接 Rule Planner，无网络延迟
   - 测试 208 → **218** ✅，`tsc` 零错误，`vite build` 通过，`cargo check` 通过
 
+- **2026-08-28 S1 基础骨骼 MVP**（`35ba47f`）：
+  - **skeleton.ts（新）**：Bone 类（position/rotation/scale/anchor/children）、Skeleton 类（骨骼树、world transform 传播、applyPose/resetPose）
+  - **skeleton-renderer.ts（新）**：Three.js 正交相机场景、PlaneGeometry 纹理网格、mesh 跟随骨骼 world transform 更新
+  - **skeleton.test.ts（新，14 tests）**：Bone 创建/默认值/子节点/flatten/findBone、Skeleton getBone/update world transform/rotation 传播/applyPose/resetPose/anchor
+  - **SkeletonDemo.tsx（新）**：可视化测试组件，5 关节骨骼 + 正弦波动画验证
+  - 依赖新增：`three` 0.185.1 + `@types/three` 0.185.4
+  - 测试 218 → **232** ✅，`tsc` 零错误
+
+- **2026-08-28 S2 动画系统**：
+  - **animation.ts（新）**：Pose/Keyframe/Animation 类型定义；easing 函数（linear/easeIn/easeOut/easeInOut）；lerpPose 补间；sampleAnimation 采样；applyConstraints 约束；FURINA_CONSTRAINTS（头±28°/体±17°/臂±68°/腿±45°/耳±22°/尾±34°）；7 个预定义动画（idle/lookAt/recoil/wave/step/earTwitch/tailWag）；primitiveToAnimation 映射全部 13 种 MotorPrimitive；AnimationPlayer 播放器
+  - **animation.test.ts（新，30 tests）**：easing 函数边界、lerpPose 插值/缺失骨骼/easing 应用、sampleAnimation 多段/循环、applyConstraints 钳制、FURINA_CONSTRAINTS 覆盖、primitiveToAnimation 映射、AnimationPlayer 播放/约束/停止
+  - 测试 232 → **262** ✅，`tsc` 零错误，`vite build` 通过
+
 ## 八、自主决策面板（Decision Inspector）
 
 ### 当前状态（✅ 2026-08-27 已实现）
@@ -477,8 +490,8 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| **S1** | **基础骨骼 MVP**：Three.js 场景 + 正交相机；角色拆件（head/body/arms/legs/ears/tail/eyes）；骨骼层级 JSON 定义；基础骨骼变换（rotation/position/scale）；单关节动画验证 | ⬜ |
-| **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ⬜ |
+| **S1** | **基础骨骼 MVP**：Three.js 场景 + 正交相机；角色拆件（head/body/arms/legs/ears/tail/eyes）；骨骼层级 JSON 定义；基础骨骼变换（rotation/position/scale）；单关节动画验证 | ✅ `35ba47f` |
+| **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ S2 |
 | **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ⬜ |
 | **S4** | **LMC 集成**：替换 LegacySpriteBackend 为 SkeletalMotionBackend；MotorPlan → Pose Resolver → Bone System 全链路；Reflex 层直接操控骨骼（即时反应）；性能优化 | ⬜ |
 

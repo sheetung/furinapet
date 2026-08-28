@@ -59,7 +59,7 @@ export class Bone {
 
   /** Recursively collect all bones into a flat list */
   flatten(): Bone[] {
-    const result = [this];
+    const result: Bone[] = [this];
     for (const child of this.children) {
       result.push(...child.flatten());
     }
