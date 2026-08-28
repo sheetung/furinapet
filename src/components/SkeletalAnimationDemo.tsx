@@ -11,7 +11,18 @@ import { SkeletonRenderer } from "../neuro/motion/skeleton-renderer";
 import { SkeletalMotionBackend } from "../neuro/motion/skeletal-motion-backend";
 import type { MotorPlan, MotorPrimitive } from "../neuro/contracts/motor-plan";
 
-// Demo skeleton with colored placeholder rectangles
+// Import placeholder art assets
+import bodyImg from "../assets/skeleton-parts/body.png";
+import headImg from "../assets/skeleton-parts/head.png";
+import armLeftImg from "../assets/skeleton-parts/arm_left.png";
+import armRightImg from "../assets/skeleton-parts/arm_right.png";
+import legLeftImg from "../assets/skeleton-parts/leg_left.png";
+import legRightImg from "../assets/skeleton-parts/leg_right.png";
+import earLeftImg from "../assets/skeleton-parts/ear_left.png";
+import earRightImg from "../assets/skeleton-parts/ear_right.png";
+import tailImg from "../assets/skeleton-parts/tail.png";
+
+// Demo skeleton with placeholder art assets
 const DEMO_SKELETON: BoneConfig = {
   name: "root",
   position: [0, -60],
@@ -19,55 +30,55 @@ const DEMO_SKELETON: BoneConfig = {
     body: {
       name: "body",
       position: [0, 50],
-      mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 40, height: 60 },
+      mesh: { texture: bodyImg, width: 80, height: 120 },
       children: {
         head: {
           name: "head",
           position: [0, 40],
           anchor: [0, -10],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 35, height: 35 },
+          mesh: { texture: headImg, width: 70, height: 70 },
         },
         arm_left: {
           name: "arm_left",
-          position: [-25, 25],
+          position: [-55, 25],
           anchor: [0, 15],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 15, height: 40 },
+          mesh: { texture: armLeftImg, width: 30, height: 80 },
         },
         arm_right: {
           name: "arm_right",
-          position: [25, 25],
+          position: [55, 25],
           anchor: [0, 15],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 15, height: 40 },
+          mesh: { texture: armRightImg, width: 30, height: 80 },
         },
         leg_left: {
           name: "leg_left",
-          position: [-12, -10],
+          position: [-20, -10],
           anchor: [0, 20],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 18, height: 45 },
+          mesh: { texture: legLeftImg, width: 36, height: 90 },
         },
         leg_right: {
           name: "leg_right",
-          position: [12, -10],
+          position: [20, -10],
           anchor: [0, 20],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 18, height: 45 },
+          mesh: { texture: legRightImg, width: 36, height: 90 },
         },
         ear_left: {
           name: "ear_left",
-          position: [-15, 35],
+          position: [-25, 55],
           anchor: [0, -5],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 10, height: 15 },
+          mesh: { texture: earLeftImg, width: 20, height: 30 },
         },
         ear_right: {
           name: "ear_right",
-          position: [15, 35],
+          position: [25, 55],
           anchor: [0, -5],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 10, height: 15 },
+          mesh: { texture: earRightImg, width: 20, height: 30 },
         },
         tail: {
           name: "tail",
           position: [0, -5],
           anchor: [0, -10],
-          mesh: { texture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", width: 8, height: 30 },
+          mesh: { texture: tailImg, width: 16, height: 60 },
         },
       },
     },
