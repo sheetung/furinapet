@@ -267,6 +267,11 @@ src/neuro/
   - **animation.test.ts（新，30 tests）**：easing 函数边界、lerpPose 插值/缺失骨骼/easing 应用、sampleAnimation 多段/循环、applyConstraints 钳制、FURINA_CONSTRAINTS 覆盖、primitiveToAnimation 映射、AnimationPlayer 播放/约束/停止
   - 测试 232 → **262** ✅，`tsc` 零错误，`vite build` 通过
 
+- **2026-08-28 S3 IK + 高级动画**（`6417567`）：
+  - **advanced-animation.ts（新）**：Two-bone IK（law of cosines 求解、可达性检查、应用到骨骼）；Look-at IK（目标追踪 + 最大角度钳制 + 平滑跟随）；弹簧阻尼系统（semi-implicit Euler 积分、ear/tail/loose 预设）；表情系统（眼睛/嘴巴变体纹理切换）；眨眼控制器（自然 3-7s 间隔、100-200ms 持续时间）
+  - **advanced-animation.test.ts（新，18 tests）**：IK 可达/不可达/骨骼应用、look-at 旋转/钳制/平滑跟随、弹簧收敛/预设、表情纹理/回退、眨眼状态转换
+  - 测试 262 → **280** ✅，`tsc` 零错误，`vite build` 通过
+
 ## 八、自主决策面板（Decision Inspector）
 
 ### 当前状态（✅ 2026-08-27 已实现）
@@ -492,7 +497,7 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 |------|------|------|
 | **S1** | **基础骨骼 MVP**：Three.js 场景 + 正交相机；角色拆件（head/body/arms/legs/ears/tail/eyes）；骨骼层级 JSON 定义；基础骨骼变换（rotation/position/scale）；单关节动画验证 | ✅ `35ba47f` |
 | **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ `44950dc` |
-| **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ⬜ |
+| **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ✅ `6417567` |
 | **S4** | **LMC 集成**：替换 LegacySpriteBackend 为 SkeletalMotionBackend；MotorPlan → Pose Resolver → Bone System 全链路；Reflex 层直接操控骨骼（即时反应）；性能优化 | ⬜ |
 
 ### 美术资产要求
