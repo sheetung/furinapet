@@ -430,3 +430,101 @@ B1–B7 聚焦「大脑」（LMC 第三层）的能力升级，M6+ 聚焦「运�
 - B7 完成后，AI 大脑具备完整上下文 → 可开始蒸馏 FurinaMotorNet（用完整 AI 决策轨迹训练小模型）
 
 因此建议：B1–B7 主线推进，M6+ Shadow 在 B1 完成后可启动 shadow 数据收集。
+
+## 十一、动作系统进化（Skeletal Animation）
+
+### 目标
+
+**保持 2D 外观，引入 3D 骨骼驱动**——角色仍是 2D 美术（大小、身材比例不变），但用骨骼系统控制关节运动，替代当前 spritesheet 逐帧动画。
+
+```text
+当前：MotorPlan → LegacySpriteBackend → spritesheet 帧动画（固定映射）
+目标：MotorPlan → Motion Engine → 骨骼变换 → 2D 部件渲染（动态驱动）
+```
+
+### 技术方案
+
+**Three.js + 自定义 2D 骨骼系统**（无商业授权，完全控制）：
+
+- Three.js 正交相机（保持 2D 观感）
+- 角色拆件为 2D 平面纹理（PlaneGeometry + MeshBasicMaterial，透明 PNG）
+- 自定义骨骼层级（Bone hierarchy，每个 bone 有 position/rotation/scale）
+- 部件挂载到骨骼，渲染时按骨骼变换绘制
+
+### 架构映射
+
+```text
+MotorPlan (lookAt, recoil, earBack, step...)
+    ↓
+Pose Resolver（Motor Primitives → 目标骨骼状态）
+    ↓
+IK / Animation System（求解骨骼变换，补间插值）
+    ↓
+Body Constraints（joint limits, spring damping）
+    ↓
+Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
+```
+
+| LMC 层 | 新实现 | 说明 |
+|--------|--------|------|
+| Cerebellum | 不变 | 仍输出 MotorPlan（13 个原语） |
+| Motion Engine | `src/neuro/motion/skeletal-engine.ts` | 骨骼系统、IK、补间 |
+| Body | `src/neuro/motion/body-constraints.ts` | 关节约束、弹簧 |
+| Renderer | `src/neuro/motion/three-renderer.ts` | Three.js 2D 骨骼渲染 |
+| Legacy Adapter | 保留为 fallback | 拆件未就绪时回退 spritesheet |
+
+### 里程碑
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| **S1** | **基础骨骼 MVP**：Three.js 场景 + 正交相机；角色拆件（head/body/arms/legs/ears/tail/eyes）；骨骼层级 JSON 定义；基础骨骼变换（rotation/position/scale）；单关节动画验证 | ⬜ |
+| **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ⬜ |
+| **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ⬜ |
+| **S4** | **LMC 集成**：替换 LegacySpriteBackend 为 SkeletalMotionBackend；MotorPlan → Pose Resolver → Bone System 全链路；Reflex 层直接操控骨骼（即时反应）；性能优化 | ⬜ |
+
+### 美术资产要求
+
+**S1 阶段需要**：
+
+1. 将现有角色拆为独立部件 PNG（带透明通道）：
+   - `head.png`（含脸部基础）
+   - `body.png`（躯干）
+   - `arm_left.png` / `arm_right.png`
+   - `leg_left.png` / `leg_right.png`
+   - `ear_left.png` / `ear_right.png`
+   - `tail.png`
+   - `eye_left.png` / `eye_right.png`（多种状态：open/half/closed）
+   - `mouth.png`（多种状态：neutral/smile/open）
+
+2. 每个部件的**锚点**（pivot point）定义——旋转中心在哪里（如 head 的锚点在颈部）
+
+3. **骨骼层级配置**（JSON）：
+   ```json
+   {
+     "root": {
+       "position": [0, 0],
+       "children": {
+         "body": {
+           "position": [0, 50],
+           "children": {
+             "head": { "position": [0, 80], "anchor": [0, -20] },
+             "arm_left": { "position": [-30, 60], "anchor": [0, 10] },
+             "arm_right": { "position": [30, 60], "anchor": [0, 10] }
+           }
+         },
+         "leg_left": { "position": [-15, 0] },
+         "leg_right": { "position": [15, 0] }
+       }
+     }
+   }
+   ```
+
+### 与 B1–B7 的关系
+
+动作系统（S1–S4）与大脑系统（B1–B7）**完全解耦**：
+
+- S1–S4 改的是 Motion Engine / Body / Renderer（LMC 第五~七层）
+- B1–B7 改的是 Brain / Cerebellum（LMC 第三~四层）
+- 共享契约：**MotorPlan**（13 个 Motor Primitives）——只要 MotorPlan 不变，两条线可完全并行
+
+建议：S1 可立即启动（不依赖任何 B 里程碑），S4 在 B1 完成后可获得 AI 驱动的 MotorPlan 测试数据。
