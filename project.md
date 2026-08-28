@@ -272,6 +272,12 @@ src/neuro/
   - **advanced-animation.test.ts（新，18 tests）**：IK 可达/不可达/骨骼应用、look-at 旋转/钳制/平滑跟随、弹簧收敛/预设、表情纹理/回退、眨眼状态转换
   - 测试 262 → **280** ✅，`tsc` 零错误，`vite build` 通过
 
+- **2026-08-28 S4 LMC 集成**（`0bbd693`）：
+  - **motion-backend.ts（新）**：MotionBackend 接口（resolveMotorPlan/update/dispose）、ReactionDirective、SkeletalReaction/SkeletalAnimationCommand 类型（骨骼级动画指令）
+  - **skeletal-motion-backend.ts（新）**：SkeletalMotionBackend 实现 — MotorPlan → Animation 解析（优先级扫描 recoil > gesture > expression > idleStyle > turn > lookAt > ...）、AnimationPlayer 集成、逐帧 pose 应用到 Skeleton、stop/dispose 生命周期
+  - **skeletal-motion-backend.test.ts（新，11 tests）**：空 plan → idle、recoil/lookAt/gesture/earPose/tailMotion 解析、优先级排序、update pose 应用、动画状态追踪、stop/dispose
+  - 测试 280 → **291** ✅，`tsc` 零错误，`vite build` 通过
+
 ## 八、自主决策面板（Decision Inspector）
 
 ### 当前状态（✅ 2026-08-27 已实现）
@@ -498,7 +504,7 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 | **S1** | **基础骨骼 MVP**：Three.js 场景 + 正交相机；角色拆件（head/body/arms/legs/ears/tail/eyes）；骨骼层级 JSON 定义；基础骨骼变换（rotation/position/scale）；单关节动画验证 | ✅ `35ba47f` |
 | **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ `44950dc` |
 | **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ✅ `6417567` |
-| **S4** | **LMC 集成**：替换 LegacySpriteBackend 为 SkeletalMotionBackend；MotorPlan → Pose Resolver → Bone System 全链路；Reflex 层直接操控骨骼（即时反应）；性能优化 | ⬜ |
+| **S4** | **LMC 集成**：替换 LegacySpriteBackend 为 SkeletalMotionBackend；MotorPlan → Pose Resolver → Bone System 全链路；Reflex 层直接操控骨骼（即时反应）；性能优化 | ✅ `0bbd693` |
 
 ### 美术资产要求
 
