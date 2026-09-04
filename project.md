@@ -287,12 +287,12 @@ src/neuro/
 - **2026-08-28 双后端接入运行时**（`3a6fa4c`）：`runtime.ts` 改用 backend-manager 解析 `resolveMotorPlan`；运行时始终走 legacy 路径（`isLegacyReaction → desktop.react`），skeletal 后端未激活（注：S4 "替换 legacy" 不成立，见第十一节）。
 - **2026-08-28 占位美术**（`afcc22b`）：12 张骨架部件占位 PNG（`src/assets/skeleton-parts/`），为 S5 资产准备第一步（单状态占位）。
 
-- **2026-09-04 修复 + 分支拆分**（`8b4aa6c` + `feat/skeletal-animation` 新分支）：
+- **2026-09-04 修复 + 分支拆分**（`8b4aa6c` + `feat/character-runtime-2d3d` 新分支）：
   - **flinch 反射接线**：感知层先于大脑引导（main.tsx 顺序），`buildReflexEvent` 的 streak/intensity 改为取自 `world.interaction`（此前硬编码 0，连点 ≥6 永不触发）；新增回归测试走 perception-reducer → buildReflexEvent → evaluateReflex 全链
   - **隐藏即停**：PetView 的 31ms 运动 tick / 光标视线 / 重力坠落恢复加可见性门控（settings.petVisible + 隐藏期低频 `isVisible()` 缓冲），隐藏时零窗口 IPC
   - **区域判定修正**：气泡展开时窗口上方多出一段（BUBBLE_SPACE），原来按全窗口算区域会整体上移；现按 `.sprite` 精灵真实可视矩形（getBoundingClientRect）判定 face/head/body/hand
   - **AI locomotion 声明**：AI 建议的 wander/dock 不再静默丢弃——纯 locomotion 计划记 trace 后返回（执行仍归 PetView 移动循环）
-  - S 系列 WIP（"骨骼"导航页 + 占位图重绘 + generate 脚本）拆到 **`feat/skeletal-animation`** 分支；`furinapet-neuro` 主包去掉 Three.js（909KB → 372KB/gzip 116KB）
+  - S 系列 WIP（"骨骼"导航页 + 占位图重绘 + generate 脚本）拆到 **`feat/character-runtime-2d3d`** 分支（原 `feat/skeletal-animation` 更名，按 PR1 Skeleton Runtime / PR2 Furina Rig / PR3 Renderer 三个 PR 推进，规范见 `docs/furina-rig-standard.md`）；`furinapet-neuro` 主包去掉 Three.js（909KB → 372KB/gzip 116KB）
   - 测试 303 → **304** ✅，`tsc` 零错误，`vite build` 通过
 
 ## 八、自主决策面板（Decision Inspector）
@@ -415,6 +415,7 @@ LMC 架构可视化交互面板已上线（`src/components/DecisionInspector.tsx
   - 原始位置：Obsidian `sheetung的知识区/make/LMC.md`（`C:\Users\sheetung\Documents\Obsidian\sheetung的知识区\make\LMC.md`）
   - 内容：感知/大脑/小脑/脊髓反射/运动系统/身体/渲染七层架构；Level 0–6 数据分级；大脑只输出 BrainIntent、小脑输出 MotorPrimitive 的职责划分；M0–M9 双线（工程线 + 模型线）开发路线；FunctionGemma → FurinaMotorNet 蒸馏策略；Shadow 模式与 Benchmark/Replay 基建要求。
   - 本工程的 M0–M3 里程碑即按其「Agent 工程线」前四个阶段执行。
+- **《芙宁娜 Rig 标准》**（Blender → glTF → furinapet runtime 数据契约）：[`docs/furina-rig-standard.md`](docs/furina-rig-standard.md)（第十一节 S5 及其后 PR 均以该文件为唯一资产规范）
 
 ## 十、大脑升级里程碑（Brain Upgrade）
 
@@ -524,6 +525,7 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 | **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ `44950dc` |
 | **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ✅ `6417567` |
 | **S4** | **LMC 集成**：`MotionBackend` 接口 + `SkeletalMotionBackend` 实现（MotorPlan → Animation 解析、AnimationPlayer 集成、逐帧 pose 应用）；**运行时暂未接入**——`runtime.ts` 仍走 legacy-sprite-backend，后端切换留待 S5（配合真实拆分件美术） | ✅ `0bbd693`（接口 + 实现 + 测试） |
+| **S5** | **运行时切换 + Rig 资产**：`runtime.ts` 默认后端切到 `SkeletalMotionBackend`（legacy 保留 fallback）；芙宁娜 Blender Rig 按 [docs/furina-rig-standard.md](docs/furina-rig-standard.md)（33±2 骨 / morph≤10 / glTF 落库 `characters/furina/model/`）交付 | ⬜ 等待 PR1（bone-target 求解）+ PR2（Rig 资产） |
 
 ### 美术资产要求
 
