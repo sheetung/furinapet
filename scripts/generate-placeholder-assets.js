@@ -11,25 +11,25 @@ import { deflateSync } from "zlib";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PARTS = [
-  // Main body (pink)
-  { name: "body", width: 80, height: 120, r: 255, g: 182, b: 193 },
-  { name: "head", width: 70, height: 70, r: 255, g: 192, b: 203 },
+  // Main body (blue outfit)
+  { name: "body", width: 80, height: 120, r: 70, g: 130, b: 180 }, // Steel blue coat
+  { name: "head", width: 70, height: 70, r: 245, g: 245, b: 245 }, // White/light hair
   
-  // Limbs (pink)
-  { name: "arm_left", width: 30, height: 80, r: 255, g: 182, b: 193 },
-  { name: "arm_right", width: 30, height: 80, r: 255, g: 182, b: 193 },
-  { name: "leg_left", width: 36, height: 90, r: 255, g: 182, b: 193 },
-  { name: "leg_right", width: 36, height: 90, r: 255, g: 182, b: 193 },
+  // Limbs (blue outfit + skin)
+  { name: "arm_left", width: 30, height: 80, r: 70, g: 130, b: 180 }, // Blue sleeves
+  { name: "arm_right", width: 30, height: 80, r: 70, g: 130, b: 180 },
+  { name: "leg_left", width: 36, height: 90, r: 245, g: 235, b: 220 }, // Skin tone
+  { name: "leg_right", width: 36, height: 90, r: 245, g: 235, b: 220 },
   
-  // Features (hot pink)
-  { name: "ear_left", width: 20, height: 30, r: 255, g: 105, b: 180 },
-  { name: "ear_right", width: 20, height: 30, r: 255, g: 105, b: 180 },
-  { name: "tail", width: 16, height: 60, r: 255, g: 105, b: 180 },
+  // Features (white hair + gold crown)
+  { name: "ear_left", width: 20, height: 30, r: 245, g: 245, b: 245 }, // White hair
+  { name: "ear_right", width: 20, height: 30, r: 245, g: 245, b: 245 },
+  { name: "tail", width: 16, height: 60, r: 218, g: 165, b: 32 }, // Gold (crown accent)
   
   // Face
-  { name: "eye_left", width: 12, height: 12, r: 65, g: 105, b: 225 },
+  { name: "eye_left", width: 12, height: 12, r: 65, g: 105, b: 225 }, // Royal blue eyes
   { name: "eye_right", width: 12, height: 12, r: 65, g: 105, b: 225 },
-  { name: "mouth", width: 20, height: 8, r: 220, g: 20, b: 60 },
+  { name: "mouth", width: 20, height: 8, r: 220, g: 120, b: 120 }, // Soft pink lips
 ];
 
 function createPNG(config) {

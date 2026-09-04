@@ -14,8 +14,9 @@ import {
   type CharacterDefinition,
 } from "./characters/registry";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
+import { SkeletalAnimationDemo } from "./components/SkeletalAnimationDemo";
 
-type Page = "home" | "pet" | "settings";
+type Page = "home" | "pet" | "settings" | "skeleton";
 type DownloadProgress = { downloaded: number; total: number; percent: number };
 type CharacterManagerView = "sources" | "online";
 
@@ -278,6 +279,7 @@ export function App() {
           <NavButton active={!extensionPageActive && page === "home"} icon="⌂" label="主页" onClick={() => setPage("home")} />
           <NavButton active={!extensionPageActive && page === "pet"} icon="♢" label="宠物" onClick={() => setPage("pet")} />
           <NavButton active={!extensionPageActive && page === "settings"} icon="⚙" label="设置" onClick={() => setPage("settings")} />
+          <NavButton active={!extensionPageActive && page === "skeleton"} icon="☠" label="骨骼" onClick={() => setPage("skeleton")} />
         </nav>
         <div className="sidebar-foot">Tauri · WebView2<br />v{version}</div>
       </aside>
@@ -366,6 +368,12 @@ export function App() {
                 {update?.state === "available" && <button className="primary" onClick={() => setUpdateOpen(true)}>查看新版本</button>}
               </div>
             </div>
+          </section>
+        )}
+
+        {page === "skeleton" && (
+          <section className="page">
+            <SkeletalAnimationDemo />
           </section>
         )}
       </main>
