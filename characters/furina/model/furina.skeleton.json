@@ -1,0 +1,32 @@
+{
+  "version": "0.1",
+  "character": "furina",
+  "coordinate": {
+    "up": "Y",
+    "forward": "-Z",
+    "unit": "meter"
+  },
+  "bones": [
+    {"name":"root","parent":null,"position":[0,0,0],"rotation":[0,0,0]},
+    {"name":"motion_root","parent":"root","position":[0,0,0],"rotation":[0,0,0]},
+    {"name":"body","parent":"motion_root","position":[0,0,0],"rotation":[0,0,0]},
+    {"name":"spine","parent":"body","position":[0,0.5,0],"rotation":[0,0,0]},
+    {"name":"chest","parent":"spine","position":[0,1.0,0],"rotation":[0,0,0]},
+    {"name":"neck","parent":"chest","position":[0,1.35,0],"rotation":[0,0,0]},
+    {"name":"head","parent":"neck","position":[0,1.55,0],"rotation":[0,0,0]},
+    {"name":"eye_left","parent":"head","position":[-0.04,1.58,-0.1],"rotation":[0,0,0]},
+    {"name":"eye_right","parent":"head","position":[0.04,1.58,-0.1],"rotation":[0,0,0]},
+    {"name":"arm_left","parent":"chest","position":[-0.25,1.15,0],"rotation":[0,0,0]},
+    {"name":"arm_right","parent":"chest","position":[0.25,1.15,0],"rotation":[0,0,0]},
+    {"name":"hair_back","parent":"head","position":[0,1.4,0.05],"rotation":[0,0,0]},
+    {"name":"tail","parent":"body","position":[0,0.3,0.1],"rotation":[0,0,0]},
+    {"name":"skirt","parent":"body","position":[0,0.7,0],"rotation":[0,0,0]},
+    {"name":"coat","parent":"chest","position":[0,1.0,0],"rotation":[0,0,0]},
+    {"name":"accessory","parent":"head","position":[0,1.7,0],"rotation":[0,0,0]}
+  ],
+  "constraints": {
+    "springBones": ["hair_back", "tail", "skirt"],
+    "ik": ["arm_left", "arm_right"],
+    "lookAt": ["head", "eye_left", "eye_right"]
+  }
+}
