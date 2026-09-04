@@ -1,9 +1,10 @@
-# Furina Rig Standard v0.2
+# Furina Rig Standard v0.3
 
 > 芙宁娜桌面宠物「2D 外观 + 3D 骨骼驱动」的 Blender → glTF → furinapet renderer 数据契约。
 > 定位：**AI 桌宠 + 小模型控制 + 实时渲染 + 极致轻量**——骨骼服务于「大脑/小脑」架构，不是影视动画。
 > 关联：`project.md` 第十一节（S 系列里程碑）、`docs/LMC.md`（七层架构）、分支 `feat/character-runtime-2d3d`（PR1–PR3）。
 > 本规范是唯一数据契约；未经共识不得单侧变更。
+> **v0.3（2026-09-04 冻结评审）**：新增 `motion_root` 动作根（AI 动作与场景移动解耦）；`face` 内删眉/眼睑/嘴骨，表情全部归 morph；新增 §7 `bone_tags.json` 神经控制接口；Hair 摆动归 Spring（rotation+translation）。
 
 ---
 
@@ -13,7 +14,7 @@
 2. **肢体只做桌宠需求**：点名、招手（2 段臂）、正反转身（spine 旋转）就够。不做脚趾、不做手指、不做每根发丝。
 3. **物理交给 Spring/Damping，不交给 bone**：衣服摆、发尾、尾巴用弹簧/阻尼（secondary motion），占用零决策算力。
 4. **脸 = 2D 层 + 3D 骨骼混合**：五官用 morph 低成本驱动，头部旋转用骨骼；不追 Whisper 级口型，用嘴形状态机。
-5. **极致轻量**：目标 33 ± 3 根骨骼（Root/Body 5、Head/Face 10、Arms 6、Hair 2、Clothes 3、Ear/Tail 3、Accessory 2）。超预算需双人 review。
+5. **极致轻量**：目标 33 ± 3 根骨骼（Root/motion_root 2、Body+Spine+Neck 4、Head 1、Face/Eye 3、Hair 3、Ear/Tail 3、Arms 6、Coat/Skirt 2、Accessory 2≈27 常用）。眉/眼睑/嘴**不建骨**（见 §4，morph 承担）；超预算需双人 review。
 
 ---
 
@@ -26,43 +27,50 @@
 | 大小写 | `snake_case` 全小写下划线连接 |
 | 左右 | 后缀 `_left` / `_right`（**不用** `L/R`，与现有 2D 资产 `arm_left.png` 等一致） |
 | 面提 | 角色区前缀：`body` `head` `face` `hair` `eyes` `brow` `mouth` `ear` `tail` `coat` `skirt` `hat` `deco`；所在“导演”前缀 `forward` 不在此列 |
-| 根 | `root`（唯一） |
+| 根 | `root`（世界定位）+ `motion_root`（动作根）——两个根，见下树 |
+| JSON 标签 | `bone_tags.json` 神经控制接口，见 §7 |
 | 菊花块（白名） | 任意裙摆/凹陷都算骨；无名不允 |
 
-### 推荐骨骼树（33 ± 2，可裁剪）
+### 推荐骨骼树（27 常用 + 可扩展，上限 33±2）
 
 ```text
-root
+root                ← 世界定位 / 移动（walk / approach / dock / step——只动 position）
 │
-├── body
-│   ├── spine
-│   │   ├── chest
-│   │   │   ├── neck
-│   │   │   │   └── head
-│   │   │   │       ├── face
-│   │   │   │       │   ├── eye_left / eye_right     (眼球，含 pupil 偏移)
-│   │   │   │       │   ├── eyelid_left/_right
-│   │   │   │       │   ├── brow_left / brow_right
-│   │   │   │       │   └── mouth
-│   │   │   │       ├── hair_back (摆尾)
-│   │   │   │       ├── hair_left / hair_right（可选）
-│   │   │   │       ├── ear_left / ear_right
-│   │   │   ├── arm_left ─ armhand_left（可选）   ← 肘单关节即可
-│   │   │   └── arm_right ─ armhand_right（可选）
-│   │   ├── coat（弹簧）
-│   │   └── skirt（阻尼）
-│   ├── tail               (弹簧，与现 2D 资产 `tail.png` 对齐)
-│   └── accessory_brooch   (刚体，任何位)
-│
-└── accessory_(decoration)
+└── motion_root     ← AI / Reflex 动作根（recoil / 开心跳 / 回弹 / 点头——只动 rotation）
+    │
+    ├── body
+    │   ├── spine
+    │   │   ├── chest
+    │   │   │   ├── neck
+    │   │   │   │   └── head
+    │   │   │   │       ├── face
+    │   │   │   │       │   └── eye_left / eye_right   ← 仅空间朝向（见 §4，表情全走 morph）
+    │   │   │   │       ├── hair_back
+    │   │   │   │       ├── hair_side_left
+    │   │   │   │       ├── hair_side_right
+    │   │   │   │       ├── ear_left
+    │   │   │   │       └── ear_right
+    │   │   │   ├── arm_left ── arm_hand_left（可选）
+    │   │   │   └── arm_right ── arm_hand_right（可选）
+    │   │   ├── coat（Spring）
+    │   │   └── skirt（Damping）
+    │   ├── tail               (Spring 摆动，与现 2D 资产 `tail.png` 对齐)
+    │   └── accessory_brooch   (刚体)
+    │
+    └── …（可选：hat / 装饰,挂 head/body）
 ```
 
-不建模：手指、脚趾、独立头发丝、衣物褶皱、foot 轴分离。
+> **motion_root 规则**：AI 与 Reflex 层只操作 `motion_root`（及子骨骼）的**旋转**；`root` 只做**平移**（场景移动、被拖走、dock）。走路 vs 开心跳动 vs 回弹互不冲突——一个走 `root.position`，其余走 `motion_root.rotation`。
+>
+> **Face 规则**：眉 / 眼睑 / 嘴 **不建 bone**（原版方案里的 `brow_*`、`eyelid_*`、`mouth` 全部删除）；表情由 morph 承担（§4）。`face` 下仅保留 `eye_left/right` 供视线/瞳孔空间朝向。
+
+不建模：手指、脚趾、独立头发丝、衣物褶皱、foot 轴分离、每根尾毛。
 
 ### Rest Pose
 
 - **A-pose**：两臂微下垂；掌心向内侧——缓解 IK 折叠与布料冲突；
 - 轴向：**Y 上，Z 前（forward = -Z 内）**，与 glTF/Three.js 一致；1 unit = 1 m；
+- `root` 与 `motion_root` 在 Rest 完全重合（同一原位），后者只叠加旋转；
 - `root` 在原点 `(0,0,0)`；左右对称（Mirror weights 用 `-X`）。
 
 ---
@@ -89,7 +97,7 @@ root
 |---|---|
 | 躯干 | `chest` 主、`spine` 尾（各 ≤3 骨/顶点） |
 | 颈/肩 | neck: chest 0.2/neck 0.8；shoulder: chest 0.4/shoulder 0.6 |
-| 头/发 | 头部 100%；发梢可 dot 到 `hair_*`（过渡 ≤2 骨） |
+| 头发 | `hair_*` **100% 附着本骨**（不发梢加第二骨）——摆动/回弹全部由 Spring 的 rotation + translation 承担（§1/§4），骨帧保持 Rest |
 | 四肢 | `arm` 0.7 / `shoulder` 0.3 过渡，无第三 bone |
 | 耳朵/尾巴 | `ear`、`tail` 100% 单骨（软尾可 spring 处理，权重固定） |
 | 刚体 | 100% 单骨（`accessory_brooch` 即 `accessory`） |
@@ -101,7 +109,7 @@ root
 
 - 只允许 `face` 相关 mesh 用 morph：`eye_open/eye_close`、`brow_raise/wipe`、`mouth_neutral/smile/open/anger/surprise`，总计 ≤ 10 个；
 - morph 基座 Index≤3000（性能）；重量运行时 **ExpressionController（计划在 PR3 新增）** 插值；
-- 分工：**morph 管表情；bone 管几何朝向**（眼球、转头、Roll）。`mouth` 不动 pler——只做骨轴邻位。
+- 分工（硬规则）：**bone 只负责空间变化**（眼球朝向、转头、Roll）；**眉、眼睑、嘴一律不建 bone**，表情全部由 morph 驱动——与 §1 骨树一致（原 `brow_*` / `eyelid_*` / `mouth` 骨删除）。
 
 ---
 
@@ -136,6 +144,7 @@ interface SkeletonAsset {
   bones: BoneConfig[];                    // { name, parent, position, rotation }：复用 skeleton.ts `BoneConfig`
   mesh?: THREE.Group;                     // glb 网格（挂骨后由 SkeletonRenderer 渲染）
   weights?: Record<string, Record<string, number>>; // vertexName → boneWeight 可选冗余
+  boneTags?: Record<string, BoneControl>; // §7：骨名 → control 标签（神经控制接口，PR3 必读）
 }
 
 // 现有 MotionBackend 接口不变；PR3 让 SkeletalMotionBackend：
