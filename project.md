@@ -1,7 +1,7 @@
 # FurinaPet Neuro 工程记录
 
 > 本文档记录 `furinapet-neuro` 分支上的「类人认知—运动架构」改造：目标、架构、里程碑与当前进度。
-> 基线：`main` v1.1.2（`cccf510`）。架构总纲见 **《LMC》**（[`docs/LMC.md`](docs/LMC.md)）。
+> 开发均在 `furinapet-neuro` 分支上进行；基线为本分支上的 v1.1.2（`cccf510`）。`main` 分支冻结于 v1.0.9（`7a5fef4`），v1.1.0–v1.1.2 及神经改造只存在于本分支，不参与开发。架构总纲见 **《LMC》**（[`docs/LMC.md`](docs/LMC.md)）。
 
 ## 一、项目简介
 
@@ -284,6 +284,17 @@ src/neuro/
   - **SkeletalAnimationDemo.tsx（新）**：S1-S4 全链路可视化 Demo（MotorPlan → SkeletalMotionBackend → AnimationPlayer → Skeleton → Three.js Renderer）、7 个预设动作按钮、实时动画状态显示
   - 测试 291 → **303** ✅，`tsc` 零错误，`vite build` 通过
 
+- **2026-08-28 双后端接入运行时**（`3a6fa4c`）：`runtime.ts` 改用 backend-manager 解析 `resolveMotorPlan`；运行时始终走 legacy 路径（`isLegacyReaction → desktop.react`），skeletal 后端未激活（注：S4 "替换 legacy" 不成立，见第十一节）。
+- **2026-08-28 占位美术**（`afcc22b`）：12 张骨架部件占位 PNG（`src/assets/skeleton-parts/`），为 S5 资产准备第一步（单状态占位）。
+
+- **2026-09-04 修复 + 分支拆分**（`8b4aa6c` + `feat/skeletal-animation` 新分支）：
+  - **flinch 反射接线**：感知层先于大脑引导（main.tsx 顺序），`buildReflexEvent` 的 streak/intensity 改为取自 `world.interaction`（此前硬编码 0，连点 ≥6 永不触发）；新增回归测试走 perception-reducer → buildReflexEvent → evaluateReflex 全链
+  - **隐藏即停**：PetView 的 31ms 运动 tick / 光标视线 / 重力坠落恢复加可见性门控（settings.petVisible + 隐藏期低频 `isVisible()` 缓冲），隐藏时零窗口 IPC
+  - **区域判定修正**：气泡展开时窗口上方多出一段（BUBBLE_SPACE），原来按全窗口算区域会整体上移；现按 `.sprite` 精灵真实可视矩形（getBoundingClientRect）判定 face/head/body/hand
+  - **AI locomotion 声明**：AI 建议的 wander/dock 不再静默丢弃——纯 locomotion 计划记 trace 后返回（执行仍归 PetView 移动循环）
+  - S 系列 WIP（"骨骼"导航页 + 占位图重绘 + generate 脚本）拆到 **`feat/skeletal-animation`** 分支；`furinapet-neuro` 主包去掉 Three.js（909KB → 372KB/gzip 116KB）
+  - 测试 303 → **304** ✅，`tsc` 零错误，`vite build` 通过
+
 ## 八、自主决策面板（Decision Inspector）
 
 ### 当前状态（✅ 2026-08-27 已实现）
@@ -437,6 +448,8 @@ LMC 架构可视化交互面板已上线（`src/components/DecisionInspector.tsx
 | **B6** | **关系状态（Relationship）**：trust/bond/familiarity 三维关系模型，从长期交互数据（touch 频率/对话情感/共处时长）演化。注入 `BrainProviderContext.relationship`，影响 AI 的 socialIntent 选择和 motor tendency。持久化跟随长期记忆存储。 | B5（依赖长期记忆提供历史数据） | ~3d | ⬜ |
 | **B7** | **情绪推理（Emotion Inference）**：AI 驱动 emotionDelta 替代固定 TOUCH_DELTAS 查表。`requestStructuredBrain()` 返回的 `emotionDelta` 已包含在 NeuroBrainIntent 中，此里程碑重点在：让 AI 根据完整上下文（人格+记忆+关系+当前事件）推理出情境敏感的情绪变化，而非硬编码映射。需 benchmark 集验证情绪合理性。 | B2+B5+B6（人格/记忆/关系全部就位） | ~3d | ⬜ |
 
+> **B1 能力边界（2026-09-04 确认）**：B1 的「主决策者」只覆盖 **Agent 状态变化与外部意图的反应类路径**（`decidePlan` 仲裁）；日常自主漫游（wander/dock/idle）仍由 PetView 移动循环内部 util 决策驱动，AI 的 locomotion 意图当前只记录 trace、不会真正执行。范围内路径不受影响，但需在文档层面明确：AI「全程主决策」尚未达成。
+
 ### 依赖路线
 
 ```
@@ -498,10 +511,10 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 | LMC 层 | 新实现 | 说明 |
 |--------|--------|------|
 | Cerebellum | 不变 | 仍输出 MotorPlan（13 个原语） |
-| Motion Engine | `src/neuro/motion/skeletal-engine.ts` | 骨骼系统、IK、补间 |
-| Body | `src/neuro/motion/body-constraints.ts` | 关节约束、弹簧 |
-| Renderer | `src/neuro/motion/three-renderer.ts` | Three.js 2D 骨骼渲染 |
-| Legacy Adapter | 保留为 fallback | 拆件未就绪时回退 spritesheet |
+| Motion Engine | `src/neuro/motion/skeleton.ts` + `skeletal-motion-backend.ts` | 骨骼树、IK、补间、播放器（实现文件名与早期规划 `skeletal-engine.ts` 有出入） |
+| Body | `src/neuro/motion/animation.ts`（FURINA_CONSTRAINTS 约束 + 弹簧） | 关节约束、弹簧 |
+| Renderer | `src/neuro/motion/skeleton-renderer.ts` | Three.js 2D 骨骼渲染 |
+| Legacy Adapter | `legacy-sprite-backend.ts`，保留为 fallback | **当前运行时唯一激活后端**，Skeletal 未接入 |
 
 ### 里程碑
 
@@ -510,9 +523,11 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 | **S1** | **基础骨骼 MVP**：Three.js 场景 + 正交相机；角色拆件（head/body/arms/legs/ears/tail/eyes）；骨骼层级 JSON 定义；基础骨骼变换（rotation/position/scale）；单关节动画验证 | ✅ `35ba47f` |
 | **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ `44950dc` |
 | **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ✅ `6417567` |
-| **S4** | **LMC 集成**：替换 LegacySpriteBackend 为 SkeletalMotionBackend；MotorPlan → Pose Resolver → Bone System 全链路；Reflex 层直接操控骨骼（即时反应）；性能优化 | ✅ `0bbd693` |
+| **S4** | **LMC 集成**：`MotionBackend` 接口 + `SkeletalMotionBackend` 实现（MotorPlan → Animation 解析、AnimationPlayer 集成、逐帧 pose 应用）；**运行时暂未接入**——`runtime.ts` 仍走 legacy-sprite-backend，后端切换留待 S5（配合真实拆分件美术） | ✅ `0bbd693`（接口 + 实现 + 测试） |
 
 ### 美术资产要求
+
+> **当前状态（2026-09-04）**：已生成 **12 张单状态占位 PNG**（`src/assets/skeleton-parts/`，由 `scripts/generate-placeholder-assets.js` 生成），仅用于 S 系列管道验证；eye/mouth 多态、真实画风部件与锚点定义尚待完成，因此运行时后端切换（S5）未启动。
 
 **S1 阶段需要**：
 
