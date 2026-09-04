@@ -1,0 +1,31 @@
+{
+  "version": "0.1",
+  "character": "furina",
+  "animations": {
+    "idle": {
+      "loop": true,
+      "description": "breathing and small posture motion"
+    },
+    "lookAt": {
+      "drivenBy": ["head", "eye_left", "eye_right"]
+    },
+    "blink": {
+      "drivenBy": "morph"
+    },
+    "wave": {
+      "drivenBy": ["arm_left", "arm_right"],
+      "ik": true
+    },
+    "recoil": {
+      "drivenBy": ["spine", "chest", "head"]
+    }
+  },
+  "expressionMorphs": [
+    "neutral",
+    "happy",
+    "sad",
+    "annoyed",
+    "surprised",
+    "tired"
+  ]
+}
