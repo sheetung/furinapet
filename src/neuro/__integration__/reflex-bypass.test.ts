@@ -8,7 +8,19 @@
 import { describe, expect, it } from "vitest";
 import { evaluateReflex } from "../reflex/reflex";
 import { reactionForMotorPlan } from "../motion/legacy-sprite-backend";
-import type { PerceptionEvent } from "../contracts";
+import { emptyPerceptionMemory, reducePerceptionEvent } from "../perception/perception-reducer";
+import { buildReflexEvent } from "../../pet-brain/runtime";
+import type { PerceptionEvent, WorldState } from "../contracts";
+
+function initialWorld(at: number): WorldState {
+  return {
+    timestamp: at,
+    pointer: { x: 0, y: 0, vx: 0, vy: 0, speed: 0, motion: "stationary", targetRegion: "none", distanceToCharacter: 1 },
+    interaction: { type: "none", clickStreak: 0, intensity: 0 },
+    agent: { state: "idle", connected: false },
+    environment: { userIdleMs: 0, canMove: false, canDock: false },
+  };
+}
 
 describe("reflex bypass integration", () => {
   it("face click → blink fires → MotorPlan has expression + recoil, source=reflex", () => {
@@ -104,6 +116,36 @@ describe("reflex bypass integration", () => {
     if (recoil && recoil.type === "recoil") {
       expect(recoil.strength).toBeGreaterThan(0.4);
     }
+  });
+
+  it("runtime wiring: burst of clicks through the perception reducer reaches the flinch streak (regression)", () => {
+    // The runtime used to hard-code streak: 0 in buildReflexEvent, so flinch
+    // (streak >= 6) was unreachable outside tests. The pet-window bootstrap
+    // reduces each sense into WorldState before the brain handler reads it,
+    // so world.interaction.clickStreak must flow into the reflex event.
+    let world = initialWorld(8000);
+    let memory = emptyPerceptionMemory();
+    for (let i = 0; i < 6; i += 1) {
+      const at = 8000 + i * 150;
+      const result = reducePerceptionEvent(
+        world,
+        memory,
+        { type: "touch", at, sense: "pet:clicked", region: "body", streak: 0, intensity: 0 },
+        null,
+      );
+      world = result.world;
+      memory = result.memory;
+    }
+    expect(world.interaction.clickStreak).toBe(6);
+
+    const reflexEvent = buildReflexEvent(
+      { name: "pet:clicked", at: 8000 + 6 * 150, handledByPlugin: false },
+      world,
+    );
+    expect(reflexEvent).not.toBeNull();
+    const reflex = evaluateReflex(reflexEvent!);
+    expect(reflex).not.toBeNull();
+    expect(reflex!.name).toBe("flinch");
   });
 
   it("body click (low streak) → no reflex → falls through to brain pipeline", () => {

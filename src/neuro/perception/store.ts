@@ -8,7 +8,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { desktop } from "../../api";
-import { PET_SENSE_EVENT } from "../../plugins/dom-bridge";
+import { PET_SENSE_EVENT, petSpriteScreenRect } from "../../plugins/dom-bridge";
 import { getCharacterStore } from "../character/character-store";
 import type { BrainAgentStateEvent, PetSenseEventDetail } from "../../pet-brain/types";
 import type {
@@ -135,12 +135,15 @@ async function samplePointer() {
     };
     const state = getWorldStateStore();
     state.setGeometry(geometry);
+    // The sprite may sit below an expanded bubble; classify against its real
+    // visual bounds so regions do not shift upward while the bubble is open.
+    const spriteRect = petSpriteScreenRect(position);
     state.dispatch({
       type: "pointer",
       at: Date.now(),
       x: pointer.x,
       y: pointer.y,
-      region: regionAtPointer(pointer, geometry),
+      region: spriteRect ? regionAtPointer(pointer, spriteRect) : regionAtPointer(pointer, geometry),
     });
   } catch {
     // The pet window may be hidden or closing; skip this sample.

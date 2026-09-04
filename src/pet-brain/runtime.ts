@@ -83,6 +83,29 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
   const character = buildCharacterState(brain.blackboard, now);
   const world = getWorldState();
   const intent = synthesizeBrainIntent(plan, character, world);
+
+  const locomotionOnly =
+    plan.actions.length > 0
+    && plan.actions.every((action) => action.type === "wander" || action.type === "dock");
+  if (locomotionOnly) {
+    // Locomotion is owned by PetView's movement loop (it plans wander/dock
+    // itself); executing these actions here would be a silent no-op. Record the
+    // decision so the inspector shows what the brain chose instead of dropping
+    // it, then hand the window state to the movement loop.
+    recordNeuroTrace({
+      t: now,
+      goal: plan.goal,
+      confidence: intent.confidence,
+      motorTendency: intent.motorTendency,
+      primitives: plan.actions.map((action) => action.type),
+      reaction: null,
+      durationMs: 0,
+      source: plan.source === "ai" ? "ai" : "rule",
+    });
+    publishPetBrainSnapshot();
+    return;
+  }
+
   publishPetBrainSnapshot();
   await brain.execute(plan, async (action, signal) => {
     publishPetBrainSnapshot();
@@ -238,8 +261,11 @@ export function buildReflexEvent(detail: PetSenseEventDetail, world: ReturnType<
       // Prefer the region resolved from the real click position; the sampler's
       // targetRegion is stale for delayed tap dispatches (pointer already moved).
       region: detail.region ?? world.pointer.targetRegion,
-      streak: 0,
-      intensity: 0,
+      // The perception store reduces this sense before the brain handler runs
+      // (see main.tsx bootstrap order), so world.interaction carries the live
+      // click streak — the flinch reflex (streak ≥ 6) depends on it.
+      streak: world.interaction.clickStreak,
+      intensity: world.interaction.intensity,
     };
   }
   return null;

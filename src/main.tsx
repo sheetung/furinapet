@@ -17,9 +17,12 @@ const isPetWindow = params.get("window") === "pet";
 if (isPetWindow) document.documentElement.classList.add("pet-window");
 if (isPetWindow) {
   installPetDomBridge();
+  // Perception first: the WorldState (including click streak) must reflect a
+  // sense before the brain's handler reads it (runtime.ts buildReflexEvent
+  // derives the flinch streak from the freshly reduced interaction).
+  bootstrapNeuroPerception();
   bootstrapPetBrainRuntime();
   bootstrapAiSuggestionRuntime();
-  bootstrapNeuroPerception();
 } else {
   bootstrapPluginRuntime();
 }

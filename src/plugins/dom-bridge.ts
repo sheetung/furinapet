@@ -15,6 +15,38 @@ function pointerScale(): number {
 }
 
 /**
+ * Physical screen rect of the pet sprite element, or null when the pet
+ * window has not mounted it yet.
+ *
+ * The window rectangle is not the body: when a speech bubble is open the
+ * window grows upward by the bubble allowance, and the sprite stays anchored
+ * to the bottom (pet.css `.sprite { bottom: 0 }`). Region classification
+ * (face/head/body/hand) must therefore measure against the sprite's own
+ * transformed bounds, not the whole window — otherwise every tap lands in a
+ * higher band than reality while the bubble is visible.
+ */
+export function petSpriteScreenRect(origin: { x: number; y: number }): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} | null {
+  const sprite = document.querySelector<HTMLElement>(".sprite");
+  if (!sprite) return null;
+  const rect = sprite.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const factor = pointerScale();
+  // The window is undecorated (no frame), so the WebView viewport origin is
+  // the window origin; CSS px * devicePixelRatio maps to physical screen px.
+  return {
+    x: origin.x + rect.left * factor,
+    y: origin.y + rect.top * factor,
+    width: rect.width * factor,
+    height: rect.height * factor,
+  };
+}
+
+/**
  * Resolve the body region for a tap from its physical screen position.
  *
  * Region is resolved at pointerdown time, when the pointer is guaranteed to
@@ -26,7 +58,13 @@ function pointerScale(): number {
 async function regionForPointer(pointer: { x: number; y: number }): Promise<BodyRegion | undefined> {
   try {
     const petWindow = getCurrentWindow();
-    const [position, size] = await Promise.all([petWindow.outerPosition(), petWindow.outerSize()]);
+    const position = await petWindow.outerPosition();
+    // Classify against the sprite's actual visual bounds (the window may
+    // include an opening bubble above it), falling back to the window rect
+    // before the pet has mounted.
+    const spriteRect = petSpriteScreenRect(position);
+    if (spriteRect) return regionAtPointer(pointer, spriteRect);
+    const size = await petWindow.outerSize();
     return regionAtPointer(pointer, {
       x: position.x,
       y: position.y,

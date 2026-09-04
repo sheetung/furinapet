@@ -99,15 +99,28 @@ export function PetView() {
   const settingsRef = useRef(settings);
   const charactersRef = useRef(characters);
   const motionRef = useRef<MotionState>({ dragging: false, falling: false, fallToken: 0 });
+  const visibleRef = useRef(true);
   const layoutQueue = useRef<Promise<void>>(Promise.resolve());
   const bubbleExpandedRef = useRef(false);
   const bubbleClampRef = useRef(0);
   const brainRef = useRef<PetBrain | null>(null);
   if (!brainRef.current) brainRef.current = new PetBrain();
 
-  useEffect(() => { reactionRef.current = reaction; }, [reaction]);
+  useEffect(() => {
+    reactionRef.current = reaction;
+  }, [reaction]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { charactersRef.current = characters; }, [characters]);
+
+  // Track window visibility: the movement/look loops must not do IPC work
+  // (outerPosition/outerSize/cursorPosition/setPosition) while the pet is
+  // hidden — it would drift unseen and burn CPU. Hides are driven by
+  // settings.petVisible, but a window can also be closed directly (Alt+F4), so
+  // the hidden branch re-checks isVisible() at idle rate to cover both.
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    void getCurrentWindow().isVisible().then((visible) => { visibleRef.current = visible; }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     void loadCharacterRegistry().then(setCharacters).catch(() => {
@@ -326,6 +339,19 @@ export function PetView() {
       if (cancelled) return;
       if (!currentSettings) {
         timer = window.setTimeout(() => void tick(), MOTION_INTERVAL_MS);
+        return;
+      }
+      if (!currentSettings.petVisible || !visibleRef.current) {
+        // While hidden do no window IPC; idle-poll slowly so the loop resumes
+        // instantly on show. A hide outside settings (window closed directly)
+        // is caught by the occasional isVisible() re-check in this branch.
+        const hiddenBySettings = !currentSettings.petVisible;
+        timer = window.setTimeout(() => {
+          if (!hiddenBySettings) {
+            void getCurrentWindow().isVisible().then((visible) => { visibleRef.current = visible; }).catch(() => undefined);
+          }
+          void tick();
+        }, MOTION_INTERVAL_MS * 8);
         return;
       }
       const now = performance.now();
@@ -654,7 +680,12 @@ export function PetView() {
       let velocity = 40;
       let previous = performance.now();
 
-      while (y < groundY && motionRef.current.fallToken === token && !motionRef.current.dragging) {
+      while (
+        y < groundY
+        && motionRef.current.fallToken === token
+        && !motionRef.current.dragging
+        && visibleRef.current
+      ) {
         await delay(16);
         const now = performance.now();
         const seconds = Math.min(0.05, (now - previous) / 1000);
@@ -663,7 +694,7 @@ export function PetView() {
         y = Math.min(groundY, y + velocity * seconds);
         await petWindow.setPosition(new PhysicalPosition(position.x, Math.round(y)));
       }
-      if (motionRef.current.fallToken === token) {
+      if (motionRef.current.fallToken === token && visibleRef.current) {
         await petWindow.setPosition(new PhysicalPosition(position.x, groundY));
       }
     } catch {
