@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "character": "furina",
+  "controls": {
+    "root": {"role":"world_translation","channels":["translation"]},
+    "motion_root": {"role":"reaction_root","channels":["rotation"]},
+    "head": {"role":"look_primary","channels":["rotation"]},
+    "neck": {"role":"look_follow","channels":["rotation"]},
+    "eye_left": {"role":"gaze","channels":["rotation"]},
+    "eye_right": {"role":"gaze","channels":["rotation"]},
+    "arm_left": {"role":"gesture","side":"left","channels":["rotation"]},
+    "arm_right": {"role":"gesture","side":"right","channels":["rotation"]},
+    "leg_left": {"role":"step","side":"left","channels":["rotation"]},
+    "leg_right": {"role":"step","side":"right","channels":["rotation"]},
+    "hair_back": {"role":"spring","channels":["rotation","translation"]},
+    "hair_side_left": {"role":"spring","side":"left","channels":["rotation"]},
+    "hair_side_right": {"role":"spring","side":"right","channels":["rotation"]},
+    "hair_curl": {"role":"spring","channels":["rotation"]},
+    "coat_left": {"role":"spring","side":"left","channels":["rotation"]},
+    "coat_right": {"role":"spring","side":"right","channels":["rotation"]},
+    "cloth_center": {"role":"damping","channels":["rotation"]},
+    "accessory_brooch": {"role":"rigid_accessory","channels":[]},
+    "hat": {"role":"rigid_accessory","channels":[]},
+    "hat_bow": {"role":"rigid_accessory","channels":[]}
+  }
+}

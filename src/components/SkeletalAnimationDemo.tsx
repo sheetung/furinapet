@@ -11,74 +11,83 @@ import { SkeletonRenderer } from "../neuro/motion/skeleton-renderer";
 import { SkeletalMotionBackend } from "../neuro/motion/skeletal-motion-backend";
 import type { MotorPlan, MotorPrimitive } from "../neuro/contracts/motor-plan";
 
-// Import placeholder art assets
+// Import the production Furina cutout textures.
 import bodyImg from "../assets/skeleton-parts/body.png";
 import headImg from "../assets/skeleton-parts/head.png";
+import hairBackImg from "../assets/skeleton-parts/hair_back.png";
 import armLeftImg from "../assets/skeleton-parts/arm_left.png";
 import armRightImg from "../assets/skeleton-parts/arm_right.png";
 import legLeftImg from "../assets/skeleton-parts/leg_left.png";
 import legRightImg from "../assets/skeleton-parts/leg_right.png";
-import earLeftImg from "../assets/skeleton-parts/ear_left.png";
-import earRightImg from "../assets/skeleton-parts/ear_right.png";
-import tailImg from "../assets/skeleton-parts/tail.png";
+import coatLeftImg from "../assets/skeleton-parts/coat_left.png";
+import coatRightImg from "../assets/skeleton-parts/coat_right.png";
 
-// Demo skeleton with placeholder art assets
+// Furina's compact rigid-cutout rig. Artwork overlaps at every joint so small
+// rotations never expose a gap.
 const DEMO_SKELETON: BoneConfig = {
   name: "root",
-  position: [0, -60],
+  position: [0, -55],
   children: {
-    body: {
-      name: "body",
-      position: [0, 50],
-      mesh: { texture: bodyImg, width: 80, height: 120 },
+    motion_root: {
+      name: "motion_root",
+      position: [0, 0],
       children: {
-        head: {
-          name: "head",
-          position: [0, 40],
-          anchor: [0, -10],
-          mesh: { texture: headImg, width: 70, height: 70 },
-        },
-        arm_left: {
-          name: "arm_left",
-          position: [-55, 25],
-          anchor: [0, 15],
-          mesh: { texture: armLeftImg, width: 30, height: 80 },
-        },
-        arm_right: {
-          name: "arm_right",
-          position: [55, 25],
-          anchor: [0, 15],
-          mesh: { texture: armRightImg, width: 30, height: 80 },
-        },
-        leg_left: {
-          name: "leg_left",
-          position: [-20, -10],
-          anchor: [0, 20],
-          mesh: { texture: legLeftImg, width: 36, height: 90 },
-        },
-        leg_right: {
-          name: "leg_right",
-          position: [20, -10],
-          anchor: [0, 20],
-          mesh: { texture: legRightImg, width: 36, height: 90 },
-        },
-        ear_left: {
-          name: "ear_left",
-          position: [-25, 55],
-          anchor: [0, -5],
-          mesh: { texture: earLeftImg, width: 20, height: 30 },
-        },
-        ear_right: {
-          name: "ear_right",
-          position: [25, 55],
-          anchor: [0, -5],
-          mesh: { texture: earRightImg, width: 20, height: 30 },
-        },
-        tail: {
-          name: "tail",
-          position: [0, -5],
-          anchor: [0, -10],
-          mesh: { texture: tailImg, width: 16, height: 60 },
+        body: {
+          name: "body",
+          position: [0, 65],
+          mesh: { texture: bodyImg, width: 88, height: 132, zIndex: 0 },
+          children: {
+            coat_left: {
+              name: "coat_left",
+              position: [-30, -18],
+              anchor: [0, -48],
+              mesh: { texture: coatLeftImg, width: 83, height: 125, zIndex: -4 },
+            },
+            coat_right: {
+              name: "coat_right",
+              position: [30, -18],
+              anchor: [0, -48],
+              mesh: { texture: coatRightImg, width: 83, height: 125, zIndex: -4 },
+            },
+            leg_left: {
+              name: "leg_left",
+              position: [-18, -48],
+              anchor: [0, -48],
+              mesh: { texture: legLeftImg, width: 49, height: 122, zIndex: -1 },
+            },
+            leg_right: {
+              name: "leg_right",
+              position: [18, -48],
+              anchor: [0, -48],
+              mesh: { texture: legRightImg, width: 49, height: 122, zIndex: -1 },
+            },
+            head: {
+              name: "head",
+              position: [0, 66],
+              anchor: [0, 54],
+              mesh: { texture: headImg, width: 147, height: 160, zIndex: 5 },
+              children: {
+                hair_back: {
+                  name: "hair_back",
+                  position: [0, 0],
+                  anchor: [0, 14],
+                  mesh: { texture: hairBackImg, width: 151, height: 90, zIndex: -5 },
+                },
+              },
+            },
+            arm_left: {
+              name: "arm_left",
+              position: [-46, 24],
+              anchor: [0, -42],
+              mesh: { texture: armLeftImg, width: 88, height: 116, zIndex: 3 },
+            },
+            arm_right: {
+              name: "arm_right",
+              position: [46, 24],
+              anchor: [0, -42],
+              mesh: { texture: armRightImg, width: 91, height: 116, zIndex: 3 },
+            },
+          },
         },
       },
     },
@@ -112,16 +121,6 @@ const PRESETS: Record<string, MotorPlan> = {
     durationMs: 500,
     confidence: 1,
   },
-  earTwitch: {
-    actions: [{ type: "earPose", pose: "perked", weight: 1 }],
-    durationMs: 300,
-    confidence: 1,
-  },
-  tailWag: {
-    actions: [{ type: "tailMotion", motion: "wag", weight: 1 }],
-    durationMs: 600,
-    confidence: 1,
-  },
 };
 
 export function SkeletalAnimationDemo() {
@@ -146,7 +145,7 @@ export function SkeletalAnimationDemo() {
       width: 400,
       height: 400,
       backgroundColor: 0x202020,
-      zoom: 1.5,
+      zoom: 0.9,
     });
     rendererRef.current = renderer;
 
@@ -232,11 +231,10 @@ export function SkeletalAnimationDemo() {
           <div style={{ marginTop: "20px", fontSize: "11px", color: "#888" }}>
             <h4 style={{ fontSize: "12px", marginBottom: "8px" }}>骨骼层级:</h4>
             <div style={{ paddingLeft: "10px", lineHeight: "1.6" }}>
-              root → body → head<br />
-              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ arm_left, arm_right<br />
-              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ leg_left, leg_right<br />
-              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ ear_left, ear_right<br />
-              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ tail
+              root → motion_root → body → head → hair_back<br />
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ arm_left, arm_right<br />
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ leg_left, leg_right<br />
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ coat_left, coat_right
             </div>
           </div>
 

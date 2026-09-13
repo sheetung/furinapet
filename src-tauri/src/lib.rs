@@ -50,6 +50,12 @@ pub fn run() {
             window_surfaces::start_fullscreen_watcher(&app_handle);
 
             if let Some(main_window) = app.get_webview_window("main") {
+                // Local QA entry when the saved pet is hidden and there is no visible window.
+                // Debug-only; does not modify persisted visibility or startup preferences.
+                #[cfg(debug_assertions)]
+                if std::env::args().any(|arg| arg == "--show-control-center") {
+                    main_window.show()?;
+                }
                 let main_for_close = main_window.clone();
                 main_window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {

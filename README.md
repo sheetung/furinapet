@@ -1,5 +1,10 @@
 # 芙宁娜桌宠
 
+> **本分支状态（2026-09-13）：暂停的美术/骨骼实验。** `feat/furina-art-pipeline`
+> 包含神经系统、切片/蒙皮候选与可选 GLB 运行时；当前美术效果未通过用户验收，
+> 不作为正式角色交付，也不合入主线。当前准确状态与文件入口见
+> [实验分支归档说明](docs/art-pipeline-snapshot.md)。下方产品简介主要描述主线基础产品。
+
 <p align="center">
   <img src="public/assets/furina-app-icon.png" width="128" alt="芙宁娜桌宠头像" />
 </p>

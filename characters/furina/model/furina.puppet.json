@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "source": "C:\\Users\\sheetung\\Documents\\cherrycli\\furinapet\\characters\\furina\\source-art\\furina-puppet-base.png",
+  "method": "normalized-polygon-cutout-with-joint-overlap",
+  "pieces": {
+    "head": {
+      "file": "head.png",
+      "sourceBounds": [
+        232,
+        49,
+        830,
+        705
+      ],
+      "textureSize": [
+        644,
+        702
+      ]
+    },
+    "body": {
+      "file": "body.png",
+      "sourceBounds": [
+        369,
+        599,
+        656,
+        1045
+      ],
+      "textureSize": [
+        319,
+        478
+      ]
+    },
+    "hair_back": {
+      "file": "hair_back.png",
+      "sourceBounds": [
+        232,
+        421,
+        806,
+        747
+      ],
+      "textureSize": [
+        614,
+        366
+      ]
+    },
+    "arm_left": {
+      "file": "arm_left.png",
+      "sourceBounds": [
+        173,
+        645,
+        441,
+        1005
+      ],
+      "textureSize": [
+        294,
+        386
+      ]
+    },
+    "arm_right": {
+      "file": "arm_right.png",
+      "sourceBounds": [
+        584,
+        645,
+        860,
+        1005
+      ],
+      "textureSize": [
+        302,
+        386
+      ]
+    },
+    "coat_left": {
+      "file": "coat_left.png",
+      "sourceBounds": [
+        224,
+        829,
+        513,
+        1278
+      ],
+      "textureSize": [
+        321,
+        481
+      ]
+    },
+    "coat_right": {
+      "file": "coat_right.png",
+      "sourceBounds": [
+        512,
+        829,
+        801,
+        1281
+      ],
+      "textureSize": [
+        321,
+        484
+      ]
+    },
+    "leg_left": {
+      "file": "leg_left.png",
+      "sourceBounds": [
+        362,
+        998,
+        523,
+        1443
+      ],
+      "textureSize": [
+        193,
+        477
+      ]
+    },
+    "leg_right": {
+      "file": "leg_right.png",
+      "sourceBounds": [
+        502,
+        998,
+        663,
+        1443
+      ],
+      "textureSize": [
+        193,
+        477
+      ]
+    }
+  }
+}

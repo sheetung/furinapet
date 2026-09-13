@@ -1,0 +1,21 @@
+{
+  "blenderVersion": "5.1.1",
+  "meshCount": 9,
+  "boneCount": 19,
+  "vertices": 4548,
+  "clips": [
+    "idle",
+    "wave",
+    "recoil",
+    "blink"
+  ],
+  "morphTargets": [
+    "happy",
+    "surprised",
+    "annoyed",
+    "tired",
+    "blink"
+  ],
+  "expressionsComplete": false,
+  "note": "UV-warp expression studies; separate facial artwork and visual acceptance remain outstanding."
+}

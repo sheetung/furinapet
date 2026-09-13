@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { PetBody } from './components/PetBody';
+import { DragGesture } from './core/drag-gesture';
 import { listen } from "@tauri-apps/api/event";
 import {
   cursorPosition,
@@ -86,6 +88,8 @@ interface MotionState {
 const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 
 export function PetView() {
+  const rigRequested = new URLSearchParams(window.location.search).get('renderer') === 'rigged'
+    || import.meta.env.VITE_PET_RENDERER === 'rigged';
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [characters, setCharacters] = useState<CharacterDefinition[]>(characterRegistry);
   const [reaction, setReaction] = useState<MotionReaction>("idle");
@@ -99,6 +103,7 @@ export function PetView() {
   const settingsRef = useRef(settings);
   const charactersRef = useRef(characters);
   const motionRef = useRef<MotionState>({ dragging: false, falling: false, fallToken: 0 });
+  const dragGesture = useRef(new DragGesture());
   const visibleRef = useRef(true);
   const layoutQueue = useRef<Promise<void>>(Promise.resolve());
   const bubbleExpandedRef = useRef(false);
@@ -707,8 +712,8 @@ export function PetView() {
     }
   }
 
-  async function beginDrag(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
+  async function beginDrag() {
+    if (motionRef.current.dragging) return;
     if (reactionTimer.current) {
       window.clearTimeout(reactionTimer.current);
       reactionTimer.current = null;
@@ -719,22 +724,27 @@ export function PetView() {
     motionRef.current.fallToken += 1;
     motionRef.current.falling = false;
     motionRef.current.dragging = true;
-    setMessage("");
     setLook(null);
     changeReaction("idle");
     try {
-      await resizeForBubble(false, settingsRef.current?.scale ?? 1);
+      // Invoke while the button is held, before any asynchronous layout IPC.
+      // Keep the bubble geometry stable during the native move loop.
       await getCurrentWindow().startDragging();
       await desktop.waitForDragRelease();
+    } catch (error) {
+      console.warn('[pet-drag] native drag failed', error);
     } finally {
       motionRef.current.dragging = false;
       dispatchPetSense("pet:dragEnd");
+      setMessage("");
+      await resizeForBubble(false, settingsRef.current?.scale ?? 1);
       await settleWithGravity();
     }
   }
 
   if (!settings) return null;
   const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
+  const useRig = rigRequested && activeCharacter.id === 'furina' && activeCharacter.source !== 'imported' && activeCharacter.source !== 'online';
   const displayedLook = look
     ? mapLookDirection(look, activeCharacter.lookDirectionOrder)
     : null;
@@ -752,12 +762,24 @@ export function PetView() {
     <div
       className="pet-stage"
       style={stageStyle}
-      onPointerDown={(event) => void beginDrag(event)}
+      onPointerDown={(event) => {
+        if(event.button!==0 || motionRef.current.dragging)return;
+        dragGesture.current.down(event.pointerId,event.button,event.clientX,event.clientY);
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        if(!dragGesture.current.move(event.pointerId,event.buttons,event.clientX,event.clientY))return;
+        if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
+        void beginDrag();
+      }}
+      onPointerUp={(event) => dragGesture.current.end(event.pointerId)}
+      onPointerCancel={(event) => dragGesture.current.end(event.pointerId)}
+      onLostPointerCapture={(event) => dragGesture.current.end(event.pointerId)}
       onDoubleClick={() => void desktop.react("waving", activeCharacter.reactionMessages?.waving ?? "你好呀！")}
       onContextMenu={(event) => { event.preventDefault(); void desktop.showControlCenter(); }}
     >
       {message && <div className="pet-bubble">{message}</div>}
-      <div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`} />
+      <PetBody enabled={useRig} reaction={reaction} scale={settings.scale} fallback={<div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`} />}/>
     </div>
   );
 }

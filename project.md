@@ -1,7 +1,11 @@
 # FurinaPet Neuro 工程记录
 
-> 本文档记录 `furinapet-neuro` 分支上的「类人认知—运动架构」改造：目标、架构、里程碑与当前进度。
-> 开发均在 `furinapet-neuro` 分支上进行；基线为本分支上的 v1.1.2（`cccf510`）。`main` 分支冻结于 v1.0.9（`7a5fef4`），v1.1.0–v1.1.2 及神经改造只存在于本分支，不参与开发。架构总纲见 **《LMC》**（[`docs/LMC.md`](docs/LMC.md)）。
+> **当前状态（2026-09-13）：实验暂停，S5 未完成，美术未通过用户验收。** 本文历史记录源自
+> `furinapet-neuro`，本次工作实际保存在 `feat/furina-art-pipeline`。
+> 远端 `main` 当前为 v1.1.2（`cccf510`），没有 `src/neuro`，但已有较早的 Pet Brain、
+> AI Adviser、Agent 与插件功能。原“main 冻结于 v1.0.9”说法作废。
+> 下文保留历史过程；当前成果、缺口和恢复入口统一见 [实验分支归档说明](docs/art-pipeline-snapshot.md)。
+> 架构总纲见 [LMC](docs/LMC.md)。
 
 ## 一、项目简介
 
@@ -515,7 +519,7 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 | Motion Engine | `src/neuro/motion/skeleton.ts` + `skeletal-motion-backend.ts` | 骨骼树、IK、补间、播放器（实现文件名与早期规划 `skeletal-engine.ts` 有出入） |
 | Body | `src/neuro/motion/animation.ts`（FURINA_CONSTRAINTS 约束 + 弹簧） | 关节约束、弹簧 |
 | Renderer | `src/neuro/motion/skeleton-renderer.ts` | Three.js 2D 骨骼渲染 |
-| Legacy Adapter | `legacy-sprite-backend.ts`，保留为 fallback | **当前运行时唯一激活后端**，Skeletal 未接入 |
+| Legacy Adapter | `legacy-sprite-backend.ts`，保留为 fallback | 默认后端；可选 GLB 身体已接入执行点，旧手写 Skeleton 后端仍未激活 |
 
 ### 里程碑
 
@@ -525,25 +529,58 @@ Renderer（Three.js 绘制 2D 部件 + 骨骼变换）
 | **S2** | **动画系统**：Pose 定义（每个动作的目标骨骼状态）；补间插值（smooth transition）；Motor Primitives → Pose 映射（lookAt→head+eye, recoil→body+head, earPose→ears）；约束系统（joint limits 防超范围） | ✅ `44950dc` |
 | **S3** | **IK + 高级**：Two-bone IK（手臂/腿）；Look-at IK（头/眼跟随目标）；弹簧阻尼（自然摆动）；表情系统（眼睛/嘴巴部件切换） | ✅ `6417567` |
 | **S4** | **LMC 集成**：`MotionBackend` 接口 + `SkeletalMotionBackend` 实现（MotorPlan → Animation 解析、AnimationPlayer 集成、逐帧 pose 应用）；**运行时暂未接入**——`runtime.ts` 仍走 legacy-sprite-backend，后端切换留待 S5（配合真实拆分件美术） | ✅ `0bbd693`（接口 + 实现 + 测试） |
-| **S5** | **运行时切换 + Rig 资产**：`runtime.ts` 默认后端切到 `SkeletalMotionBackend`（legacy 保留 fallback）；芙宁娜 Blender Rig 按 [docs/furina-rig-standard.md](docs/furina-rig-standard.md)（33±2 骨 / morph≤10 / glTF 落库 `characters/furina/model/`）交付 | ⬜ 等待 PR1（bone-target 求解）+ PR2（Rig 资产） |
+| **S5** | **运行时切换 + Rig 资产**：按 [docs/furina-rig-standard.md](docs/furina-rig-standard.md) 交付 Blender、蒙皮、morph 和 glTF，保留 legacy fallback | 🟨 GLB 已接入；原生模型显示、控制中心挥手/气泡、隐藏恢复抽样通过；拖动/双击未通过，剩余动作与最终验收待完成 |
 
 ### 美术资产要求
 
-> **当前状态（2026-09-04）**：已生成 **12 张单状态占位 PNG**（`src/assets/skeleton-parts/`，由 `scripts/generate-placeholder-assets.js` 生成），仅用于 S 系列管道验证；eye/mouth 多态、真实画风部件与锚点定义尚待完成，因此运行时后端切换（S5）未启动。
+> **最新状态（2026-09-07）**：已使用本机 Blender 5.1.1 产出可编辑工程和独立蒙皮候选，打通 Blender → GLB → 浏览器加载链路。原“缺少蒙皮、morph、动画”的记录仅适用于旧原型；新候选已有这些数据，但美术验收仍未通过，不能标记 PR2 / S5 完成。
 
-**S1 阶段需要**：
+#### Blender 美术制作进度（2026-09-07）
+
+**骨骼动作扩展（2026-09-09，最新）**：新增左右膝骨与渐变蒙皮，候选为 21 骨、13 网格；新增 walk/jump/cheer/think，连同原动画共 8 段。运行时已改为播放真实四肢/根骨轨道，移除整体起伏替代；加入头发/衣摆阻尼跟随和关节角限幅。324 项测试通过，Khronos 零错误/警告；步行重叠深度已调整并重新生成渲染。仍是 2.5D FK 动作，完整 IK、脚底锁定、全范围遮挡/变形与原生新版验收尚未完成，不能标记 S5 完成。
+
+**S5 外观一致性（2026-09-09，最新）**：用户已确认拖动能移动到目标位置并开心跳、单击挥手，拖动人工验收通过。待机/运动外观差异确认为动作能力回退切换旧 sprite；现改为 GLB 就绪后始终保留同一身体，新增基础跳跃/跑动/思考程序动画，缺失原语仅记录缺口，加载/渲染故障仍回退 sprite。323 项 / 25 文件及构建通过，最终动作美术/IK 等仍待完善。
+
+**S5 新版复测（2026-09-09，最新）**：已获授权停止旧实例并运行修复版；自动化仍未取得拖动位移证据。更正双击标准：原生感知层接管双击并触发惊吓，不保证挥手/气泡；工具即时结果为两次普通点击，等待用户手动复核以区分应用与输入工具问题。S5 未完成，新版暂保持可见/自主移动关闭供手测。
+
+**S5 复测准备（2026-09-09，最新）**：含拖动阈值修复的 GLB Tauri 调试版构建成功；用户 D:\furinapet 下另一实例正在运行，本轮未停止或并行启动，待退出旧实例或获准停止后复测。拖动/双击验收状态不变。
+
+**S5 交互修复（2026-09-08，最新）**：将原生拖动从 pointerdown 改为左键移动超过 5px 后触发，取消拖动前的异步尺寸等待，保留轻微抖动/普通点击供双击识别；增加取消/释放与多指针回归。320 项 / 25 文件测试及前端构建通过。原生拖动/双击待更新调试版复测，尚不能勾选通过。美术继续后置。
+
+**S5 原生抽样补记（最新）**：已构建并运行内嵌 GLB 的 Tauri/WebView2 调试版；模型显示、控制中心挥手/短气泡、隐藏恢复通过抽样。拖动未观察到坐标变化，双击未可靠出现气泡，需继续诊断；尚未做安装及原生故障注入。新增 debug-only `--show-control-center` 便于隐藏状态下验证。复现配置与逐项证据见 [原生验收记录](docs/s5-native-acceptance.md)。
+
+**S5 稳定性补记（最新）**：取消幂等化并恢复最新 legacy 状态，清除残留表情/强度；计划到期按实际间隔计算，动画积分仍限帧；显式表情优先于 idleStyle，前后 lean 明确回退；阻止上下文丢失后的迟到加载重启渲染，释放共享 Skeleton GPU 资源。前端 **316 项 / 24 文件**通过，生产构建通过；`cargo test --manifest-path src-tauri/Cargo.toml --locked` 通过，但当前 Rust 测试数为 0，只证明测试目标编译/链接成功，不等于原生窗口验收。S5 仍为部分完成，美术精修暂缓。
+
+**最终验证补记**：新增原生 CSP 本地 GLB/blob 读取配置检查后，测试总数为 **311 项 / 24 文件**；前端构建与 `cargo check --manifest-path src-tauri/Cargo.toml --locked` 均通过。浏览器还确认了不支持动作回退及取消后恢复 GLB。下段 310 项为加入 CSP 检查前的结果。
+
+**运行时对接阶段（最新，按用户要求暂停美术精修）**：已将脑/反射执行点的 MotorPlan 连接到共享 PetBody / GlbBody，加入组合动作与表情、取消/超时、反射优先级、Shadow 隔离与 legacy 回退。PetView 可通过 `renderer=rigged` 或 `VITE_PET_RENDERER=rigged` 选择 GLB，默认不变。实际 GLB 集成测试加入后为 310 项 / 24 文件通过，构建通过。浏览器共用组件的模型加载和模拟失败回退已验证；Tauri 原生端到端验收仍待执行。能力/降级/开启方式详见 [运行时对接记录](docs/rigged-runtime-integration.md)。S5 为部分接入，不能继续描述为“完全未接入”，也不能标记最终验收完成。
+
+**第二轮修整（最新）**：双臂已通过 imagegen 补绘，衣摆网格误含的袖子区域已裁去；当前挥手渲染中的悬空残片已清理。新增左右独立眼睛/眼睑，闭眼不再牵动刘海，GLB 的 blink 已合并驱动眼部部件。候选更新为 **13 个 glTF 网格、19 骨、6,350 顶点**（Three.js 双材质拆分后为 14 个 SkinnedMesh）。Khronos 零错误/警告；头发 blink 零位移及眼部通道契约检查通过，304 项测试与构建通过。预览新增基于 `updateSpring` 的轻推回弹测试，替换正弦摆动。最新渲染见 `characters/furina/model/qa/refined/`，图像来源/提示词见 `characters/furina/source-art/refinement-prompts.md`。仍待眼部贴合和表情精修、嘴/眉独立控制、完整运动验收、JSON 同步及 S5 接入，PR2 尚未完成。
+
+以下为首轮链路打通时的历史记录，数量及缺陷状态以上述第二轮为准：
+
+- **资产**：`characters/furina/model/furina.blend`（纹理打包）与 `furina.skinned.glb`；19 根骨骼、9 个蒙皮网格、4,548 顶点、1 个 skin。
+- **动画/表情**：4 段真实动画 `idle` / `wave` / `recoil` / `blink`；5 个形态键试作 `happy` / `surprised` / `annoyed` / `tired` / `blink`，neutral 为基础形态。
+- **已修复**：形态键默认叠加、挥手旋转轴错误、蒙皮网格非根节点导出警告。
+- **真实加载预览**：`/skinned-art.html` 使用 GLTFLoader 与 AnimationMixer，已验证加载及挥手/眨眼交互；与旧 `/skeletal-art.html` PNG 平面演示分开，不增加正式入口的模型依赖。
+- **验证**：Khronos 校验 0 错误、0 警告（9 条纹理尺寸信息提示）；23 个测试文件、304 项测试通过，TypeScript / Vite 构建通过。报告与渲染在 `characters/furina/model/qa/`，候选仍为 `productionReady: false`。
+- **未完成**：大幅挥手暴露切片残片及肩部遮挡缺口；眨眼牵动刘海/眼角；需要独立眼睛、眼睑、脸部分层及表情精修。动作范围、物理弹簧和最终视觉验收尚未完成。
+- **后续顺序**：补绘及独立面部分层 → 复核表情/动作/弹簧 → 同步最终 GLB 与 JSON 契约并生成验收证据 → S5 运行时接入和 fallback 回归。
+- **边界**：旧 `furina.mesh.glb` 和骨架/动画 JSON 仍属于此前 27 节点无蒙皮原型，不得与新 19 骨候选混用。正式桌宠仍使用原 spritesheet。
+
+详细计划见 [美术制作计划](docs/furina-art-production-plan.md)，复现命令与缺陷见 [候选状态](characters/furina/model/PROTOTYPE-STATUS.md)，实际加载记录见 [运行时复核](characters/furina/model/qa/runtime-review.md)。
+
+**正式切片组成**：
 
 1. 将现有角色拆为独立部件 PNG（带透明通道）：
    - `head.png`（含脸部基础）
    - `body.png`（躯干）
    - `arm_left.png` / `arm_right.png`
    - `leg_left.png` / `leg_right.png`
-   - `ear_left.png` / `ear_right.png`
-   - `tail.png`
-   - `eye_left.png` / `eye_right.png`（多种状态：open/half/closed）
-   - `mouth.png`（多种状态：neutral/smile/open）
+   - `hair_back.png`（后发弹簧层）
+   - `coat_left.png` / `coat_right.png`（双侧衣摆弹簧层）
 
-2. 每个部件的**锚点**（pivot point）定义——旋转中心在哪里（如 head 的锚点在颈部）
+2. 每个部件的**锚点**（pivot point）与遮挡深度已在交互预览和 GLB 构建脚本中固定。
 
 3. **骨骼层级配置**（JSON）：
    ```json

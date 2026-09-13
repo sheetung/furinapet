@@ -62,9 +62,13 @@ export class SkeletonRenderer {
   private createBoneMesh(bone: Bone): void {
     if (!bone.meshConfig) return;
 
-    const { texture, width, height } = bone.meshConfig;
+    const { texture, width, height, zIndex = 0 } = bone.meshConfig;
 
     const geometry = new THREE.PlaneGeometry(width, height);
+    // Keep the bone at the joint and offset the artwork around that pivot.
+    // Translating vertices (instead of the mesh node) preserves the offset
+    // when the bone rotates.
+    geometry.translate(bone.anchor.x, bone.anchor.y, 0);
     const tex = this.textureLoader.load(texture);
     tex.minFilter = THREE.NearestFilter;
     tex.magFilter = THREE.NearestFilter;
@@ -73,13 +77,15 @@ export class SkeletonRenderer {
     const material = new THREE.MeshBasicMaterial({
       map: tex,
       transparent: true,
+      depthWrite: false,
       side: THREE.DoubleSide,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
 
     // Apply anchor offset (pivot point for rotation)
-    mesh.position.set(bone.anchor.x, bone.anchor.y, 0);
+    mesh.position.set(0, 0, zIndex * 0.01);
+    mesh.renderOrder = zIndex;
 
     // Store mesh reference
     bone.threeMesh = mesh;
@@ -93,7 +99,11 @@ export class SkeletonRenderer {
 
     for (const bone of skeleton.getAllBones()) {
       if (bone.threeMesh) {
-        bone.threeMesh.position.set(bone.worldPosition.x, bone.worldPosition.y, 0);
+        bone.threeMesh.position.set(
+          bone.worldPosition.x,
+          bone.worldPosition.y,
+          (bone.meshConfig?.zIndex ?? 0) * 0.01,
+        );
         bone.threeMesh.rotation.z = bone.worldRotation;
         bone.threeMesh.scale.set(bone.worldScale.x, bone.worldScale.y, 1);
       }

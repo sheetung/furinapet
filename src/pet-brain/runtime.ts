@@ -1,5 +1,6 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { desktop } from "../api";
+import { deliverRigPlan } from '../neuro/motion/rigged-bridge';
 import { buildCharacterState, characterSnapshot } from "../neuro/character/character-adapter";
 import { planMotor, synthesizeBrainIntent } from "../neuro/cerebellum/rule-cerebellum";
 import { evaluateReflex } from "../neuro/reflex/reflex";
@@ -118,6 +119,7 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
     const motorPlan = planMotor(intent, character, world, action);
     const directive = resolveMotorPlan(motorPlan, actionFallbackDuration(action));
     if (!directive || signal.aborted) return;
+    const finishRigPlan = deliverRigPlan(motorPlan, signal);
     recordNeuroTrace({
       t: Date.now(),
       goal: plan.goal,
@@ -130,10 +132,10 @@ async function executeReactionPlan(plan: PetActionPlan, force = false) {
     });
     // Legacy backend: call desktop.react() for sprite atlas animation
     // Skeletal backend: skip (skeletal renderer handles animation separately)
-    if (isLegacyReaction(directive.reaction)) {
-      await desktop.react(directive.reaction);
-    }
-    await waitForAction(directive.durationMs, signal);
+    try {
+      if (isLegacyReaction(directive.reaction)) await desktop.react(directive.reaction);
+      await waitForAction(directive.durationMs, signal);
+    } finally { finishRigPlan(); }
   }, { force });
   publishPetBrainSnapshot();
 }
@@ -280,6 +282,7 @@ async function executeReflex(
   if (!reflex) return;
   const directive = resolveMotorPlan(reflex.plan, reflex.plan.durationMs);
   if (!directive) return;
+  const finishRigPlan = deliverRigPlan(reflex.plan);
   recordNeuroTrace({
     t: at,
     goal: "idle",
@@ -294,12 +297,12 @@ async function executeReflex(
   });
   // Legacy backend: call desktop.react() for sprite atlas animation
   // Skeletal backend: skip (skeletal renderer handles animation separately)
-  if (isLegacyReaction(directive.reaction)) {
-    await desktop.react(directive.reaction);
-  }
+  try {
+    if (isLegacyReaction(directive.reaction)) await desktop.react(directive.reaction);
   // Reflex runs to completion: a never-aborting signal keeps waitForAction valid
   // (waitForAction reads signal.aborted — passing undefined throws TypeError).
   await waitForAction(directive.durationMs, new AbortController().signal);
+  } finally { finishRigPlan(); }
   publishPetBrainSnapshot();
 }
 

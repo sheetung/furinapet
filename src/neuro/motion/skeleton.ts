@@ -20,6 +20,7 @@ export interface BoneConfig {
     texture: string; // texture path
     width: number;
     height: number;
+    zIndex?: number; // front-to-back order for overlapping cutout pieces
   };
 }
 
@@ -28,7 +29,7 @@ export class Bone {
   readonly name: string;
   readonly anchor: THREE.Vector2;
   readonly children: Bone[] = [];
-  readonly meshConfig?: { texture: string; width: number; height: number };
+  readonly meshConfig?: { texture: string; width: number; height: number; zIndex?: number };
 
   position: THREE.Vector2;
   rotation: number;

@@ -1,0 +1,34 @@
+{
+  "glbSha256": "a2b839100ba3c05af621f8ce0b83844f5b50fc4f2b6b41b563f9dd247b48ab15",
+  "errors": 0,
+  "warnings": 0,
+  "skins": 1,
+  "joints": 21,
+  "meshes": 13,
+  "clips": [
+    "cheer",
+    "idle",
+    "jump",
+    "recoil",
+    "think",
+    "walk",
+    "wave",
+    "blink"
+  ],
+  "morphs": [
+    "happy",
+    "surprised",
+    "annoyed",
+    "tired",
+    "blink"
+  ],
+  "morphMeshes": [
+    "head",
+    "eye_left_surface",
+    "eye_right_surface",
+    "eye_left_lid",
+    "eye_right_lid"
+  ],
+  "productionReady": false,
+  "contractErrors": []
+}

@@ -1,0 +1,25 @@
+{
+  "blenderVersion": "5.1.1",
+  "meshCount": 13,
+  "boneCount": 21,
+  "vertices": 6350,
+  "clips": [
+    "idle",
+    "wave",
+    "recoil",
+    "walk",
+    "jump",
+    "cheer",
+    "think",
+    "blink"
+  ],
+  "morphTargets": [
+    "happy",
+    "surprised",
+    "annoyed",
+    "tired",
+    "blink"
+  ],
+  "expressionsComplete": false,
+  "note": "Repaired arm art, trimmed coat coverage, independent eye/lid meshes. Full-range art acceptance remains outstanding."
+}

@@ -1,0 +1,144 @@
+{
+  "ok": false,
+  "structuralOk": true,
+  "productionReady": false,
+  "productionErrors": [
+    "Missing editable furina.blend source",
+    "GLB has no skin: named transform nodes are not a skinned armature",
+    "GLB has no expression morph targets",
+    "GLB has no baked animation clips",
+    "Missing or stale acceptance evidence for the current GLB",
+    "Production acceptance not passed: khronosValidation",
+    "Production acceptance not passed: glbLoad",
+    "Production acceptance not passed: pose",
+    "Production acceptance not passed: spring",
+    "Production acceptance not passed: morph",
+    "Production acceptance not passed: visual"
+  ],
+  "glbSha256": "48898e0725fbb10f896af97e870d664fcee2d25b2b2aeb479663da25501309ab",
+  "rigType": "rigid-cutout-2.5d",
+  "boneCount": 27,
+  "textureCount": 9,
+  "meshCount": 9,
+  "textures": {
+    "head": {
+      "mode": "RGBA",
+      "size": [
+        644,
+        702
+      ],
+      "alphaBounds": [
+        23,
+        23,
+        621,
+        679
+      ]
+    },
+    "body": {
+      "mode": "RGBA",
+      "size": [
+        319,
+        478
+      ],
+      "alphaBounds": [
+        16,
+        16,
+        303,
+        462
+      ]
+    },
+    "hair_back": {
+      "mode": "RGBA",
+      "size": [
+        614,
+        366
+      ],
+      "alphaBounds": [
+        20,
+        20,
+        594,
+        346
+      ]
+    },
+    "arm_left": {
+      "mode": "RGBA",
+      "size": [
+        294,
+        386
+      ],
+      "alphaBounds": [
+        13,
+        13,
+        281,
+        373
+      ]
+    },
+    "arm_right": {
+      "mode": "RGBA",
+      "size": [
+        302,
+        386
+      ],
+      "alphaBounds": [
+        13,
+        13,
+        289,
+        373
+      ]
+    },
+    "leg_left": {
+      "mode": "RGBA",
+      "size": [
+        193,
+        477
+      ],
+      "alphaBounds": [
+        16,
+        16,
+        177,
+        461
+      ]
+    },
+    "leg_right": {
+      "mode": "RGBA",
+      "size": [
+        193,
+        477
+      ],
+      "alphaBounds": [
+        16,
+        16,
+        177,
+        461
+      ]
+    },
+    "coat_left": {
+      "mode": "RGBA",
+      "size": [
+        321,
+        481
+      ],
+      "alphaBounds": [
+        16,
+        16,
+        305,
+        465
+      ]
+    },
+    "coat_right": {
+      "mode": "RGBA",
+      "size": [
+        321,
+        484
+      ],
+      "alphaBounds": [
+        16,
+        16,
+        305,
+        468
+      ]
+    }
+  },
+  "warnings": [],
+  "errors": []
+}

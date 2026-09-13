@@ -1,32 +1,41 @@
 {
-  "version": "0.1",
+  "version": "1.0",
   "character": "furina",
-  "coordinate": {
-    "up": "Y",
-    "forward": "-Z",
-    "unit": "meter"
-  },
+  "rigType": "rigid-cutout-2.5d",
+  "coordinate": {"up":"Y","forward":"-Z","unit":"meter"},
   "bones": [
     {"name":"root","parent":null,"position":[0,0,0],"rotation":[0,0,0]},
     {"name":"motion_root","parent":"root","position":[0,0,0],"rotation":[0,0,0]},
-    {"name":"body","parent":"motion_root","position":[0,0,0],"rotation":[0,0,0]},
-    {"name":"spine","parent":"body","position":[0,0.5,0],"rotation":[0,0,0]},
-    {"name":"chest","parent":"spine","position":[0,1.0,0],"rotation":[0,0,0]},
-    {"name":"neck","parent":"chest","position":[0,1.35,0],"rotation":[0,0,0]},
-    {"name":"head","parent":"neck","position":[0,1.55,0],"rotation":[0,0,0]},
-    {"name":"eye_left","parent":"head","position":[-0.04,1.58,-0.1],"rotation":[0,0,0]},
-    {"name":"eye_right","parent":"head","position":[0.04,1.58,-0.1],"rotation":[0,0,0]},
-    {"name":"arm_left","parent":"chest","position":[-0.25,1.15,0],"rotation":[0,0,0]},
-    {"name":"arm_right","parent":"chest","position":[0.25,1.15,0],"rotation":[0,0,0]},
-    {"name":"hair_back","parent":"head","position":[0,1.4,0.05],"rotation":[0,0,0]},
-    {"name":"tail","parent":"body","position":[0,0.3,0.1],"rotation":[0,0,0]},
-    {"name":"skirt","parent":"body","position":[0,0.7,0],"rotation":[0,0,0]},
-    {"name":"coat","parent":"chest","position":[0,1.0,0],"rotation":[0,0,0]},
-    {"name":"accessory","parent":"head","position":[0,1.7,0],"rotation":[0,0,0]}
+    {"name":"body","parent":"motion_root","position":[0,0.30,0],"rotation":[0,0,0]},
+    {"name":"spine","parent":"body","position":[0,0.18,0],"rotation":[0,0,0]},
+    {"name":"chest","parent":"spine","position":[0,0.18,0],"rotation":[0,0,0]},
+    {"name":"neck","parent":"chest","position":[0,0.18,0],"rotation":[0,0,0]},
+    {"name":"head","parent":"neck","position":[0,0.10,0],"rotation":[0,0,0]},
+    {"name":"face","parent":"head","position":[0,0.10,0.02],"rotation":[0,0,0]},
+    {"name":"eye_left","parent":"face","position":[-0.16,0.12,0.01],"rotation":[0,0,0]},
+    {"name":"eye_right","parent":"face","position":[0.16,0.12,0.01],"rotation":[0,0,0]},
+    {"name":"hair_back","parent":"head","position":[0,0,-0.04],"rotation":[0,0,0]},
+    {"name":"hair_side_left","parent":"head","position":[-0.28,-0.10,0],"rotation":[0,0,0]},
+    {"name":"hair_side_right","parent":"head","position":[0.28,-0.10,0],"rotation":[0,0,0]},
+    {"name":"hair_curl","parent":"head","position":[-0.22,0.43,0.01],"rotation":[0,0,0]},
+    {"name":"hat","parent":"head","position":[0.13,0.42,0.02],"rotation":[0,0,0]},
+    {"name":"hat_bow","parent":"hat","position":[0.18,-0.02,0.01],"rotation":[0,0,0]},
+    {"name":"arm_left","parent":"chest","position":[-0.38,0.08,0.03],"rotation":[0,0,0]},
+    {"name":"arm_hand_left","parent":"arm_left","position":[0,-0.52,0],"rotation":[0,0,0]},
+    {"name":"arm_right","parent":"chest","position":[0.38,0.08,0.03],"rotation":[0,0,0]},
+    {"name":"arm_hand_right","parent":"arm_right","position":[0,-0.52,0],"rotation":[0,0,0]},
+    {"name":"leg_left","parent":"body","position":[-0.16,-0.12,-0.01],"rotation":[0,0,0]},
+    {"name":"leg_right","parent":"body","position":[0.16,-0.12,-0.01],"rotation":[0,0,0]},
+    {"name":"coat_left","parent":"body","position":[-0.28,0.10,-0.03],"rotation":[0,0,0]},
+    {"name":"coat_right","parent":"body","position":[0.28,0.10,-0.03],"rotation":[0,0,0]},
+    {"name":"skirt","parent":"body","position":[0,-0.16,-0.02],"rotation":[0,0,0]},
+    {"name":"cloth_center","parent":"skirt","position":[0,-0.22,-0.01],"rotation":[0,0,0]},
+    {"name":"accessory_brooch","parent":"chest","position":[0,0.05,0.04],"rotation":[0,0,0]}
   ],
   "constraints": {
-    "springBones": ["hair_back", "tail", "skirt"],
-    "ik": ["arm_left", "arm_right"],
-    "lookAt": ["head", "eye_left", "eye_right"]
-  }
+    "springBones": ["hair_back","hair_side_left","hair_side_right","hair_curl","coat_left","coat_right","cloth_center"],
+    "ik": ["arm_left","arm_right"],
+    "lookAt": ["head","eye_left","eye_right"]
+  },
+  "limits": {"maxBones":35,"maxInfluencesPerVertex":4,"expressionMorphs":10}
 }
