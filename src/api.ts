@@ -100,6 +100,12 @@ export interface ClaudeIntegrationStatus {
   message: string;
 }
 
+export interface CodexIntegrationStatus {
+  mcpStatus: IntegrationStatus;
+  managed: boolean;
+  message: string;
+}
+
 export interface McpServerConfigPreview {
   command: string;
   args: string[];
@@ -195,6 +201,9 @@ export const desktop = {
   getAgentStatus: () => invoke<AgentStatusSnapshot>("get_agent_status"),
   getMcpServerConfig: () => invoke<McpServerConfigPreview>("get_mcp_server_config"),
   getClaudeIntegrationStatus: () => invoke<ClaudeIntegrationStatus>("get_claude_integration_status"),
+  getCodexIntegrationStatus: () => invoke<CodexIntegrationStatus>("get_codex_integration_status"),
+  installCodexIntegration: () => invoke<CodexIntegrationStatus>("install_codex_integration"),
+  uninstallCodexIntegration: () => invoke<CodexIntegrationStatus>("uninstall_codex_integration"),
   installClaudeIntegration: () => invoke<ClaudeIntegrationStatus>("install_claude_integration"),
   uninstallClaudeIntegration: () => invoke<ClaudeIntegrationStatus>("uninstall_claude_integration"),
   testAgentIntegration: () => invoke<void>("test_agent_integration"),

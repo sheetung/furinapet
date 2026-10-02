@@ -3,6 +3,7 @@ mod agent_host;
 mod ai;
 mod brain_commands;
 mod claude_integration;
+mod codex_integration;
 mod commands;
 mod mcp_server;
 mod pet;
@@ -84,6 +85,9 @@ pub fn run() {
             ai::request_ai_behavior_suggestion,
             agent_commands::get_mcp_server_config,
             claude_integration::get_claude_integration_status,
+            codex_integration::get_codex_integration_status,
+            codex_integration::install_codex_integration,
+            codex_integration::uninstall_codex_integration,
             claude_integration::install_claude_integration,
             claude_integration::uninstall_claude_integration,
             claude_integration::test_agent_integration,

@@ -6,6 +6,7 @@ import {
   type AgentState,
   type AgentStatusSnapshot,
   type ClaudeIntegrationStatus,
+  type CodexIntegrationStatus,
   type IntegrationStatus,
   type McpServerConfigPreview,
 } from "../api";
@@ -57,6 +58,7 @@ export function AgentNavigation() {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [agent, setAgent] = useState<AgentStatusSnapshot | null>(null);
   const [claude, setClaude] = useState<ClaudeIntegrationStatus | null>(null);
+  const [codex, setCodex] = useState<CodexIntegrationStatus | null>(null);
   const [mcp, setMcp] = useState<McpServerConfigPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
@@ -153,6 +155,9 @@ export function AgentNavigation() {
   }
 
   async function refreshAll() {
+    void desktop.getCodexIntegrationStatus().then(setCodex).catch(() => setCodex({
+      mcpStatus: 'error', managed: false, message: '无法读取 Codex 配置，请检查配置格式或权限后刷新。',
+    }));
     try {
       const [nextAgent, nextClaude, nextMcp] = await Promise.all([
         desktop.getAgentStatus(),
@@ -178,6 +183,16 @@ export function AgentNavigation() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function configureCodex(remove = false) {
+    setBusy(true);
+    try {
+      setCodex(await (remove ? desktop.uninstallCodexIntegration() : desktop.installCodexIntegration()));
+      showToast(remove ? '已移除 Codex 接入配置，重启 Codex 后生效' : 'Codex MCP 已配置，请重启 Codex 或重新加载 MCP');
+    } catch (error) {
+      showToast(`Codex 配置失败：${String(error)}`);
+    } finally { setBusy(false); }
   }
 
   async function uninstallClaude() {
@@ -334,6 +349,28 @@ export function AgentNavigation() {
       </div>
 
       <div className="agent-section-title"><div><span>官方集成</span><h3>智能体连接</h3></div></div>
+
+      <div className="agent-card">
+        <div className="agent-card-main">
+          <div className="agent-icon">O</div>
+          <div className="agent-card-info">
+            <div className="agent-card-title"><strong>Codex</strong>
+              <span className={`agent-badge ${codex?.mcpStatus === 'installed' ? 'live' : ''}`}>
+                {codex?.mcpStatus === 'installed' ? '已配置' : codex ? statusLabel[codex.mcpStatus] : '检测中…'}
+              </span>
+            </div>
+            <p>{codex?.message ?? '检测当前用户的 Codex MCP 配置。'}</p>
+            <p>支持气泡、动作和状态工具；本次接入不包含自动工作状态同步。重启后请让 Codex 调用 furinapet_status 测试连接。</p>
+          </div>
+          <div className="agent-actions">
+            {codex?.mcpStatus !== 'installed' && <button className="primary" disabled={busy || !codex || codex.mcpStatus === 'error'} onClick={() => void configureCodex()}>
+              {busy ? '处理中…' : codex?.mcpStatus === 'needs_update' ? '更新接入' : '一键接入'}
+            </button>}
+            {codex?.managed && <button className="agent-danger" disabled={busy} onClick={() => void configureCodex(true)}>移除</button>}
+            <button className="secondary" disabled={busy} onClick={() => void refreshAll()}>刷新</button>
+          </div>
+        </div>
+      </div>
 
       <div className="agent-card">
         <div className="agent-card-main">

@@ -39,7 +39,19 @@ Agent sessions use heartbeats and an expiry timeout so a crashed agent process c
 
 No LAN listener is opened by this feature.
 
-## Claude Code
+## Codex
+
+Control Center → 智能体 → Codex → 一键接入 configures the built-in stdio server in the current user's `~/.codex/config.toml` (or the absolute `CODEX_HOME` directory inherited by FurinaPet). No Codex CLI installation is required. Restart Codex or reload MCP, then ask it to call `furinapet_status`; a live session should appear in 当前连接. “已配置” only confirms the configuration, not a live connection.
+
+The integration uses `[mcp_servers.furinapet]` with the running pet executable and `args = ["mcp"]`. It preserves unrelated settings/comments, backs up existing files before changes, and only updates/removes entries marked as FurinaPet-managed. Conflicting manually managed entries and malformed TOML are not overwritten. Project-specific configuration or organization policy may override the user configuration.
+
+This integration exposes the four MCP tools above; it does not install Claude-style lifecycle hooks or claim automatic thinking/editing/testing synchronization. Configuration is local to the same host as the desktop pet.
+
+The MCP process retains the client's initialization name/version. After the desktop pet restarts, a missing heartbeat session is registered again with the same metadata; state calls also carry the metadata so they cannot create anonymous fallback sessions during reconnection. Healthy heartbeats do not renew work-state activity. Existing MCP processes must be reloaded once after upgrading to this fix; client names are taken from the handshake, not inferred from installed integrations.
+
+Official configuration reference: https://developers.openai.com/codex/mcp
+
+## Claude Code setup
 
 FurinaPet can manage a user-scoped Claude Code integration from the 智能体 page. Installation performs two independent operations:
 

@@ -6,7 +6,7 @@ use std::{
     fs,
     io::{self, BufRead, BufReader, Write},
     net::{SocketAddr, TcpStream},
-    sync::Arc,
+    sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
@@ -14,10 +14,63 @@ use uuid::Uuid;
 
 const MAX_MCP_LINE_BYTES: usize = 256 * 1024;
 
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn missing_session_recovers_handshake_metadata_without_replaying_work_state() {
+        let params = json!({"sessionId":"session-1", "agent":"codex", "clientName":"codex-cli",
+            "clientVersion":"1.0", "integration":"mcp", "project":"furinapet"});
+        let mut calls = Vec::new();
+        keep_session_alive(&params, |method, value| {
+            calls.push((method.to_string(), value));
+            if method == "session.heartbeat" { Err("agent session is unavailable".into()) }
+            else { Ok(json!({})) }
+        }).unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[1], ("session.start".into(), params));
+        assert!(calls[1].1.get("state").is_none());
+    }
+
+    #[test]
+    fn healthy_heartbeat_does_not_register_again_or_extend_work_state() {
+        let mut calls = 0;
+        keep_session_alive(&json!({"sessionId":"session-1"}), |method, params| {
+            calls += 1; assert_eq!(method, "session.heartbeat");
+            assert_eq!(params, json!({"sessionId":"session-1"})); Ok(json!({}))
+        }).unwrap();
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn unavailable_desktop_does_not_trigger_extra_registration_attempt() {
+        let mut calls = 0;
+        assert!(keep_session_alive(&json!({"sessionId":"session-1"}), |_, _| {
+            calls += 1; Err("FurinaPet desktop app is unavailable".into())
+        }).is_err());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn cloned_client_uses_same_identity_for_recovery_and_state_requests() {
+        let client = BridgeClient::new(); let heartbeat = client.clone();
+        *client.identity.lock().unwrap() = json!({"agent":"codex", "clientName":"Codex Desktop",
+            "clientVersion":"2", "integration":"mcp"});
+        let params = heartbeat.session_params(&heartbeat.identity.lock().unwrap());
+        assert_eq!(params["clientName"], "Codex Desktop");
+        assert_eq!(params["integration"], "mcp");
+        assert_eq!(params["sessionId"], client.session_id.as_str());
+        assert_eq!(sanitize_agent_name("Codex Desktop"), "codex");
+        assert_eq!(sanitize_agent_name("claude-code"), "claude-code");
+    }
+}
+
 #[derive(Clone)]
 struct BridgeClient {
     session_id: Arc<String>,
     project: Option<String>,
+    identity: Arc<Mutex<Value>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +85,9 @@ impl BridgeClient {
         Self {
             session_id: Arc::new(format!("mcp-{}", Uuid::new_v4().simple())),
             project: current_project_name(),
+            identity: Arc::new(Mutex::new(json!({
+                "agent": "mcp", "clientName": "MCP Client", "integration": "mcp"
+            }))),
         }
     }
 
@@ -84,6 +140,7 @@ impl BridgeClient {
     }
 
     fn start_session(&self, agent: &str, client_name: &str, client_version: Option<&str>) {
+        let Ok(mut identity) = self.identity.lock() else { return; };
         let mut params = json!({
             "sessionId": self.session_id.as_str(),
             "agent": agent,
@@ -96,14 +153,31 @@ impl BridgeClient {
         if let Some(project) = &self.project {
             params["project"] = Value::String(project.clone());
         }
+        // Keep handshake metadata even if the desktop app is currently closed.
+        *identity = params.clone();
         let _ = self.call("session.start", params);
     }
 
     fn heartbeat(&self) {
-        let _ = self.call(
-            "session.heartbeat",
-            json!({ "sessionId": self.session_id.as_str() }),
-        );
+        let Ok(identity) = self.identity.lock() else { return; };
+        let params = self.session_params(&identity);
+        let _ = keep_session_alive(&params, |method, params| self.call(method, params));
+    }
+
+    fn session_params(&self, identity: &Value) -> Value {
+        let mut params = identity.clone();
+        params["sessionId"] = json!(self.session_id.as_str());
+        if let Some(project) = &self.project { params["project"] = json!(project); }
+        params
+    }
+
+    fn set_state(&self, state: &str) -> Result<Value, String> {
+        let identity = self.identity.lock().map_err(|_| "MCP identity unavailable")?;
+        let mut params = self.session_params(&identity);
+        params["state"] = json!(state);
+        // The host may restart between any two calls; state-created sessions
+        // must have the same identity as sessions created by initialize.
+        self.call("session.state", params)
     }
 
     fn end_session(&self) {
@@ -111,6 +185,13 @@ impl BridgeClient {
             "session.end",
             json!({ "sessionId": self.session_id.as_str() }),
         );
+    }
+}
+
+fn keep_session_alive(params: &Value, mut call: impl FnMut(&str, Value) -> Result<Value, String>) -> Result<Value, String> {
+    match call("session.heartbeat", json!({ "sessionId": params["sessionId"] })) {
+        Err(error) if error == "agent session is unavailable" => call("session.start", params.clone()),
+        result => result,
     }
 }
 
@@ -325,7 +406,9 @@ fn handle_tool_call(params: &Value, client: &BridgeClient) -> Value {
         .unwrap_or_else(|| json!({}));
 
     match name {
-        "furinapet_status" => match client.call("status", json!({})) {
+        "furinapet_status" => {
+            client.heartbeat();
+            match client.call("status", json!({})) {
             Ok(status) => tool_success("FurinaPet is running.", status),
             Err(_) => tool_success(
                 "FurinaPet desktop app is not running or its local Agent Bridge is unavailable.",
@@ -335,6 +418,7 @@ fn handle_tool_call(params: &Value, client: &BridgeClient) -> Value {
                     "unavailableReason": "Open FurinaPet and try again."
                 }),
             ),
+            }
         },
         "furinapet_set_state" => {
             let Some(state) = arguments.get("state").and_then(Value::as_str) else {
@@ -345,13 +429,7 @@ fn handle_tool_call(params: &Value, client: &BridgeClient) -> Value {
                     "Invalid state. Use idle, thinking, editing, testing, waiting, success, or error.",
                 );
             }
-            match client.call(
-                "session.state",
-                json!({
-                    "sessionId": client.session_id.as_str(),
-                    "state": state
-                }),
-            ) {
+            match client.set_state(state) {
                 Ok(result) => tool_success(
                     &format!("FurinaPet agent state set to {state}."),
                     result,
