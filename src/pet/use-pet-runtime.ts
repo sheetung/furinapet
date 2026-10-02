@@ -20,6 +20,7 @@ import { bubbles } from '../bubbles/controller';
 import { BubbleLayoutController } from '../bubbles/layout-controller';
 import { startWanderController } from '../motion/wander';
 import { DockPolicyMemory } from '../motion/dock-policy';
+import { requestSettling } from '../motion/settle-request';
 import { PetBrain } from "../pet-brain";
 import { planWanderGoal } from "../pet-brain/adapters/wander";
 import { publishPetBrainSnapshot, executeReactionPlan } from "../pet-brain/runtime";
@@ -219,8 +220,13 @@ export function usePetRuntime() {
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window) || !settings?.gravityEnabled) return;
-    return animationClock.schedule(() => void settleWithGravity(), 80);
-  }, [settings?.gravityEnabled, settings?.scale]);
+    return requestSettling({
+      schedule: (callback, delay) => animationClock.schedule(callback, delay),
+      enabled: () => !!settingsRef.current?.petVisible && !!settingsRef.current.gravityEnabled,
+      falling: () => interaction.snapshot().falling,
+      settle: () => interaction.settle(),
+    });
+  }, [settings, !!bubble, dragging]);
 
   async function settleWithGravity() { await interaction.settle(); }
 
