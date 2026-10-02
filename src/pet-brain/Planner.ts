@@ -137,7 +137,9 @@ export class PetUtilityPlanner {
         return [{ type: "dock" }];
       case "respond-user": {
         const streak = blackboard.getClickStreak();
-        return [{ type: "respond", intensity: streak >= 3 ? "excited" : streak >= 2 ? "normal" : "soft" }];
+        // Repeated clicks settle into attentive listening, not an escalating jump loop.
+        if (streak >= 3) return [{ type: "rest", durationMs: 1400 }];
+        return [{ type: "respond", intensity: streak >= 2 ? "normal" : "soft" }];
       }
       case "observe-agent":
         return [{ type: "observe", durationMs: 2200 + Math.round(this.random() * 1800) }, { type: "wait", durationMs: 500 }];

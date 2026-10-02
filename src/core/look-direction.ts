@@ -1,7 +1,7 @@
 export interface Point { x: number; y: number }
 export interface LookCell { index: number; row: 9 | 10; column: number }
 
-function lookCell(index: number): LookCell {
+export function lookCell(index: number): LookCell {
   const normalized = ((index % 16) + 16) % 16;
   return normalized < 8
     ? { index: normalized, row: 9, column: normalized }

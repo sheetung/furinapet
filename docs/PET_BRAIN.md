@@ -15,6 +15,7 @@ System state ─────┘
 Pet Brain decides **what the character should do**. Existing motion/rendering code decides **how the selected action is physically displayed**.
 
 - PetView owns sprite rendering, cursor look, gravity and movement interpolation.
+- `core/action-playback.ts` owns reaction sequence lifetime, pauses, duration and source priority. User sequences cannot be interrupted by Agent or background playback. Semantic plans render locally through the same controller, rather than the fixed-duration legacy IPC reaction path.
 - `wander-controller` owns geometry and movement target helpers.
 - Pet Brain owns goals, context, memory, priorities and action sequences.
 - Agent Bridge publishes lifecycle facts; it no longer chooses lifecycle animations.
@@ -25,7 +26,7 @@ Pet Brain decides **what the character should do**. Existing motion/rendering co
 
 - `Blackboard.ts` — short-term memory, mood, energy, recent interaction and Agent state.
 - `Planner.ts` — Utility AI scoring and contextual weighted selection.
-- `Executor.ts` — interruptible action-plan execution and priority arbitration.
+- `Executor.ts` — interruptible semantic plan execution; the playback controller arbitrates between user, Agent and background sources before a plan is admitted.
 - `runtime.ts` — pet-window bridge for senses, Agent state and external intents.
 - `ai-runtime.ts` — event-triggered AI suggestion bridge with server-side cooldown.
 - `adapters/wander.ts` — maps existing wander settings/profile into Brain context.

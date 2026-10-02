@@ -98,6 +98,12 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
+      - name: Test playback and compatibility
+        run: pnpm test
+
+      - name: Test native upgrade and bridge logic
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
       - name: Build Windows installer
         shell: pwsh
         run: |

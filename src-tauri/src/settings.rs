@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    pub schema_version: u32,
     pub selected_character_id: String,
     pub pet_visible: bool,
     pub always_on_top: bool,
@@ -22,6 +23,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            schema_version: 1,
             selected_character_id: "furina".into(),
             pet_visible: true,
             always_on_top: true,
@@ -123,17 +125,105 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 pub fn load(app: &AppHandle) -> Settings {
     let Ok(path) = settings_path(app) else { return Settings::default(); };
-    let mut value: Settings = fs::read_to_string(path)
-        .ok()
-        .and_then(|content| serde_json::from_str(&content).ok())
-        .unwrap_or_default();
-    value.enforce_motion_mode();
-    value
+    load_path(&path)
 }
 
 pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     let path = settings_path(app)?;
+    save_path(&path, settings)
+}
+
+fn decode(content: &str) -> Result<Settings, String> {
+    let mut value: Settings = serde_json::from_str(content).map_err(|e| e.to_string())?;
+    if value.schema_version > 1 { return Err("Settings belong to a newer application".into()); }
+    // v0/legacy files have the same field names; missing fields use safe defaults.
+    value.schema_version = 1;
+    let defaults = Settings::default();
+    if !(0.65..=1.5).contains(&value.scale) { value.scale = defaults.scale; }
+    if !(0.6..=1.8).contains(&value.wander_speed) { value.wander_speed = defaults.wander_speed; }
+    if !(0.0..=1.0).contains(&value.wander_weight) { value.wander_weight = defaults.wander_weight; }
+    if !(0.0..=1.0).contains(&value.dock_weight) { value.dock_weight = defaults.dock_weight; }
+    value.enforce_motion_mode();
+    Ok(value)
+}
+
+fn load_path(path: &std::path::Path) -> Settings {
+    if let Ok(content) = fs::read_to_string(path) {
+        match decode(&content) {
+            Ok(value) => return value,
+            Err(error) => {
+                eprintln!("[settings] {error}; recovering backup");
+                let _ = fs::copy(path, path.with_extension(format!("invalid-{}.json", uuid::Uuid::new_v4())));
+            }
+        }
+    }
+    fs::read_to_string(path.with_extension("bak"))
+        .ok().and_then(|content| decode(&content).ok()).unwrap_or_default()
+}
+
+static SAVE_LOCK: Mutex<()> = Mutex::new(());
+fn save_path(path: &std::path::Path, settings: &Settings) -> Result<(), String> {
+    use std::io::Write;
+    let _guard = SAVE_LOCK.lock().map_err(|e| e.to_string())?;
     if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|error| error.to_string())?; }
+    if let Ok(content) = fs::read_to_string(path) {
+        let raw: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+        if raw["schemaVersion"].as_u64().unwrap_or(0) > 1 {
+            return Err("配置来自较新版本，请升级应用后再保存。".into());
+        }
+        if decode(&content).is_ok() {
+            fs::copy(path, path.with_extension("bak")).map_err(|e| e.to_string())?;
+        }
+    }
     let content = serde_json::to_vec_pretty(settings).map_err(|error| error.to_string())?;
-    fs::write(path, content).map_err(|error| error.to_string())
+    let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+    let result = (|| -> std::io::Result<()> {
+        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temporary)?;
+        file.write_all(&content)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary, path)
+    })();
+    if result.is_err() { let _ = fs::remove_file(&temporary); }
+    result.map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    struct Directory(PathBuf);
+    impl Directory {
+        fn new() -> Self { Self(std::env::temp_dir().join(format!("furinapet-settings-test-{}", uuid::Uuid::new_v4()))) }
+        fn path(&self) -> PathBuf { self.0.join("settings.json") }
+    }
+    impl Drop for Directory { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); } }
+
+    #[test]
+    fn migrates_legacy_and_normalizes_ranges() {
+        let settings = decode(r#"{"scale":99,"petVisible":false,"gravityEnabled":true,"windowDocking":true}"#).unwrap();
+        assert_eq!(settings.schema_version, 1);
+        assert_eq!(settings.scale, 1.0);
+        assert!(!settings.pet_visible);
+        assert!(!settings.window_docking);
+    }
+    #[test]
+    fn replaces_existing_file_and_recovers_previous_backup() {
+        let directory = Directory::new(); let path = directory.path();
+        let first = Settings { scale: 0.8, ..Settings::default() };
+        save_path(&path, &first).unwrap();
+        save_path(&path, &Settings::default()).unwrap();
+        assert_eq!(load_path(&path).scale, 1.0);
+        fs::write(&path, "{broken").unwrap();
+        assert_eq!(load_path(&path).scale, 0.8);
+        assert!(fs::read_dir(&directory.0).unwrap().any(|entry| entry.unwrap().file_name().to_string_lossy().contains("invalid-")));
+    }
+    #[test]
+    fn never_overwrites_future_configuration() {
+        let directory = Directory::new(); let path = directory.path();
+        fs::create_dir_all(&directory.0).unwrap();
+        let future = r#"{"schemaVersion":2,"newField":"preserve"}"#;
+        fs::write(&path, future).unwrap();
+        assert!(save_path(&path, &Settings::default()).is_err());
+        assert_eq!(fs::read_to_string(path).unwrap(), future);
+    }
 }

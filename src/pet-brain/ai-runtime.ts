@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { desktop, type AiBehaviorContext } from "../api";
+import { actionPlayback, ACTION_PRIORITY } from '../core/action-playback';
 import { normalizeAiBehaviorSuggestion } from "./adapters/ai";
 import { getPetBrain } from "./index";
 import { PET_BRAIN_AGENT_STATE_EVENT, publishPetBrainSnapshot } from "./runtime";
@@ -51,9 +52,14 @@ async function requestSuggestion(reason: string) {
     const settings = await desktop.getAiSettings();
     if (!settings.enabled || !settings.configured) return;
 
+    const interactionAt = getPetBrain().snapshot().lastUserInteractionAt;
     const context = await buildContext();
     const result = await desktop.requestAiBehaviorSuggestion(context);
     if (result.state !== "suggested" || !result.suggestion) return;
+    const latest = await desktop.getAiSettings();
+    if (!latest.enabled || JSON.stringify(latest) !== JSON.stringify(settings)
+      || interactionAt !== getPetBrain().snapshot().lastUserInteractionAt
+      || !actionPlayback.canStart(ACTION_PRIORITY.background)) return;
 
     const intent = normalizeAiBehaviorSuggestion(result.suggestion);
     if (!intent) {

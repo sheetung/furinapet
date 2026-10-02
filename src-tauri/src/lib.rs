@@ -40,11 +40,13 @@ pub fn run() {
             }
 
             let pet_window = pet::create(&app_handle, &initial_settings)?;
-            let pet_for_close = pet_window.clone();
+            let app_for_pet_close = app_handle.clone();
             pet_window.on_window_event(move |event| {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = pet_for_close.hide();
+                    if let Err(error) = commands::set_pet_visible_inner(&app_for_pet_close, false) {
+                        eprintln!("[pet] failed to persist hide: {error}");
+                    }
                 }
             });
             window_surfaces::start_fullscreen_watcher(&app_handle);

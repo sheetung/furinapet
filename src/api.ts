@@ -173,7 +173,7 @@ export const desktop = {
   waitForDragRelease: () => invoke<void>("wait_for_drag_release"),
   getWorkAreaAt: (x: number, y: number) => invoke<WorkArea>("get_work_area_at", { x, y }),
   listDockSurfaces: () => invoke<WindowSurface[]>("list_dock_surfaces"),
-  react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message }),
+  react: (reaction: Reaction, message?: string) => invoke<void>("trigger_reaction", { reaction, message, manual: true }),
   submitBrainIntent: (
     source: BrainIntentSource,
     goal: PetGoalId,

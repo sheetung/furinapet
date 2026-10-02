@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { ROUTINE_EVENT, routines, type RoutineStep } from './core/action-routines';
+import { actionPlayback, ACTION_PRIORITY } from './core/action-playback';
 import { listen } from "@tauri-apps/api/event";
 import {
   cursorPosition,
@@ -9,7 +11,11 @@ import {
 } from "@tauri-apps/api/window";
 import { desktop } from "./api";
 import { characterRegistry, getCharacter, loadCharacterRegistry, type CharacterDefinition } from "./characters/registry";
-import { computeLookDirection, mapLookDirection, type LookCell } from "./core/look-direction";
+import { computeLookDirection, lookCell, mapLookDirection, type LookCell } from "./core/look-direction";
+import { sampleMotion, locomotionReaction, isTravelMotion, type MotionReaction } from './core/sprite-motion';
+import { AttentionTracker, isDragDisplacement } from './core/attention';
+import { replacementFrame, replacementStyle } from './core/motion-art';
+import { motionAssets } from './characters/motion-assets';
 import {
   advanceSpeed,
   chooseDockPlacement,
@@ -39,25 +45,6 @@ const GROUNDED_Y_TOLERANCE = 2;
 const MIN_EFFECTIVE_MOTION_PX = 1;
 const MAX_STALLED_TICKS = 4;
 
-type MotionReaction = Reaction | "run-left" | "run-right";
-
-interface FrameRow {
-  row: number;
-  durations: readonly number[];
-}
-
-/** Exact v2 used columns and per-frame timings. Never sample transparent tail cells. */
-const frameRows: Record<MotionReaction, FrameRow> = {
-  idle: { row: 0, durations: [280, 110, 110, 140, 140, 320] },
-  "run-right": { row: 1, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
-  "run-left": { row: 2, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
-  waving: { row: 3, durations: [140, 140, 140, 280] },
-  jumping: { row: 4, durations: [140, 140, 140, 140, 280] },
-  failed: { row: 5, durations: [140, 140, 140, 140, 140, 140, 140, 240] },
-  waiting: { row: 6, durations: [150, 150, 150, 150, 150, 260] },
-  running: { row: 7, durations: [120, 120, 120, 120, 120, 220] },
-  review: { row: 8, durations: [150, 150, 150, 150, 150, 280] },
-};
 
 interface WanderState {
   mode: "idle" | "walking" | "approaching" | "docked";
@@ -89,11 +76,10 @@ export function PetView() {
   const [characters, setCharacters] = useState<CharacterDefinition[]>(characterRegistry);
   const [reaction, setReaction] = useState<MotionReaction>("idle");
   const [animationEpoch, setAnimationEpoch] = useState(0);
-  const [spriteFrame, setSpriteFrame] = useState(0);
+  const [spriteCell, setSpriteCell] = useState({ row: 0, column: 0 });
   const [look, setLook] = useState<LookCell | null>(null);
   const [message, setMessage] = useState("");
   const [bubbleEpoch, setBubbleEpoch] = useState(0);
-  const reactionTimer = useRef<number | null>(null);
   const reactionRef = useRef<MotionReaction>(reaction);
   const settingsRef = useRef(settings);
   const charactersRef = useRef(characters);
@@ -193,41 +179,56 @@ export function PetView() {
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     void desktop.getSettings().then(setSettings);
+    const applyReaction = (payload:RoutineStep) => {
+      setLook(null);
+      const character = getCharacter(settingsRef.current?.selectedCharacterId ?? 'furina', charactersRef.current);
+      const supportsGestures = character.id === 'furina' && character.source === 'built-in';
+      changeReaction(supportsGestures && payload.motion ? payload.motion : payload.reaction, true);
+      setMessage(payload.message ?? "");
+      setBubbleEpoch((value) => value + 1);
+    };
+    const unsubscribe = actionPlayback.subscribe(applyReaction);
     const cleanups = Promise.all([
+      listen<unknown>(ROUTINE_EVENT, (event) => {
+        if(event.payload==='stop'){actionPlayback.stop();brainRef.current?.interrupt();return;}
+        if(!settingsRef.current?.petVisible)return;
+        const routine = routines.find(item => item.id === event.payload);
+        if (routine && actionPlayback.canStart(ACTION_PRIORITY.user)) {
+          brainRef.current?.observeUserInteraction(Date.now());
+          void actionPlayback.play(routine.steps, ACTION_PRIORITY.user);
+        }
+      }),
       listen<AppSettings>("settings-changed", (event) => setSettings(event.payload)),
       listen<ReactionEvent>("pet-reaction", (event) => {
-        const payload = event.payload;
-        if (reactionTimer.current) window.clearTimeout(reactionTimer.current);
-        setLook(null);
-        changeReaction(payload.reaction, true);
-        setMessage(payload.message ?? "");
-        setBubbleEpoch((value) => value + 1);
-        reactionTimer.current = window.setTimeout(() => {
-          reactionTimer.current = null;
-          changeReaction("idle");
-          setMessage("");
-        }, payload.durationMs ?? 2600);
+        if (!settingsRef.current?.petVisible) return;
+        if (event.payload.manual && actionPlayback.canStart(ACTION_PRIORITY.user)) {
+          brainRef.current?.observeUserInteraction(Date.now());
+        }
+        void actionPlayback.play([{ ...event.payload, durationMs: event.payload.durationMs ?? 2600 }],
+          event.payload.manual ? ACTION_PRIORITY.user : ACTION_PRIORITY.background);
       }),
     ]);
-    return () => { void cleanups.then((items) => items.forEach((cleanup) => cleanup())); };
+    return () => {actionPlayback.stop();unsubscribe();void cleanups.then((items) => items.forEach((cleanup) => cleanup()));};
   }, []);
 
-  useEffect(() => {
-    setSpriteFrame(0);
-    if (look) return;
+  useEffect(()=>{
+    actionPlayback.stop();
+    brainRef.current?.interrupt();
+    actionPlayback.block('hidden', !settings?.petVisible);
+    setMessage('');changeReaction('idle');
+  },[settings?.petVisible,settings?.selectedCharacterId]);
 
-    const spec = frameRows[reaction];
+  useEffect(() => {
+    setSpriteCell(sampleMotion(reaction, 0));
+    if (look) return;
     let stopped = false;
     let timer = 0;
-    let frame = 0;
-
+    const started = performance.now();
     const scheduleNext = () => {
-      timer = window.setTimeout(() => {
-        if (stopped) return;
-        frame = (frame + 1) % spec.durations.length;
-        setSpriteFrame(frame);
-        scheduleNext();
-      }, spec.durations[frame]);
+      if (stopped) return;
+      const frame = sampleMotion(reaction, performance.now() - started);
+      setSpriteCell(frame);
+      if (frame.nextMs !== null) timer = window.setTimeout(scheduleNext, Math.max(1, frame.nextMs));
     };
     scheduleNext();
     return () => {
@@ -262,6 +263,7 @@ export function PetView() {
     let cancelled = false;
     let timer = 0;
     let lastLook = -1;
+    const attention = new AttentionTracker();
     let lastLookAt = 0;
     let lastTick = performance.now();
     let lastAutonomousActionAt = Date.now();
@@ -331,24 +333,28 @@ export function PetView() {
       const wallClock = Date.now();
       const elapsed = Math.min(64, now - lastTick);
       lastTick = now;
+      const playbackEpoch = actionPlayback.epoch;
+      const stale = () => cancelled || playbackEpoch !== actionPlayback.epoch
+        || settingsRef.current !== currentSettings || motionRef.current.dragging || motionRef.current.falling;
 
       try {
-        if (motionRef.current.dragging || motionRef.current.falling) {
+        if (!currentSettings.petVisible || actionPlayback.active || motionRef.current.dragging || motionRef.current.falling) {
+          attention.reset(now);
+          lastLook = -1;
           resetWander();
           return;
         }
 
-        const userReactionActive = reactionTimer.current !== null;
+        const userReactionActive = actionPlayback.active;
         const isLocomotionState = !userReactionActive && (reactionRef.current === "idle"
-          || reactionRef.current === "run-left"
-          || reactionRef.current === "run-right"
-          || reactionRef.current === "jumping"
+          || isTravelMotion(reactionRef.current)
           || (wander.mode === "docked" && (reactionRef.current === "waiting" || reactionRef.current === "review")));
         let position = await petWindow.outerPosition();
         const size = await petWindow.outerSize();
         const activeCharacter = getCharacter(currentSettings.selectedCharacterId, charactersRef.current);
         const profile = activeCharacter.wanderProfile!;
         const workArea = await getWorkArea(position, size);
+        if (stale()) return;
         const bounds = makeBounds(workArea, size);
 
         if (currentSettings.autonomousMovement && isLocomotionState) {
@@ -363,6 +369,7 @@ export function PetView() {
             } else if (wallClock >= wander.dockRefreshAt) {
               wander.dockRefreshAt = wallClock + 450;
               const point = await refreshDockTarget(await desktop.listDockSurfaces(), size, workArea);
+              if (stale()) return;
               if (!point || Math.hypot(point.x - position.x, point.y - position.y) > 140) {
                 resetWander(wallClock + pauseDuration(profile));
                 changeReaction("idle");
@@ -372,6 +379,7 @@ export function PetView() {
                 }
               } else {
                 await petWindow.setPosition(new PhysicalPosition(point.x, point.y));
+                if (stale()) return;
                 position = new PhysicalPosition(point.x, point.y);
               }
             }
@@ -425,6 +433,7 @@ export function PetView() {
                     ),
                   }))
                   .filter((candidate): candidate is typeof candidate & { placement: DockPlacement } => candidate.placement !== null);
+                if (stale()) return;
                 const candidate = candidates[Math.floor(Math.random() * candidates.length)];
                 if (candidate) {
                   wander.mode = "approaching";
@@ -454,6 +463,7 @@ export function PetView() {
             if (wander.mode === "approaching" && wallClock >= wander.dockRefreshAt) {
               wander.dockRefreshAt = wallClock + 450;
               const point = await refreshDockTarget(await desktop.listDockSurfaces(), size, workArea);
+              if (stale()) return;
               if (point) wander.target = point;
               else resetWander(wallClock + pauseDuration(profile));
             }
@@ -504,6 +514,7 @@ export function PetView() {
             if (distance < 3) {
               const finalY = groundedWander ? bounds.groundY : wander.target.y;
               await petWindow.setPosition(new PhysicalPosition(wander.target.x, finalY));
+              if (stale()) return;
               if (wander.mode === "approaching") {
                 wander.mode = "docked";
                 wander.target = null;
@@ -543,17 +554,16 @@ export function PetView() {
 
               position = new PhysicalPosition(nextX, nextY);
               await petWindow.setPosition(position);
+              if (stale()) return;
               setLook(null);
-              changeReaction(groundedWander
-                ? dx >= 0 ? "run-right" : "run-left"
-                : Math.abs(dy) > Math.abs(dx) * 1.25 ? "jumping" : dx >= 0 ? "run-right" : "run-left");
+              changeReaction(locomotionReaction(dx, dy, groundedWander));
             }
           }
         } else {
           if (!userReactionActive) {
             const shouldFall = wander.mode === "docked" && currentSettings.gravityEnabled;
             resetWander();
-            if (reactionRef.current === "run-left" || reactionRef.current === "run-right" || reactionRef.current === "jumping") {
+            if (isTravelMotion(reactionRef.current)) {
               changeReaction("idle");
             }
             if (shouldFall) {
@@ -566,26 +576,27 @@ export function PetView() {
         if (wander.mode === "idle" && currentSettings.lookAtCursor && reactionRef.current === "idle" && now - lastLookAt >= 96) {
           lastLookAt = now;
           const cursor = await cursorPosition();
+          if (stale()) return;
           const petHeight = CELL_HEIGHT * currentSettings.scale * window.devicePixelRatio;
           const origin = {
             x: position.x + size.width / 2,
             y: position.y + size.height - petHeight / 2,
           };
-          if (Math.hypot(cursor.x - origin.x, cursor.y - origin.y) > Math.max(size.width, size.height) * 0.55) {
-            const cell = computeLookDirection(origin, cursor);
-            if (cell.index !== lastLook) {
-              lastLook = cell.index;
-              setLook(cell);
-            }
-          } else if (lastLook !== -1) {
-            lastLook = -1;
-            setLook(null);
+          const distance = Math.hypot(cursor.x - origin.x, cursor.y - origin.y);
+          const target = distance > Math.max(size.width, size.height) * 0.55 && distance < 650 * window.devicePixelRatio
+            ? computeLookDirection(origin, cursor).index : null;
+          const index = attention.update(target, now);
+          if ((index ?? -1) !== lastLook) {
+            lastLook = index ?? -1;
+            setLook(index === null ? null : lookCell(index));
           }
-        } else if ((wander.mode !== "idle" || reactionRef.current !== "idle") && lastLook !== -1) {
+        } else if ((!currentSettings.lookAtCursor || wander.mode !== "idle" || reactionRef.current !== "idle") && lastLook !== -1) {
           lastLook = -1;
+          attention.reset(now);
           setLook(null);
         }
       } catch {
+        if (stale()) return;
         if (wander.mode === "walking" || wander.mode === "approaching") {
           wander.stalledTicks += 1;
           if (wander.stalledTicks >= MAX_STALLED_TICKS) {
@@ -648,7 +659,7 @@ export function PetView() {
         await petWindow.setPosition(new PhysicalPosition(position.x, groundY));
         return;
       }
-      changeReaction("jumping", true);
+      changeReaction("falling", true);
       let y = Math.min(position.y, groundY);
       let velocity = 40;
       let previous = performance.now();
@@ -676,11 +687,10 @@ export function PetView() {
   }
 
   async function beginDrag(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    if (reactionTimer.current) {
-      window.clearTimeout(reactionTimer.current);
-      reactionTimer.current = null;
-    }
+    if (event.button !== 0 || motionRef.current.dragging) return;
+    actionPlayback.block('drag', true);
+    const gestureEpoch = actionPlayback.epoch;
+    let moved = false;
     brainRef.current?.interrupt();
     brainRef.current?.observeUserInteraction(Date.now());
     motionRef.current.fallToken += 1;
@@ -691,11 +701,24 @@ export function PetView() {
     changeReaction("idle");
     try {
       await resizeForBubble(false, settingsRef.current?.scale ?? 1);
+      const start = await getCurrentWindow().outerPosition();
       await getCurrentWindow().startDragging();
       await desktop.waitForDragRelease();
+      const end = await getCurrentWindow().outerPosition();
+      moved = isDragDisplacement(start, end, window.devicePixelRatio);
+    } catch (error) {
+      console.warn('[pet] drag did not complete', error);
     } finally {
       motionRef.current.dragging = false;
-      await settleWithGravity();
+      try { if (moved) await settleWithGravity(); }
+      finally { actionPlayback.block('drag', false); }
+    }
+    if (moved && settingsRef.current?.petVisible && gestureEpoch === actionPlayback.epoch) {
+      void actionPlayback.play([
+        { reaction: 'idle', durationMs: 180 },
+        { reaction: 'jumping', durationMs: 840 },
+        { reaction: 'idle', durationMs: 500 },
+      ], ACTION_PRIORITY.user);
     }
   }
 
@@ -704,12 +727,12 @@ export function PetView() {
   const displayedLook = look
     ? mapLookDirection(look, activeCharacter.lookDirectionOrder)
     : null;
-  const state = frameRows[reaction];
-  const column = displayedLook ? displayedLook.column : Math.min(spriteFrame, state.durations.length - 1);
-  const row = displayedLook ? displayedLook.row : state.row;
+  const column = displayedLook ? displayedLook.column : spriteCell.column;
+  const row = displayedLook ? displayedLook.row : spriteCell.row;
+  const replacement = replacementFrame(activeCharacter.id, activeCharacter.source, row, column);
   const style = {
     backgroundPosition: `${-column * CELL_WIDTH}px ${-row * CELL_HEIGHT}px`,
-    backgroundImage: `url("${activeCharacter.spriteSheetUrl}")`,
+    backgroundImage: replacement ? 'none' : `url("${activeCharacter.spriteSheetUrl}")`,
     transform: `scale(${settings.scale})`,
   } as React.CSSProperties;
   const stageStyle = { "--pet-height": `${CELL_HEIGHT * settings.scale}px` } as React.CSSProperties;
@@ -719,11 +742,12 @@ export function PetView() {
       className="pet-stage"
       style={stageStyle}
       onPointerDown={(event) => void beginDrag(event)}
-      onDoubleClick={() => void desktop.react("waving", activeCharacter.reactionMessages?.waving ?? "你好呀！")}
       onContextMenu={(event) => { event.preventDefault(); void desktop.showControlCenter(); }}
     >
       {message && <div className="pet-bubble">{message}</div>}
-      <div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`} />
+      <div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`}>
+        {replacement && <div className="sprite-art" style={replacementStyle(replacement, motionAssets[replacement.asset])} />}
+      </div>
     </div>
   );
 }

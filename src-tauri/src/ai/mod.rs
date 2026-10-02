@@ -5,6 +5,7 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
 use tauri::{AppHandle, Manager, State};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const SETTINGS_FILE: &str = "ai-settings.json";
 
@@ -31,6 +32,7 @@ impl Default for AiSettings {
 }
 
 pub struct AiServiceState {
+    revision: AtomicU64,
     settings: Mutex<AiSettings>,
     last_request_ms: Mutex<u64>,
 }
@@ -39,6 +41,7 @@ impl AiServiceState {
     pub fn load(app: &AppHandle) -> Self {
         Self {
             settings: Mutex::new(load_settings(app)),
+            revision: AtomicU64::new(0),
             last_request_ms: Mutex::new(0),
         }
     }
@@ -139,6 +142,7 @@ pub fn update_ai_settings(
     update: AiSettingsUpdate,
 ) -> Result<AiSettingsSnapshot, String> {
     let next = normalize_settings(&update)?;
+    state.revision.fetch_add(1, Ordering::SeqCst);
 
     if next.enabled && (next.base_url.is_empty() || next.model.is_empty()) {
         return Err("启用 AI 建议前需要填写 API 地址和模型名称。".into());
@@ -155,6 +159,7 @@ pub fn update_ai_settings(
 
     persist_settings(&app, &next)?;
     *state.settings.lock().map_err(|_| "AI settings lock is poisoned")? = next.clone();
+    state.revision.fetch_add(1, Ordering::SeqCst);
     *state.last_request_ms.lock().map_err(|_| "AI cooldown lock is poisoned")? = 0;
     Ok(settings_snapshot(&next))
 }
@@ -184,6 +189,7 @@ pub async fn request_ai_behavior_suggestion(
     context: AiBehaviorContext,
 ) -> Result<AiSuggestionResult, String> {
     validate_context(&context)?;
+    let revision = state.revision.load(Ordering::SeqCst);
     let settings = state.settings.lock().map_err(|_| "AI settings lock is poisoned")?.clone();
     if !settings.enabled {
         return Ok(AiSuggestionResult {
@@ -210,6 +216,10 @@ pub async fn request_ai_behavior_suggestion(
 
     let key = credentials::load_api_key()?;
     let suggestion = provider::request_suggestion(&settings, key.as_deref(), &context).await?;
+    if revision != state.revision.load(Ordering::SeqCst) {
+        return Ok(AiSuggestionResult { state: "skipped", suggestion: None,
+            message: "AI settings changed during request".into() });
+    }
     Ok(AiSuggestionResult {
         state: "suggested",
         suggestion: Some(suggestion),

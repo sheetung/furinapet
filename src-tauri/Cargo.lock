@@ -1107,8 +1107,9 @@ dependencies = [
 
 [[package]]
 name = "furina-desktop-pet"
-version = "1.0.9"
+version = "1.1.2"
 dependencies = [
+ "dirs 6.0.0",
  "futures-util",
  "reqwest 0.12.28",
  "serde",
@@ -1118,6 +1119,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-autostart",
  "tauri-plugin-opener",
+ "uuid",
  "windows-sys 0.61.2",
 ]
 

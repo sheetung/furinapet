@@ -1,8 +1,8 @@
 import { emit, listen } from "@tauri-apps/api/event";
-import { desktop } from "../api";
+import { actionPlayback, ACTION_PRIORITY } from '../core/action-playback';
 import { PET_SENSE_EVENT } from "../plugins/dom-bridge";
 import { reactionForSemanticAction } from "./adapters/reaction";
-import { getPetBrain, waitForAction } from "./index";
+import { getPetBrain } from "./index";
 import type {
   BrainAgentState,
   BrainAgentStateEvent,
@@ -27,7 +27,7 @@ function immediateContext(now: number, agentState: BrainAgentState): BrainContex
     autonomousMovement: false,
     canMove: false,
     canDock: false,
-    userReactionActive: false,
+    userReactionActive: actionPlayback.active,
     agentState,
     idleForMs: lastInteraction === null ? 0 : Math.max(0, now - lastInteraction),
     wanderWeight: 0,
@@ -45,23 +45,30 @@ export function publishPetBrainSnapshot() {
   });
 }
 
-async function executeReactionPlan(plan: PetActionPlan, force = false) {
+async function executeReactionPlan(plan: PetActionPlan, priority: number) {
   const brain = getPetBrain();
   const agentState = brain.blackboard.getAgentState();
   publishPetBrainSnapshot();
-  await brain.execute(plan, async (action, signal) => {
-    publishPetBrainSnapshot();
-    if (action.type === "wait") {
-      await waitForAction(action.durationMs, signal);
-      return;
+  await actionPlayback.run(priority, async session => {
+    const interrupt = () => brain.interrupt();
+    session.signal.addEventListener('abort', interrupt, { once: true });
+    try {
+      await brain.execute(plan, async (action, signal) => {
+        publishPetBrainSnapshot();
+        if (action.type === "wait") {
+          await session.wait(action.durationMs);
+          return;
+        }
+        if (action.type === "wander" || action.type === "dock") return;
+        const directive = reactionForSemanticAction(action, agentState);
+        if (!directive || signal.aborted || session.signal.aborted) return;
+        session.show(directive);
+        await session.wait(directive.durationMs);
+      }, { force: true });
+    } finally {
+      session.signal.removeEventListener('abort', interrupt);
     }
-    if (action.type === "wander" || action.type === "dock") return;
-
-    const directive = reactionForSemanticAction(action, agentState);
-    if (!directive || signal.aborted) return;
-    await desktop.react(directive.reaction);
-    await waitForAction(directive.durationMs, signal);
-  }, { force });
+  });
   publishPetBrainSnapshot();
 }
 
@@ -86,7 +93,7 @@ function handlePetSense(detail: PetSenseEventDetail) {
       now: detail.at,
     });
     const plan = brain.plan(immediateContext(detail.at, brain.blackboard.getAgentState()));
-    void executeReactionPlan(plan, true);
+    void executeReactionPlan(plan, ACTION_PRIORITY.user);
   }
 }
 
@@ -95,14 +102,16 @@ function handleAgentState(payload: BrainAgentStateEvent) {
   const now = payload.at ?? Date.now();
   brain.observeAgentState(payload.state, now);
 
-  if (payload.state === "idle") brain.interrupt();
+  if (!actionPlayback.canStart(ACTION_PRIORITY.agent)) return;
   const plan = brain.plan(immediateContext(now, payload.state));
-  void executeReactionPlan(plan, payload.state === "idle" || payload.state === "success" || payload.state === "error");
+  void executeReactionPlan(plan, ACTION_PRIORITY.agent);
 }
 
 function handleExternalIntent(payload: BrainIntentEvent) {
   const brain = getPetBrain();
   const now = Date.now();
+  const priority = payload.source === 'user' ? ACTION_PRIORITY.user : ACTION_PRIORITY.background;
+  if (!actionPlayback.canStart(priority)) return;
   brain.submitIntent(payload.source, payload.goal, {
     id: payload.id,
     priority: payload.priority,
@@ -118,7 +127,7 @@ function handleExternalIntent(payload: BrainIntentEvent) {
   }
 
   const plan = brain.plan(immediateContext(now, brain.blackboard.getAgentState()));
-  void executeReactionPlan(plan, (payload.priority ?? 0.65) >= 0.9);
+  void executeReactionPlan(plan, priority);
 }
 
 export function bootstrapPetBrainRuntime() {

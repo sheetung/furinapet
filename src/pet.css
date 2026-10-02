@@ -25,6 +25,11 @@ html.pet-window, html.pet-window body, html.pet-window #root {
   will-change: background-position;
   pointer-events: none;
 }
+.sprite-art {
+  position: absolute;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
 .pet-bubble {
   position: absolute;
   z-index: 2;

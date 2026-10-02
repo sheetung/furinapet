@@ -1,0 +1,12 @@
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.6 system-ui, sans-serif; }
+main { min-height: 100vh; padding: 24px; color: #17213d; background: #edf1f8; }
+main.dark { color: #eef2ff; background: #192237; }
+h1 { margin: 0; font-size: 24px; } h2 { font-size: 17px; }
+nav, .comparison, .frames { display: flex; gap: 16px; flex-wrap: wrap; }
+button, select { font: inherit; border: 1px solid #96a6bf; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+article { padding: 0 16px; border: 1px solid #96a6bf; border-radius: 8px; }
+.comparison { margin-top: 20px; }
+.preview-sprite { position: relative; width: 192px; height: 208px; overflow: hidden; contain: strict; background-repeat: no-repeat; image-rendering: pixelated; }
+.preview-art { position: absolute; background-repeat: no-repeat; pointer-events: none; }
+.frame { color: inherit; background: transparent; padding: 8px; }

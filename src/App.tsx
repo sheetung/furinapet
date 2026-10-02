@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ROUTINE_EVENT, routines } from './core/action-routines';
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { checkForUpdates, desktop, type UpdateResult } from "./api";
@@ -326,6 +327,16 @@ export function App() {
                 </button>
               ))}
             </div>
+            <div className="section-title"><div><span>组合动作</span><h3>多陪你一会儿</h3></div></div>
+            <p>沿用角色原有图集，增加动作顺序、停顿与短句；点击、拖动或新的互动会打断。</p>
+            <div className="reaction-grid">
+              {routines.map(item=><button key={item.id} className="reaction-card" disabled={!settings.petVisible} title={item.description}
+                onClick={()=>void emit(ROUTINE_EVENT,item.id).catch(()=>showToast('动作发送失败，请重试'))}>
+                <span>{item.icon}</span><strong>{item.label}</strong>
+              </button>)}
+              <button className="reaction-card" onClick={()=>void emit(ROUTINE_EVENT,'stop').catch(()=>showToast('停止动作失败'))}><span>⏹</span><strong>停止动作</strong></button>
+            </div>
+            {!settings.petVisible && <p>先显示桌宠，再播放组合动作。</p>}
           </section>
         )}
 

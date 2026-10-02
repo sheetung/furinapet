@@ -33,6 +33,7 @@ export function installPetDomBridge(): () => void {
   const dispatch = async (name: "pet:clicked" | "pet:doubleClicked") => {
     try {
       const handled = await desktop.publishPetEvent(name);
+      if (disposed) return;
       emitSense(name, handled);
     } catch (error) {
       console.error(`[plugin-host] ${name} dispatch failed`, error);
@@ -68,6 +69,7 @@ export function installPetDomBridge(): () => void {
     if (disposed || event.button !== 0) return;
 
     const token = ++gestureToken;
+    window.clearTimeout(singleTapTimer);
     const scale = Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
       ? window.devicePixelRatio
       : 1;
@@ -125,7 +127,8 @@ export function installPetDomBridge(): () => void {
       if (distances.length === 0) return;
 
       const moved = pointerDistance ?? windowDistance ?? Number.POSITIVE_INFINITY;
-      if (moved <= TAP_MOVE_THRESHOLD) registerTap();
+      if (moved <= TAP_MOVE_THRESHOLD * scale) registerTap();
+      else { window.clearTimeout(singleTapTimer); lastTapAt = 0; }
     })();
   };
 

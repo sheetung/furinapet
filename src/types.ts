@@ -32,6 +32,7 @@ export interface FeatureDescriptor {
 }
 
 export interface ReactionEvent {
+  manual?: boolean;
   reaction: Reaction;
   message?: string;
   durationMs?: number;

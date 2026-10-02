@@ -20,6 +20,7 @@ pub struct DashboardSnapshot {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ReactionPayload {
+    manual: bool,
     reaction: String,
     message: Option<String>,
     duration_ms: u64,
@@ -198,6 +199,10 @@ pub fn trigger_reaction_inner(
     reaction: String,
     message: Option<String>,
 ) -> Result<(), String> {
+    emit_reaction(app, reaction, message, false)
+}
+
+fn emit_reaction(app: &AppHandle, reaction: String, message: Option<String>, manual: bool) -> Result<(), String> {
     const ALLOWED: [&str; 7] = [
         "idle", "waving", "jumping", "failed", "waiting", "running", "review",
     ];
@@ -208,6 +213,7 @@ pub fn trigger_reaction_inner(
         .map(|value| value.chars().take(160).collect::<String>())
         .filter(|value| !value.is_empty());
     let payload = ReactionPayload {
+        manual,
         reaction,
         message: safe_message,
         duration_ms: 2600,
@@ -237,8 +243,9 @@ pub fn trigger_reaction(
     app: AppHandle,
     reaction: String,
     message: Option<String>,
+    manual: Option<bool>,
 ) -> Result<(), String> {
-    trigger_reaction_inner(&app, reaction, message)
+    emit_reaction(&app, reaction, message, manual.unwrap_or(false))
 }
 
 #[tauri::command]

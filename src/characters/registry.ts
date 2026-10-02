@@ -1,7 +1,11 @@
 import type { Reaction } from "../types";
+import { version as appVersion } from '../../package.json';
+import { supportsCharacter } from './compatibility';
 import { normalizeWanderProfile, type WanderProfile } from "../core/wander-controller";
 
 export interface CharacterManifest {
+  schemaVersion?: number;
+  minimumAppVersion?: string;
   id: string;
   name: string;
   description: string;
@@ -78,6 +82,9 @@ function companionAsset(manifestPath: string, fileName: string, assets: Record<s
 function validateManifest(value: unknown, directoryId?: string): CharacterManifest {
   if (!value || typeof value !== "object") throw new Error("character.json 内容无效。");
   const source = value as Partial<CharacterManifest>;
+  if (!supportsCharacter(source.minimumAppVersion, appVersion, source.schemaVersion)) {
+    throw new Error('角色包格式不兼容或需要更新版本的应用。');
+  }
   if (typeof source.id !== "string" || !ID_PATTERN.test(source.id)) {
     throw new Error("角色 id 仅支持小写字母、数字和连字符，长度不能超过 48 位。");
   }
@@ -117,6 +124,8 @@ function validateManifest(value: unknown, directoryId?: string): CharacterManife
 
   return {
     id: source.id,
+    schemaVersion: 1,
+    minimumAppVersion: source.minimumAppVersion,
     name: source.name.trim(),
     description: source.description.trim(),
     isDefault: source.isDefault === true,
@@ -211,12 +220,18 @@ function importedDefinition(stored: StoredCharacter): CharacterDefinition {
 }
 
 export async function loadCharacterRegistry(): Promise<CharacterDefinition[]> {
-  importedObjectUrls.forEach((url) => URL.revokeObjectURL(url));
-  importedObjectUrls = [];
   const stored = await storedCharacters();
+  const previousUrls = importedObjectUrls;
+  importedObjectUrls = [];
   const builtInIds = new Set(characterRegistry.map((character) => character.id));
-  return [...characterRegistry, ...stored.filter((character) => !builtInIds.has(character.id)).map(importedDefinition)]
-    .sort(compareCharacters);
+  const imported: CharacterDefinition[] = [];
+  for (const character of stored) {
+    if (builtInIds.has(character.id)) continue;
+    try { imported.push(importedDefinition(character)); }
+    catch (error) { console.warn(`[characters] skipped ${character.id}; original package retained`, error); }
+  }
+  previousUrls.forEach(url => URL.revokeObjectURL(url));
+  return [...characterRegistry, ...imported].sort(compareCharacters);
 }
 
 export function getCharacter(characterId: string | undefined, registry: readonly CharacterDefinition[] = characterRegistry): CharacterDefinition {
@@ -293,7 +308,12 @@ async function saveCharacter(manifest: CharacterManifest, avatar: Blob, thumbnai
   try {
     const transaction = database.transaction(STORE_NAME, "readwrite");
     const store = transaction.objectStore(STORE_NAME);
-    await requestResult(replace ? store.put(stored) : store.add(stored));
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(new Error('角色保存事务失败。'));
+      transaction.onerror = () => reject(new Error('角色保存失败。'));
+      if (replace) store.put(stored); else store.add(stored);
+    });
   } finally {
     database.close();
   }
@@ -359,7 +379,11 @@ export async function loadOnlineCharacters(): Promise<CharacterDefinition[]> {
   if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.characters) || !catalog.characters.every((id) => typeof id === "string" && ID_PATTERN.test(id))) {
     throw new Error("在线角色目录格式无效。");
   }
-  return Promise.all([...new Set(catalog.characters)].map(onlineCharacter));
+  const results = await Promise.allSettled([...new Set(catalog.characters)].map(onlineCharacter));
+  const available = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+  if (results.length > 0 && available.length === 0) throw new Error('没有可用的兼容角色，请检查网络或更新应用。');
+  for (const result of results) if (result.status === 'rejected') console.warn('[characters] unavailable package', result.reason);
+  return available;
 }
 
 export async function installOnlineCharacter(character: CharacterDefinition): Promise<CharacterManifest> {

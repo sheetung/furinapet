@@ -4,10 +4,10 @@ use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
-    sync::Mutex,
+    sync::{Mutex, atomic::{AtomicUsize, Ordering}},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -18,6 +18,17 @@ pub const AGENT_PROTOCOL_VERSION: u32 = 1;
 const SESSION_TTL_MS: u64 = 15_000;
 const ACTIVITY_TTL_MS: u64 = 20_000;
 const MAX_BRIDGE_LINE_BYTES: usize = 64 * 1024;
+static ACTIVE_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
+struct ConnectionGuard;
+impl ConnectionGuard {
+    fn acquire() -> Option<Self> {
+        ACTIVE_CONNECTIONS.fetch_update(Ordering::SeqCst, Ordering::SeqCst,
+            |n| (n < 16).then_some(n + 1)).ok().map(|_| Self)
+    }
+}
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) { ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::SeqCst); }
+}
 const CONFIG_DIR_NAME: &str = "dev.furinapet.desktop";
 const DISCOVERY_FILE_NAME: &str = "agent-ipc.json";
 const PET_BRAIN_AGENT_STATE_EVENT: &str = "pet-brain-agent-state";
@@ -152,11 +163,13 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         .spawn(move || {
             for incoming in listener.incoming() {
                 let Ok(stream) = incoming else { break; };
+                let Some(connection_guard) = ConnectionGuard::acquire() else { continue; };
                 let app = listener_app.clone();
                 let token = listener_token.clone();
                 let _ = thread::Builder::new()
                     .name("furinapet-agent-client".into())
                     .spawn(move || {
+                        let _guard = connection_guard;
                         let _ = handle_connection(&app, stream, &token);
                     });
             }
@@ -192,10 +205,8 @@ fn handle_connection(app: &AppHandle, mut stream: TcpStream, expected_token: &st
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
     let reader_stream = stream.try_clone().map_err(|error| error.to_string())?;
-    let mut reader = BufReader::new(reader_stream);
-    let mut line = String::new();
-    let read = reader.read_line(&mut line).map_err(|error| error.to_string())?;
-    if read == 0 {
+    let line = read_bridge_line(reader_stream)?;
+    if line.is_empty() {
         return Ok(());
     }
     if line.len() > MAX_BRIDGE_LINE_BYTES {
@@ -224,6 +235,36 @@ fn handle_connection(app: &AppHandle, mut stream: TcpStream, expected_token: &st
         Err(error) => BridgeResponse { ok: false, result: None, error: Some(sanitize_bridge_error(error)) },
     };
     write_bridge_response(&mut stream, response)
+}
+
+fn read_bridge_line(reader: impl Read) -> Result<String, String> {
+    let mut reader = BufReader::new(reader.take((MAX_BRIDGE_LINE_BYTES + 1) as u64));
+    let mut line = String::new();
+    reader.read_line(&mut line).map_err(|error| error.to_string())?;
+    Ok(line)
+}
+
+#[cfg(test)]
+mod bridge_tests {
+    use super::*;
+    #[test]
+    fn bounds_read_before_parsing_or_authentication() {
+        let mut input = std::io::Cursor::new(vec![b'x'; MAX_BRIDGE_LINE_BYTES * 8]);
+        let line = read_bridge_line(&mut input).unwrap();
+        assert_eq!(line.len(), MAX_BRIDGE_LINE_BYTES + 1);
+        assert_eq!(input.position(), (MAX_BRIDGE_LINE_BYTES + 1) as u64);
+    }
+    #[test]
+    fn keeps_normal_line_protocol() {
+        assert_eq!(read_bridge_line(&b"{}\n"[..]).unwrap(), "{}\n");
+    }
+    #[test]
+    fn caps_connections_and_releases_slots() {
+        let guards: Vec<_> = (0..16).map(|_| ConnectionGuard::acquire().unwrap()).collect();
+        assert!(ConnectionGuard::acquire().is_none());
+        drop(guards);
+        assert!(ConnectionGuard::acquire().is_some());
+    }
 }
 
 fn write_bridge_response(stream: &mut TcpStream, response: BridgeResponse) -> Result<(), String> {
