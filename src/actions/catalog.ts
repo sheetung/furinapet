@@ -1,4 +1,6 @@
-import { normalizeStep, type ActionStep } from './action-step';
+import { normalizeStep, type ActionStep } from './steps';
+import { frameRows, type GestureMotion, type MotionReaction } from '../core/sprite-motion';
+import type { Reaction } from '../types';
 
 export const ROUTINE_EVENT = 'pet-action-routine';
 export type RoutineStep = ActionStep;
@@ -36,32 +38,32 @@ const definitions: ActionRoutine[] = [
     {reaction:'idle',durationMs:1600},
   ]},
   {id:'double-blink',label:'眨眨眼',icon:'😉',description:'轻轻闭眼、睁眼，再眨一下',steps:[
-    {reaction:'idle',motion:'double-blink',durationMs:1530},
+    {reaction:'idle',motion:'double-blink',durationMs:0},
   ]},
   {id:'curious',label:'歪头观察',icon:'🧐',description:'托腮、侧看、歪头，再回正',steps:[
-    {reaction:'review',motion:'curious',durationMs:2700},
+    {reaction:'review',motion:'curious',durationMs:0},
   ]},
   {id:'doze',label:'闭眼小憩',icon:'💤',description:'站立闭眼休息，随后睁眼；不是躺卧睡眠新图',steps:[
     {reaction:'idle',motion:'doze',durationMs:5800},
-    {reaction:'idle',motion:'double-blink',durationMs:1530},
+    {reaction:'idle',motion:'double-blink',durationMs:0},
   ]},
   {id:'celebrate',label:'开心庆祝',icon:'🎉',description:'轻跳、停顿、挥手致意',steps:[
-    {reaction:'jumping',durationMs:840,message:'太棒了，值得庆祝！'},
+    {reaction:'jumping',durationMs:0,message:'太棒了，值得庆祝！'},
     {reaction:'idle',durationMs:350},
-    {reaction:'waving',durationMs:1180},
-    {reaction:'idle',motion:'double-blink',durationMs:1530},
+    {reaction:'waving',durationMs:0},
+    {reaction:'idle',motion:'double-blink',durationMs:0},
   ]},
   {id:'greeting',label:'低头致意',icon:'🎩',description:'抬手、低头致意，再收手回正',steps:[
-    {reaction:'waving',motion:'greeting',durationMs:2270},
+    {reaction:'waving',motion:'greeting',durationMs:0},
   ]},
   {id:'sitting',label:'坐下晃腿',icon:'🪑',description:'坐下交替晃腿，闭眼休息后起身',steps:[
-    {reaction:'waiting',motion:'sitting',durationMs:4610},
+    {reaction:'waiting',motion:'sitting',durationMs:0},
   ]},
   {id:'stretch-yawn',label:'伸懒腰打哈欠',icon:'🥱',description:'双臂伸展，再掩嘴打哈欠',steps:[
-    {reaction:'idle',motion:'stretch-yawn',durationMs:3600},
+    {reaction:'idle',motion:'stretch-yawn',durationMs:0},
   ]},
   {id:'tea',label:'品茶时光',icon:'🫖',description:'举杯、闭眼轻饮、放回杯碟；茶具出入过渡待精修',steps:[
-    {reaction:'waiting',motion:'tea',durationMs:4150},
+    {reaction:'waiting',motion:'tea',durationMs:0},
   ]},
   {id:'cake',label:'享用蛋糕',icon:'🍰',description:'举叉、尝一口、满足地放下叉子',steps:[
     {reaction:'waiting',motion:'cake',durationMs:0},
@@ -72,3 +74,34 @@ const definitions: ActionRoutine[] = [
 ];
 
 export const routines = definitions.map(routine => ({ ...routine, steps: routine.steps.map(completeStep) }));
+
+interface MotionEntry { id: MotionReaction; label: string; icon: string; reaction?: Reaction }
+const baseMotions: Record<Exclude<MotionReaction, GestureMotion>, Omit<MotionEntry, 'id'>> = {
+  idle: { label: '待机', icon: '💙' },
+  waving: { label: '挥手', icon: '👋', reaction: 'waving' },
+  jumping: { label: '开心跳', icon: '✨', reaction: 'jumping' },
+  review: { label: '思考', icon: '🔍', reaction: 'review' },
+  waiting: { label: '等待', icon: '⏳', reaction: 'waiting' },
+  failed: { label: '沮丧', icon: '💧', reaction: 'failed' },
+  running: { label: '忙碌', icon: '💨' },
+  'run-left': { label: '向左移动', icon: '⬅️' },
+  'run-right': { label: '向右移动', icon: '➡️' },
+  airborne: { label: '持续上移', icon: '⬆️' },
+  falling: { label: '持续下落', icon: '⬇️' },
+  dragged: { label: '被拖拽', icon: '🖐️' },
+};
+
+/** Both manual controls and clip preview read names from this catalog. */
+export const motionCatalog: MotionEntry[] = (Object.keys(frameRows) as MotionReaction[]).map(id => {
+  if (Object.hasOwn(baseMotions, id)) return { id, ...baseMotions[id as keyof typeof baseMotions] };
+  const routine = definitions.find(item => item.id === id && item.steps.some(step => step.motion === id));
+  if (!routine) throw new Error(`Missing motion catalog entry: ${id}`);
+  return { id, label: routine.label, icon: routine.icon };
+});
+export const quickActions = motionCatalog.filter((entry): entry is MotionEntry & { reaction: Reaction } => !!entry.reaction);
+
+/** Furina's authored routines belong to her; other v2 pets retain basic reactions. */
+export function getCharacterActions(character: { id: string; source?: string }) {
+  const furina = character.id === 'furina' && character.source === 'built-in';
+  return { quickActions, routines: furina ? routines : [] };
+}

@@ -13,6 +13,7 @@ pub struct Settings {
     pub scale: f64,
     pub look_at_cursor: bool,
     pub autonomous_movement: bool,
+    pub autonomous_behavior: bool,
     pub wander_weight: f64,
     pub dock_weight: f64,
     pub wander_speed: f64,
@@ -31,6 +32,7 @@ impl Default for Settings {
             scale: 1.0,
             look_at_cursor: true,
             autonomous_movement: false,
+            autonomous_behavior: true,
             wander_weight: 0.65,
             dock_weight: 0.45,
             wander_speed: 1.0,
@@ -50,6 +52,7 @@ pub struct SettingsPatch {
     pub scale: Option<f64>,
     pub look_at_cursor: Option<bool>,
     pub autonomous_movement: Option<bool>,
+    pub autonomous_behavior: Option<bool>,
     pub wander_weight: Option<f64>,
     pub dock_weight: Option<f64>,
     pub wander_speed: Option<f64>,
@@ -82,6 +85,7 @@ impl Settings {
         if let Some(value) = patch.launch_at_login { self.launch_at_login = value; }
         if let Some(value) = patch.look_at_cursor { self.look_at_cursor = value; }
         if let Some(value) = patch.autonomous_movement { self.autonomous_movement = value; }
+        if let Some(value) = patch.autonomous_behavior { self.autonomous_behavior = value; }
         if let Some(value) = patch.gravity_enabled {
             self.gravity_enabled = value;
             if value { self.window_docking = false; }
@@ -134,7 +138,12 @@ pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
 }
 
 fn decode(content: &str) -> Result<Settings, String> {
+    let raw: serde_json::Value = serde_json::from_str(content).map_err(|e| e.to_string())?;
     let mut value: Settings = serde_json::from_str(content).map_err(|e| e.to_string())?;
+    if raw.get("autonomousBehavior").is_none() {
+        // Preserve the old combined switch for existing installations.
+        value.autonomous_behavior = value.autonomous_movement;
+    }
     if value.schema_version > 1 { return Err("Settings belong to a newer application".into()); }
     // v0/legacy files have the same field names; missing fields use safe defaults.
     value.schema_version = 1;
@@ -198,6 +207,14 @@ mod tests {
     }
     impl Drop for Directory { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); } }
 
+    #[test]
+    fn autonomy_migrates_without_coupling_new_switches() {
+        assert!(!decode(r#"{"autonomousMovement":false}"#).unwrap().autonomous_behavior);
+        assert!(decode(r#"{"autonomousMovement":true}"#).unwrap().autonomous_behavior);
+        let settings = decode(r#"{"autonomousBehavior":true,"autonomousMovement":false}"#).unwrap();
+        assert!(settings.autonomous_behavior);
+        assert!(!settings.autonomous_movement);
+    }
     #[test]
     fn migrates_legacy_and_normalizes_ranges() {
         let settings = decode(r#"{"scale":99,"petVisible":false,"gravityEnabled":true,"windowDocking":true}"#).unwrap();

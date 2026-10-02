@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ROUTINE_EVENT, routines } from './core/action-routines';
+import { ROUTINE_EVENT, getCharacterActions } from './actions/catalog';
+import { PetBehaviorSettings } from './pet-brain/PetBehaviorSettings';
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { checkForUpdates, desktop, type UpdateResult } from "./api";
@@ -28,20 +29,14 @@ const defaultSettings: AppSettings = {
   scale: 1,
   lookAtCursor: true,
   autonomousMovement: false,
+  autonomousBehavior: true,
   wanderWeight: 0.65,
   dockWeight: 0.45,
   wanderSpeed: 1,
   gravityEnabled: true,
-  windowDocking: true,
+  windowDocking: false,
 };
 
-const reactions: readonly { id: Reaction; label: string; icon: string }[] = [
-  { id: "waving", label: "挥手", icon: "👋" },
-  { id: "jumping", label: "开心", icon: "✨" },
-  { id: "review", label: "思考", icon: "🔍" },
-  { id: "waiting", label: "等待", icon: "⏳" },
-  { id: "failed", label: "沮丧", icon: "💧" },
-];
 
 export function App() {
   const [page, setPage] = useState<Page>("home");
@@ -64,6 +59,7 @@ export function App() {
   const localCharacterInput = useRef<HTMLInputElement | null>(null);
   const version = dashboard?.version ?? "1.0.9";
   const activeCharacter = getCharacter(settings.selectedCharacterId, characters);
+  const { quickActions, routines } = getCharacterActions(activeCharacter);
 
   useEffect(() => {
     void loadCharacterRegistry()
@@ -319,30 +315,26 @@ export function App() {
                 <i>在线安装或导入</i>
               </button>
             </div>
-            <div className="section-title"><div><span>快捷互动</span><h3>今天想看什么？</h3></div></div>
+            <div className="section-title"><div><span>{activeCharacter.name}的动作</span><h3>今天想看什么？</h3></div></div>
             <div className="reaction-grid">
-              {reactions.map((item) => (
-                <button key={item.id} className="reaction-card" onClick={() => void react(item.id, activeCharacter.reactionMessages?.[item.id] ?? "")}>
+              {quickActions.map((item) => (
+                <button key={item.id} className="reaction-card" disabled={!settings.petVisible} onClick={() => void react(item.reaction, activeCharacter.reactionMessages?.[item.reaction] ?? "")}>
                   <span>{item.icon}</span><strong>{item.label}</strong>
                 </button>
               ))}
-            </div>
-            <div className="section-title"><div><span>组合动作</span><h3>多陪你一会儿</h3></div></div>
-            <p>沿用角色原有图集，增加动作顺序、停顿与短句；点击、拖动或新的互动会打断。</p>
-            <div className="reaction-grid">
               {routines.map(item=><button key={item.id} className="reaction-card" disabled={!settings.petVisible} title={item.description}
                 onClick={()=>void emit(ROUTINE_EVENT,item.id).catch(()=>showToast('动作发送失败，请重试'))}>
                 <span>{item.icon}</span><strong>{item.label}</strong>
               </button>)}
               <button className="reaction-card" onClick={()=>void emit(ROUTINE_EVENT,'stop').catch(()=>showToast('停止动作失败'))}><span>⏹</span><strong>停止动作</strong></button>
             </div>
-            {!settings.petVisible && <p>先显示桌宠，再播放组合动作。</p>}
+            {!settings.petVisible && <p>先显示桌宠，再播放动作。</p>}
           </section>
         )}
 
         {page === "pet" && (
           <section className="page">
-            <PageHeader eyebrow="Companion" title="宠物" description="这里配置角色的显示、物理和运动表现；自主决策权重统一放在“自主”页面。" />
+            <PageHeader eyebrow="Companion" title="宠物" description="调整外观、移动和自主行为。" />
             <div className="pet-profile card">
               <img src={activeCharacter.thumbnailUrl} alt={activeCharacter.name} />
               <div><span className="tag">已注册 · v2</span><h2>{activeCharacter.name}</h2><p>{activeCharacter.description} 11 行、8 列图集，包含 9 种基础动画和 16 个顺时针视线方向。</p></div>
@@ -350,16 +342,25 @@ export function App() {
             <div className="settings-list">
               <SettingRow title="显示桌宠" description={`在桌面显示或隐藏${activeCharacter.name}。`}><Switch checked={settings.petVisible} disabled={busy} onChange={(value) => void updateSettings({ petVisible: value })} /></SettingRow>
               <SettingRow title="视线跟随" description="空闲时看向全局鼠标位置。"><Switch checked={settings.lookAtCursor} disabled={busy} onChange={(value) => void updateSettings({ lookAtCursor: value })} /></SettingRow>
+              <SettingRow title="自主行为" description="根据体力、口渴和饥饿安排休息与日常动作；不要求开启走动。"><Switch checked={settings.autonomousBehavior} disabled={busy} onChange={(value) => void updateSettings({ autonomousBehavior: value })} /></SettingRow>
+              <SettingRow title="允许走动" description="允许闲时漫步；关闭后仍可原地休息、喝茶和吃点心。"><Switch checked={settings.autonomousMovement} disabled={busy || !settings.autonomousBehavior} onChange={(value) => void updateSettings({ autonomousMovement: value })} /></SettingRow>
               <SettingRow title="重力落地" description="开启后拖动松手自然落地并贴地漫步；关闭后可在屏幕内自由移动。"><Switch checked={settings.gravityEnabled} disabled={busy} onChange={(value) => void updateSettings({ gravityEnabled: value })} /></SettingRow>
-              <SettingRow title="窗口停靠" description="允许角色停留在其他应用窗口的顶部、内侧底边或左右轮廓；是否主动探索由自主页面权重决定。"><Switch checked={settings.windowDocking} disabled={busy} onChange={(value) => void updateSettings({ windowDocking: value })} /></SettingRow>
+              <SettingRow title="允许停靠" description="允许接近并停留在窗口边缘，与普通漫步独立；开启会关闭重力。"><Switch checked={settings.windowDocking} disabled={busy || !settings.autonomousBehavior} onChange={(value) => void updateSettings({ windowDocking: value })} /></SettingRow>
+              <SettingRow title="漫步倾向" description={`${Math.round(settings.wanderWeight * 100)}% · 越高越喜欢四处走动`} wide>
+                <input className="range" type="range" min="0" max="1" step="0.05" value={settings.wanderWeight} disabled={busy || !settings.autonomousBehavior || !settings.autonomousMovement} onChange={event => setSettings(current => ({ ...current, wanderWeight: Number(event.target.value) }))} onPointerUp={event => void updateSettings({ wanderWeight: Number(event.currentTarget.value) })} />
+              </SettingRow>
+              <SettingRow title="停靠倾向" description={`${Math.round(settings.dockWeight * 100)}% · 越高越喜欢停靠窗口边缘`} wide>
+                <input className="range" type="range" min="0" max="1" step="0.05" value={settings.dockWeight} disabled={busy || !settings.autonomousBehavior || !settings.windowDocking} onChange={event => setSettings(current => ({ ...current, dockWeight: Number(event.target.value) }))} onPointerUp={event => void updateSettings({ dockWeight: Number(event.currentTarget.value) })} />
+              </SettingRow>
               <SettingRow title="宠物大小" description={`${Math.round(settings.scale * 100)}%`} wide>
                 <input className="range" type="range" min="0.65" max="1.5" step="0.05" value={settings.scale} onChange={(event) => setSettings((current) => ({ ...current, scale: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ scale: Number(event.currentTarget.value) })} />
               </SettingRow>
-              <SettingRow title="漫步速度" description={`${Math.round(settings.wanderSpeed * 100)}% · 自主移动开启后生效`} wide>
-                <input className="range" type="range" min="0.6" max="1.8" step="0.1" value={settings.wanderSpeed} disabled={!settings.autonomousMovement} onChange={(event) => setSettings((current) => ({ ...current, wanderSpeed: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ wanderSpeed: Number(event.currentTarget.value) })} />
+              <SettingRow title="移动速度" description={`${Math.round(settings.wanderSpeed * 100)}% · 走动或接近停靠位置时生效`} wide>
+                <input className="range" type="range" min="0.6" max="1.8" step="0.1" value={settings.wanderSpeed} disabled={!settings.autonomousBehavior || (!settings.autonomousMovement && !settings.windowDocking)} onChange={(event) => setSettings((current) => ({ ...current, wanderSpeed: Number(event.target.value) }))} onPointerUp={(event) => void updateSettings({ wanderSpeed: Number(event.currentTarget.value) })} />
               </SettingRow>
             </div>
             <button className="secondary" onClick={() => void desktop.resetPetPosition().then(() => showToast("已重置到主屏幕右下角"))}>重置桌宠位置</button>
+            <PetBehaviorSettings />
           </section>
         )}
 

@@ -16,6 +16,8 @@ export class PetUtilityPlanner {
       ? 0
       : clamp01(1 - (now - lastUserInteractionAt) / 5000);
     const energy = blackboard.getEnergy();
+    const needs = blackboard.getNeeds();
+    const cursorAttention = blackboard.cursorAttention(now);
     const repeatPenalty = (goal: PetGoalId, amount: number) => Math.min(0.45, blackboard.goalRepeatCount(goal) * amount);
     const cooldownPenalty = (goal: PetGoalId, cooldownMs: number, amount: number) => {
       const elapsed = blackboard.msSinceGoal(goal, now);
@@ -32,7 +34,8 @@ export class PetUtilityPlanner {
       scores.push({ goal, score: clamp01(score), reason });
     };
 
-    add("idle", 0.26 + (1 - context.activity) * 0.12 + (context.userReactionActive ? 0.32 : 0), "baseline calm state");
+    add("idle", 0.26 + (1 - context.activity) * 0.12 + (context.userReactionActive ? 0.32 : 0)
+      + cursorAttention * 0.5, cursorAttention > 0 ? "nearby cursor movement" : "baseline calm state");
 
     const respondScore = recentUserInteraction * (0.62 + Math.min(3, clickStreak) * 0.11)
       - repeatPenalty("respond-user", 0.12)
@@ -59,10 +62,11 @@ export class PetUtilityPlanner {
     const restScore = (1 - energy) * 0.7
       + (context.idleForMs > 45000 ? 0.12 : 0)
       - (agentActive ? 0.18 : 0)
-      - recentUserInteraction * 0.25;
-    add("rest", restScore - cooldownPenalty("rest", 12000, 0.18), "energy recovery");
+      - recentUserInteraction * 0.25 - cursorAttention * 0.3;
+    add("rest", needs.reason ? (needs.recovering ? .98 : .94) : Math.max(energy <= .55 ? .62 : 0, restScore - cooldownPenalty("rest", 12000, 0.18)),
+      needs.reason ? `need:${needs.reason}` : "energy recovery");
 
-    const movementAvailable = context.autonomousMovement && context.canMove && !context.userReactionActive;
+    const movementAvailable = context.autonomousMovement && context.canMove && !context.userReactionActive && !needs.recovering;
     const wanderBase = movementAvailable
       ? context.wanderWeight * (0.48 + context.activity * 0.36)
       : 0;
@@ -70,21 +74,24 @@ export class PetUtilityPlanner {
       + Math.min(0.18, context.idleForMs / 90000 * 0.18)
       + energy * 0.08
       - recentUserInteraction * 0.35
+      - cursorAttention * 0.55
       - (agentActive ? 0.2 : 0)
       - repeatPenalty("wander", 0.1)
       - cooldownPenalty("wander", 3500, 0.15);
-    add("wander", wanderScore, "autonomous exploration tendency");
+    add("wander", movementAvailable && context.wanderWeight > 0 ? wanderScore : 0, "autonomous exploration tendency");
 
-    const dockBase = movementAvailable && context.canDock
-      ? context.dockWeight * (0.38 + context.curiosity * 0.42)
+    const wantsWindowRest = movementAvailable && context.canDock && !needs.reason && energy <= .55;
+    const dockBase = wantsWindowRest
+      ? context.dockWeight * .55
       : 0;
     const dockScore = dockBase
       + Math.min(0.08, context.idleForMs / 120000 * 0.08)
       - recentUserInteraction * 0.25
+      - cursorAttention * 0.5
       - (agentActive ? 0.12 : 0)
       - repeatPenalty("dock", 0.12)
       - cooldownPenalty("dock", 10000, 0.28);
-    add("dock", dockScore, "window exploration tendency");
+    add("dock", wantsWindowRest && context.dockWeight > 0 ? dockScore : 0, "nearby window rest");
 
     if (intent) {
       const existing = scores.find((item) => item.goal === intent.goal);

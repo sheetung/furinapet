@@ -132,6 +132,8 @@ export interface BrainExecutorSnapshot {
 }
 
 export interface PetBrainSnapshot {
+  needs?: import('./needs').NeedsSnapshot;
+  cursor?: { at: number; near: boolean; moving: boolean; speed: number; attention: number } | null;
   currentGoal: PetGoalId;
   mood: PetMood;
   energy: number;

@@ -43,11 +43,13 @@ export interface WindowSurface {
   processName?: string;
   appKind?: WindowAppKind;
   dockPolicy?: DockPolicy;
+  isForeground?: boolean;
 }
 
 export interface PetSize {
   width: number;
   height: number;
+  feetInset?: number;
 }
 
 export type DockEdge = "top" | "bottom-inside" | "left" | "right";
@@ -223,7 +225,7 @@ export function chooseDockPlacement(
     }
   };
 
-  addHorizontal("top", surface.y - petSize.height + 2, 56, 176);
+  addHorizontal("top", surface.y - petSize.height + (petSize.feetInset ?? 0), 8, 8);
   if (dockPolicy === "outside-only") {
     return preferredEdge && preferredEdge !== "top"
       ? null
@@ -246,4 +248,37 @@ export function chooseDockPlacement(
   return edgePreference
     .map((edge) => placements.find((placement) => placement.edge === edge))
     .find((placement): placement is DockPlacement => placement !== undefined) ?? null;
+}
+
+/** Native surfaces are ordered front to back. Only use an exposed top edge. */
+export function exposedTopPlacement(
+  surfaces: WindowSurface[], index: number, size: PetSize, area: WorkArea, ratio: number,
+): DockPlacement | null {
+  const surface = surfaces[index];
+  const point = chooseDockPlacement(surface, size, area, 0, ratio, 'top');
+  if (!point) return null;
+  const obscured = surfaces.slice(0, index).some(front =>
+    front.x < point.x + size.width && front.x + front.width > point.x
+    && front.y <= surface.y && front.y + front.height > point.y);
+  return obscured ? null : point;
+}
+
+export function nearestRestingEdge(surfaces: WindowSurface[], size: PetSize, area: WorkArea,
+  position: Point, maximumDistance: number, random = Math.random,
+  policy?: { allowWindow(surface: WindowSurface): boolean; allowPlacement(point: Point): boolean }) {
+  return surfaces.flatMap((surface, index) => {
+    // Roll once per window selection, never while following an existing dock.
+    if (policy ? !policy.allowWindow(surface) : surface.isForeground && random() >= .2) return [];
+    const left = chooseDockPlacement(surface, size, area, 0, 0, 'top');
+    const right = chooseDockPlacement(surface, size, area, 0, 1, 'top');
+    if (!left || !right) return [];
+    const nearestRatio = right.x === left.x ? 0 : clamp((position.x - left.x) / (right.x - left.x), 0, 1);
+    return [nearestRatio, 0, .25, .5, .75, 1].flatMap(ratio => {
+      const placement = exposedTopPlacement(surfaces, index, size, area, ratio);
+      if (!placement) return [];
+      if (policy && !policy.allowPlacement(placement)) return [];
+      const distance = Math.hypot(placement.x - position.x, placement.y - position.y);
+      return distance <= maximumDistance ? [{ surface, ratio, placement, distance }] : [];
+    });
+  }).sort((a, b) => a.distance - b.distance)[0] ?? null;
 }

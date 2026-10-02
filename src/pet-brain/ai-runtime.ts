@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { desktop, type AiBehaviorContext } from "../api";
-import { actionPlayback, ACTION_PRIORITY } from '../core/action-playback';
+import { actionPlayback, ACTION_PRIORITY } from '../actions/coordinator';
 import { normalizeAiBehaviorSuggestion } from "./adapters/ai";
 import { getPetBrain } from "./index";
 import { PET_BRAIN_AGENT_STATE_EVENT, publishPetBrainSnapshot } from "./runtime";
@@ -39,8 +39,8 @@ async function buildContext(): Promise<AiBehaviorContext> {
       recentInteraction: idleForMs <= 5_000,
     },
     environment: {
-      canWander: settings.autonomousMovement,
-      canDock: settings.autonomousMovement && settings.windowDocking && !settings.gravityEnabled,
+      canWander: settings.autonomousBehavior && settings.autonomousMovement,
+      canDock: settings.autonomousBehavior && settings.windowDocking && !settings.gravityEnabled,
     },
   };
 }
@@ -49,6 +49,7 @@ async function requestSuggestion(reason: string) {
   if (inFlight || !("__TAURI_INTERNALS__" in window)) return;
   inFlight = true;
   try {
+    if (!(await desktop.getSettings()).autonomousBehavior) return;
     const settings = await desktop.getAiSettings();
     if (!settings.enabled || !settings.configured) return;
 
@@ -57,6 +58,7 @@ async function requestSuggestion(reason: string) {
     const result = await desktop.requestAiBehaviorSuggestion(context);
     if (result.state !== "suggested" || !result.suggestion) return;
     const latest = await desktop.getAiSettings();
+    if (!(await desktop.getSettings()).autonomousBehavior) return;
     if (!latest.enabled || JSON.stringify(latest) !== JSON.stringify(settings)
       || interactionAt !== getPetBrain().snapshot().lastUserInteractionAt
       || !actionPlayback.canStart(ACTION_PRIORITY.background)) return;

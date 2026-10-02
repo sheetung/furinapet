@@ -1,13 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import ts from 'typescript';
-
-async function load(source) {
-  const code = await readFile(new URL(source, import.meta.url), 'utf8');
-  const { outputText } = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
-  return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
-}
+import { load } from './load-ts.mjs';
 const { sampleMotion, frameRows, locomotionReaction, isTravelMotion } = await load('../src/core/sprite-motion.ts');
 
 test('dragged pose loops until release instead of completing on idle', () => {
@@ -50,12 +43,14 @@ test('new gestures finish or loop as specified without empty frames', () => {
   assert.ok(sampleMotion('doze', 20000).nextMs > 0);
 });
 const { AttentionTracker, isDragDisplacement } = await load('../src/core/attention.ts');
-const { replacementFrame, replacementStyle } = await load('../src/core/motion-art.ts');
+const { replacementStyle } = await load('../src/core/motion-art.ts');
+const { replacementFrame } = await load('../src/characters/furina-art.ts');
 
 test('replacement crops stay within their atlases and use finite anchored styles', () => {
-  for (const [row, count] of [[0, 6], [3, 4], [4, 5], [8, 6], [11, 6], [12, 6], [13, 6], [14, 6]]) {
+  for (const [row, count, clipId] of [[0, 6], [3, 4], [4, 5], [8, 6],
+    ...['greeting', 'sitting', 'stretch', 'tea', 'cake', 'proud'].map(id => [0, 6, id])]) {
     for (let column = 0; column < count; column++) {
-      const frame = replacementFrame('furina', 'built-in', row, column);
+      const frame = replacementFrame('furina', 'built-in', row, column, clipId);
       assert.ok(frame);
       assert.ok(frame.x >= 0 && frame.x + frame.width <= frame.atlasWidth);
       assert.ok(frame.y >= 0 && frame.y + frame.height <= frame.atlasHeight);
@@ -64,7 +59,7 @@ test('replacement crops stay within their atlases and use finite anchored styles
       assert.equal(style.left + frame.anchorX * frame.scale, 96);
       assert.equal(style.top + frame.anchorY * frame.scale, 200);
     }
-    assert.equal(replacementFrame('furina', 'built-in', row, count), null);
+    assert.equal(replacementFrame('furina', 'built-in', row, count, clipId), null);
   }
 });
 
@@ -72,8 +67,19 @@ test('art overrides never affect imported characters or unpopulated cells', () =
   for (const [id, source] of [['other', 'built-in'], ['furina', 'local'], ['furina', undefined]]) {
     assert.equal(replacementFrame(id, source, 0, 0), null);
   }
-  for (const row of [1, 2, 5, 6, 7, 9, 10]) assert.equal(replacementFrame('furina', 'built-in', row, 0), null);
+  for (const row of [1, 2, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16]) assert.equal(replacementFrame('furina', 'built-in', row, 0), null);
   for (const column of [-1, 0.5, NaN]) assert.equal(replacementFrame('furina', 'built-in', 0, column), null);
+});
+
+test('extension sampling carries explicit assets and completes on a public neutral frame', () => {
+  for (const name of ['greeting', 'sitting', 'stretch-yawn', 'tea', 'cake', 'proud']) {
+    const cell = sampleMotion(name, 0);
+    assert.ok(cell.row <= 10);
+    const frame = replacementFrame('furina', 'built-in', cell.row, cell.column, cell.clipId);
+    assert.equal(frame.asset, name === 'stretch-yawn' ? 'stretch' : name);
+    assert.equal(replacementFrame('other', 'local', cell.row, cell.column, cell.clipId), null);
+    assert.deepEqual(sampleMotion(name, 100000), { row: 0, column: 0, nextMs: null });
+  }
 });
 
 test('jump frames share a scale and baseline to preserve airborne displacement', () => {

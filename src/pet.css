@@ -59,9 +59,9 @@ html.pet-window, html.pet-window body, html.pet-window #root {
   max-width: calc(100% - 12px);
   max-height: 80px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: auto;
   transform: translateX(-50%);
-  padding: 8px 11px;
+  padding: 8px 24px 8px 11px;
   border: 1px solid rgba(139,190,239,.34);
   border-radius: 12px 12px 12px 3px;
   color: #142139;
@@ -69,5 +69,7 @@ html.pet-window, html.pet-window body, html.pet-window #root {
   box-shadow: 0 6px 18px rgba(13,31,61,.22);
   font: 600 12px/1.45 "Segoe UI", "Microsoft YaHei UI", sans-serif;
   text-align: center;
-  pointer-events: none;
+  pointer-events: auto;
 }
+.bubble-close { position: absolute; right: 3px; top: 2px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.bubble-inside { bottom: auto; top: 0; }

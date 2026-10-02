@@ -1,4 +1,4 @@
-use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::settings::Settings;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -39,7 +39,8 @@ pub fn create(app: &AppHandle, settings: &Settings) -> tauri::Result<WebviewWind
 
 pub fn apply_settings(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     let window = app.get_webview_window("pet").ok_or("pet window is unavailable")?;
-    window.set_size(LogicalSize::new(BASE_WIDTH * settings.scale, BASE_HEIGHT * settings.scale)).map_err(|error| error.to_string())?;
+    // Runtime geometry belongs to the pet webview's serialized layout queue.
+    // Initial geometry is set by create(); settings-changed drives later resizes.
     window.set_always_on_top(settings.always_on_top).map_err(|error| error.to_string())?;
     let revision = VISIBILITY_REVISION.fetch_add(1, Ordering::SeqCst) + 1;
     if settings.pet_visible {
@@ -65,9 +66,11 @@ pub fn apply_settings(app: &AppHandle, settings: &Settings) -> Result<(), String
 pub fn reset_position(app: &AppHandle) -> Result<(), String> {
     let window = app.get_webview_window("pet").ok_or("pet window is unavailable")?;
     let monitor = window.primary_monitor().map_err(|error| error.to_string())?.ok_or("primary monitor is unavailable")?;
-    let size = window.outer_size().map_err(|error| error.to_string())?;
     let work_area = monitor.work_area();
-    let x = work_area.position.x + work_area.size.width as i32 - size.width as i32 - 32;
-    let y = work_area.position.y + work_area.size.height as i32 - size.height as i32;
-    window.set_position(PhysicalPosition::new(x, y)).map_err(|error| error.to_string())
+    // Dispatch a request; the pet cancels movement and waits for native drag release.
+    // Size is read at execution time, after any queued scale/bubble layout.
+    app.emit_to("pet", "pet-reset-position", serde_json::json!({
+        "x": work_area.position.x, "y": work_area.position.y,
+        "width": work_area.size.width, "height": work_area.size.height,
+    })).map_err(|error| error.to_string())
 }

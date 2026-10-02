@@ -8,13 +8,16 @@ export class AttentionTracker {
     this.candidate = this.current = null;
     this.candidateSince = this.changedAt = now;
   }
-  update(target: number | null, now: number): number | null {
+  update(target: number | null, now: number, moving = false): number | null {
     if (target !== this.candidate) {
       this.candidate = target;
       this.candidateSince = now;
     }
     const dwell = target === null ? 650 : 280;
-    if (now - this.candidateSince >= dwell && now - this.changedAt >= 450 && this.current !== target) {
+    const ready = moving && target !== null
+      ? now - this.changedAt >= 80
+      : now - this.candidateSince >= dwell && now - this.changedAt >= 450;
+    if (ready && this.current !== target) {
       this.current = target;
       this.changedAt = now;
     }

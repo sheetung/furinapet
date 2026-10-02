@@ -8,6 +8,7 @@ export interface AppSettings {
   scale: number;
   lookAtCursor: boolean;
   autonomousMovement: boolean;
+  autonomousBehavior: boolean;
   wanderWeight: number;
   dockWeight: number;
   wanderSpeed: number;

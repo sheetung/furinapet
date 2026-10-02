@@ -1,6 +1,6 @@
 import type { WanderProfile } from "../../core/wander-controller";
 import { PetBrain } from "../index";
-import type { BrainAgentState, PetGoalId } from "../types";
+import type { BrainAgentState, PetGoalId, PetActionPlan } from "../types";
 
 export interface WanderDecisionInput {
   now: number;
@@ -16,7 +16,7 @@ export interface WanderDecisionInput {
   profile: WanderProfile;
 }
 
-export function planWanderGoal(brain: PetBrain, input: WanderDecisionInput): PetGoalId {
+export function planWanderGoal(brain: PetBrain, input: WanderDecisionInput, onStationaryPlan?: (plan: PetActionPlan) => void): PetGoalId {
   const effectiveWanderWeight = input.wanderWeight <= 0
     ? 0
     : Math.min(1, Math.max(0, input.wanderWeight) + Math.min(4, input.missedOpportunities) * 0.05);
@@ -36,5 +36,6 @@ export function planWanderGoal(brain: PetBrain, input: WanderDecisionInput): Pet
     activity: input.profile.activity,
     curiosity: input.profile.curiosity,
   });
+  if (plan.goal !== 'wander' && plan.goal !== 'dock') onStationaryPlan?.(plan);
   return plan.goal;
 }

@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
-import { createPortal } from "react-dom";
 import { desktop, type AiBehaviorSuggestion, type AiSettingsSnapshot } from "../api";
-import type { AppSettings, SettingsPatch } from "../types";
 import {
   PET_BRAIN_SNAPSHOT_EVENT,
   PET_BRAIN_SNAPSHOT_REQUEST_EVENT,
@@ -27,77 +25,21 @@ const emptyForm: FormState = {
   apiKey: "",
 };
 
-export function BrainNavigation() {
-  const [active, setActive] = useState(false);
-  const [host, setHost] = useState<HTMLDivElement | null>(null);
+export function PetBehaviorSettings() {
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [aiSettings, setAiSettings] = useState<AiSettingsSnapshot | null>(null);
-  const [behaviorSettings, setBehaviorSettings] = useState<AppSettings | null>(null);
   const [brainSnapshot, setBrainSnapshot] = useState<PetBrainSnapshot | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [busy, setBusy] = useState(false);
-  const [behaviorBusy, setBehaviorBusy] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<AiBehaviorSuggestion | null>(null);
   const [toast, setToast] = useState("");
-  const navButtonRef = useRef<HTMLButtonElement | null>(null);
-
   useEffect(() => {
-    let disposed = false;
-    let observer: MutationObserver | null = null;
-    let mountedNav: HTMLElement | null = null;
-    let delegatedListener: ((event: Event) => void) | null = null;
-
-    const mountNavigation = () => {
-      if (disposed || navButtonRef.current) return;
-      const nav = document.querySelector<HTMLElement>(".sidebar nav");
-      const settingsButton = Array.from(nav?.querySelectorAll<HTMLButtonElement>("button") ?? [])
-        .find((button) => button.textContent?.includes("设置"));
-      if (!nav || !settingsButton) return;
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "brain-nav-button";
-      button.innerHTML = "<span>◈</span>自主";
-      button.addEventListener("click", () => {
-        const home = Array.from(nav.querySelectorAll<HTMLButtonElement>("button"))
-          .find((item) => item !== button && item.textContent?.includes("主页"));
-        home?.click();
-        Array.from(nav.querySelectorAll<HTMLButtonElement>("button")).forEach((item) => {
-          if (item !== button) item.classList.remove("active");
-        });
-        setActive(true);
-      });
-      nav.insertBefore(button, settingsButton);
-      navButtonRef.current = button;
-      mountedNav = nav;
-      delegatedListener = (event: Event) => {
-        const target = event.target instanceof Element ? event.target.closest("button") : null;
-        if (target && target !== button) setActive(false);
-      };
-      nav.addEventListener("click", delegatedListener);
-    };
-
-    mountNavigation();
-    observer = new MutationObserver(mountNavigation);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      disposed = true;
-      observer?.disconnect();
-      if (mountedNav && delegatedListener) mountedNav.removeEventListener("click", delegatedListener);
-      navButtonRef.current?.remove();
-      navButtonRef.current = null;
-    };
+    void refresh();
   }, []);
 
   useEffect(() => {
-    navButtonRef.current?.classList.toggle("active", active);
-    if (!active) return;
-    void refresh();
-  }, [active]);
-
-  useEffect(() => {
-    if (!active || !("__TAURI_INTERNALS__" in window)) return;
+    if (!inspectorOpen || !("__TAURI_INTERNALS__" in window)) return;
     let disposed = false;
     let stopListening: (() => void) | null = null;
 
@@ -121,30 +63,7 @@ export function BrainNavigation() {
       window.clearInterval(timer);
       stopListening?.();
     };
-  }, [active]);
-
-  useEffect(() => {
-    const content = document.querySelector<HTMLElement>("main.content");
-    if (!active || !content) {
-      setHost(null);
-      return;
-    }
-    const existingChildren = Array.from(content.children) as HTMLElement[];
-    const previousDisplays = existingChildren.map((element) => element.style.display);
-    existingChildren.forEach((element) => { element.style.display = "none"; });
-
-    const pageHost = document.createElement("div");
-    pageHost.style.display = "contents";
-    content.appendChild(pageHost);
-    setHost(pageHost);
-
-    return () => {
-      pageHost.remove();
-      existingChildren.forEach((element, index) => {
-        element.style.display = previousDisplays[index];
-      });
-    };
-  }, [active]);
+  }, [inspectorOpen]);
 
   function showToast(message: string) {
     setToast(message);
@@ -153,12 +72,8 @@ export function BrainNavigation() {
 
   async function refresh() {
     try {
-      const [nextAi, nextBehavior] = await Promise.all([
-        desktop.getAiSettings(),
-        desktop.getSettings(),
-      ]);
+      const nextAi = await desktop.getAiSettings();
       setAiSettings(nextAi);
-      setBehaviorSettings(nextBehavior);
       setForm({
         enabled: nextAi.enabled,
         baseUrl: nextAi.baseUrl,
@@ -169,19 +84,6 @@ export function BrainNavigation() {
       });
     } catch (error) {
       showToast(`自主设置加载失败：${String(error)}`);
-    }
-  }
-
-  async function updateBehaviorSettings(patch: SettingsPatch) {
-    setBehaviorBusy(true);
-    try {
-      const next = await desktop.updateSettings(patch);
-      setBehaviorSettings(next);
-    } catch (error) {
-      showToast(`自主设置保存失败：${String(error)}`);
-      void desktop.getSettings().then(setBehaviorSettings).catch(() => undefined);
-    } finally {
-      setBehaviorBusy(false);
     }
   }
 
@@ -225,16 +127,16 @@ export function BrainNavigation() {
     }
   }
 
-  if (!active || !host) return null;
 
   const decision = brainSnapshot?.lastDecision ?? null;
   const executor = brainSnapshot?.executor;
   const topScore = decision?.candidates[0]?.score ?? 1;
 
-  return createPortal(
-    <section className="page brain-page">
+  return (
+    <div className="brain-page">
       <style>{`
-        .brain-page { padding-bottom:36px; }
+        .brain-page { padding-top:18px; padding-bottom:18px; }
+        .brain-card > summary { padding:18px; cursor:pointer; font-weight:600; }
         .brain-header > span { color:#66d7e8; font-size:10px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
         .brain-header h1 { margin:6px 0 8px; font-size:28px; }
         .brain-header p { margin:0 0 22px; color:#91a2bd; font-size:13px; line-height:1.65; }
@@ -303,73 +205,8 @@ export function BrainNavigation() {
         @media (max-width:820px) { .brain-field { grid-template-columns:1fr; gap:7px; } .brain-actions { align-items:flex-start; flex-direction:column; } .brain-live-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
       `}</style>
 
-      <div className="brain-header">
-        <span>Pet Brain</span>
-        <h1>自主</h1>
-        <p>本地 Utility Planner 拥有最终决定权。这里配置角色的自主行为倾向；AI 只提供高层 Goal 建议，不直接控制动画或坐标。</p>
-      </div>
-
-      <div className="brain-card">
-        <div className="brain-card-head">
-          <div>
-            <span className="brain-kicker">Core</span>
-            <h3>自主行为核心</h3>
-            <p>Blackboard → Utility Planner → Action Plan → Priority Executor</p>
-          </div>
-          <span className="brain-badge live">本地运行</span>
-        </div>
-        {behaviorSettings && (
-          <div className="brain-fields">
-            <div className="brain-field">
-              <label><strong>自主移动</strong><small>允许 Pet Brain 主动选择当前运动模式下可用的行为。</small></label>
-              <button
-                className={`brain-switch ${behaviorSettings.autonomousMovement ? "on" : ""}`}
-                role="switch"
-                aria-checked={behaviorSettings.autonomousMovement}
-                disabled={behaviorBusy}
-                onClick={() => void updateBehaviorSettings({ autonomousMovement: !behaviorSettings.autonomousMovement })}
-              ><span /></button>
-            </div>
-            <div className="brain-field">
-              <label><strong>漫步倾向</strong><small>影响 wander Goal 的 Utility 权重，不是固定触发概率。</small></label>
-              <div className="brain-range-control">
-                <input
-                  className="brain-range"
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={behaviorSettings.wanderWeight}
-                  disabled={behaviorBusy}
-                  onChange={(event) => setBehaviorSettings((current) => current ? { ...current, wanderWeight: Number(event.target.value) } : current)}
-                  onPointerUp={(event) => void updateBehaviorSettings({ wanderWeight: Number(event.currentTarget.value) })}
-                />
-                <span className="brain-range-value">{Math.round(behaviorSettings.wanderWeight * 100)}%</span>
-              </div>
-            </div>
-            <div className="brain-field">
-              <label><strong>窗口探索倾向</strong><small>{behaviorSettings.gravityEnabled ? "重力落地开启时窗口停靠会自动关闭，因此该权重不参与规划。" : behaviorSettings.windowDocking ? "独立影响 dock Goal 的 Utility 权重。" : "宠物页的“窗口停靠”已关闭，因此当前不会参与规划。"}</small></label>
-              <div className="brain-range-control">
-                <input
-                  className="brain-range"
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={behaviorSettings.dockWeight}
-                  disabled={behaviorBusy || behaviorSettings.gravityEnabled || !behaviorSettings.windowDocking}
-                  onChange={(event) => setBehaviorSettings((current) => current ? { ...current, dockWeight: Number(event.target.value) } : current)}
-                  onPointerUp={(event) => void updateBehaviorSettings({ dockWeight: Number(event.currentTarget.value) })}
-                />
-                <span className="brain-range-value">{Math.round(behaviorSettings.dockWeight * 100)}%</span>
-              </div>
-            </div>
-          </div>
-        )}
-        <div className="brain-note">重力落地与窗口停靠互斥：重力模式使用 Windows 工作区底边（任务栏上沿）作为唯一地面，普通漫步只沿 X 轴；开启窗口停靠会自动关闭重力，才允许二维接近窗口。</div>
-      </div>
-
-      <div className="brain-card">
+      <details className="brain-card" onToggle={event => setInspectorOpen(event.currentTarget.open)}>
+        <summary>行为状态与评分</summary>
         <div className="brain-card-head">
           <div>
             <span className="brain-kicker">Decision Inspector</span>
@@ -388,6 +225,14 @@ export function BrainNavigation() {
                 <LiveStat label="Agent" value={agentStateLabel(brainSnapshot.agentState)} />
                 <LiveStat label="Executor" value={executor?.running ? `${goalLabel(executor.goal ?? "idle")} · #${executor.actionIndex + 1}` : "空闲"} />
                 <LiveStat label="Pending Intent" value={String(brainSnapshot.pendingIntentCount)} />
+                {brainSnapshot.needs && <>
+                  <LiveStat label="口渴" value={`${Math.round(brainSnapshot.needs.thirst * 100)}%`} />
+                  <LiveStat label="饥饿" value={`${Math.round(brainSnapshot.needs.hunger * 100)}%`} />
+                  <LiveStat label="当前需求" value={brainSnapshot.needs.reason ? ({ exhausted: '活动后很累，准备小憩', tired: '体力恢复中', thirsty: '口渴，准备喝茶', hungry: '饿了，准备吃点心' }[brainSnapshot.needs.reason]) : '状态良好'} />
+                </>}
+                <LiveStat label="鼠标观察" value={!brainSnapshot.cursor || Date.now() - brainSnapshot.cursor.at > 500 ? '暂无采样'
+                  : !brainSnapshot.cursor.near ? (brainSnapshot.cursor.moving ? '远处移动中' : '远处静止') : brainSnapshot.cursor.moving ? '附近移动中'
+                    : brainSnapshot.cursor.attention > 0 ? '关注逐渐减弱' : '附近静止'} />
               </div>
 
               <div className="brain-inspector-grid">
@@ -429,9 +274,10 @@ export function BrainNavigation() {
             </>
           ) : <div className="brain-empty">正在请求宠物窗口的 Brain Snapshot…</div>}
         </div>
-      </div>
+      </details>
 
-      <div className="brain-card">
+      <details className="brain-card">
+        <summary>AI 行为建议（可选）</summary>
         <div className="brain-card-head">
           <div>
             <span className="brain-kicker">AI Adviser · v1</span>
@@ -488,10 +334,9 @@ export function BrainNavigation() {
             <button className="primary" disabled={busy || testing} onClick={() => void testProvider()}>{testing ? "测试中…" : "测试 AI"}</button>
           </div>
         </div>
-      </div>
+      </details>
       {toast && <div className="toast">{toast}</div>}
-    </section>,
-    host,
+    </div>
   );
 }
 
@@ -567,6 +412,7 @@ function traceStatusLabel(status: AiSuggestionTrace["status"]) {
 function reasonLabel(reason: string) {
   return reason
     .replace("baseline calm state", "基础平静状态")
+    .replace("nearby cursor movement", "鼠标在附近移动，留意用户")
     .replace("recent user interaction", "最近有用户互动")
     .replace("repeated user interaction", "连续用户互动")
     .replace("agent error needs attention", "Agent 出错，需要关注")
@@ -574,8 +420,12 @@ function reasonLabel(reason: string) {
     .replace("agent completed work", "Agent 已完成任务")
     .replace("high user engagement", "用户互动强度较高")
     .replace("energy recovery", "恢复能量")
+    .replace("need:exhausted", "活动后体力过低，需要小憩")
+    .replace("need:tired", "体力未恢复到目标，继续休息")
+    .replace("need:thirsty", "口渴，需要喝茶")
+    .replace("need:hungry", "饥饿，需要吃点心")
     .replace("autonomous exploration tendency", "自主漫步倾向")
-    .replace("window exploration tendency", "窗口探索倾向")
+    .replace("nearby window rest", "就近窗口休息")
     .replace("system intent", "系统 Intent")
     .replace("user intent", "用户 Intent")
     .replace("agent intent", "Agent Intent")

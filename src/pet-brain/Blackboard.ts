@@ -8,6 +8,8 @@ import type {
   PetGoalId,
   PetMood,
 } from "./types";
+import type { CursorObservation } from '../motion/cursor-observer';
+import { PetNeeds, type Activity } from './needs';
 
 const HISTORY_LIMIT = 12;
 const AI_TRACE_LIMIT = 8;
@@ -18,13 +20,16 @@ const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 export class PetBlackboard {
   private currentGoal: PetGoalId = "idle";
   private mood: PetMood = "normal";
-  private energy = 0.78;
+  private needsByCharacter = new Map<string, PetNeeds>();
+  private needs = new PetNeeds();
+  private get energy() { return this.needs.snapshot().energy; }
   private clickStreak = 0;
   private lastClickAt: number | null = null;
   private lastUserInteractionAt: number | null = null;
+  private cursor: CursorObservation | null = null;
+  private lastNearbyCursorMoveAt: number | null = null;
   private lastAgentActivityAt: number | null = null;
   private lastDecisionAt: number | null = null;
-  private lastTickAt: number | null = null;
   private agentState: BrainAgentState = "idle";
   private history: BrainHistoryEntry[] = [];
   private intents: BrainIntent[] = [];
@@ -37,12 +42,34 @@ export class PetBlackboard {
       : 1;
     this.lastClickAt = now;
     this.lastUserInteractionAt = now;
-    this.energy = clamp01(this.energy - 0.012);
     this.refreshMood();
   }
 
   observeUserInteraction(now: number) {
     this.lastUserInteractionAt = now;
+  }
+
+  observeActivity(characterKey: string, activity: Activity, now: number) {
+    if (!this.needsByCharacter.has(characterKey)) this.needsByCharacter.set(characterKey, new PetNeeds());
+    const next = this.needsByCharacter.get(characterKey)!;
+    if (next !== this.needs) {
+      this.needs.observe('paused', now);
+      next.observe('paused', now);
+      this.needs = next;
+    }
+    this.needs.observe(activity, now);
+    this.refreshMood();
+  }
+  getNeeds() { return this.needs.snapshot(); }
+
+  observeCursor(observation: CursorObservation) {
+    this.cursor = { ...observation };
+    if (observation.near && observation.moving) this.lastNearbyCursorMoveAt = observation.at;
+  }
+
+  cursorAttention(now: number) {
+    if (!this.cursor?.near || now - this.cursor.at > 500 || this.lastNearbyCursorMoveAt === null) return 0;
+    return clamp01(1 - (now - this.lastNearbyCursorMoveAt) / 1800);
   }
 
   observeAgentState(state: BrainAgentState, now: number) {
@@ -99,17 +126,12 @@ export class PetBlackboard {
     ));
   }
 
-  tick(now: number, isBusy: boolean) {
-    const elapsedMs = this.lastTickAt === null ? 0 : Math.min(5000, Math.max(0, now - this.lastTickAt));
-    this.lastTickAt = now;
+  tick(now: number, _isBusy: boolean) {
 
     if (this.lastClickAt !== null && now - this.lastClickAt > CLICK_STREAK_WINDOW_MS) {
       this.clickStreak = 0;
     }
 
-    const elapsedSeconds = elapsedMs / 1000;
-    const energyDelta = isBusy ? -0.0025 * elapsedSeconds : 0.004 * elapsedSeconds;
-    this.energy = clamp01(this.energy + energyDelta);
     this.getActiveIntents(now);
     this.refreshMood();
   }
@@ -129,9 +151,6 @@ export class PetBlackboard {
     this.history.unshift({ goal: plan.goal, at: plan.createdAt });
     if (this.history.length > HISTORY_LIMIT) this.history.length = HISTORY_LIMIT;
 
-    if (plan.goal === "wander" || plan.goal === "dock") this.energy = clamp01(this.energy - 0.02);
-    if (plan.goal === "celebrate") this.energy = clamp01(this.energy - 0.035);
-    if (plan.goal === "rest") this.energy = clamp01(this.energy + 0.05);
     this.refreshMood();
   }
 
@@ -175,9 +194,11 @@ export class PetBlackboard {
       currentGoal: this.currentGoal,
       mood: this.mood,
       energy: this.energy,
+      needs: this.getNeeds(),
       agentState: this.agentState,
       clickStreak: this.clickStreak,
       lastUserInteractionAt: this.lastUserInteractionAt,
+      cursor: this.cursor ? { ...this.cursor, attention: this.cursorAttention(now) } : null,
       lastAgentActivityAt: this.lastAgentActivityAt,
       lastDecisionAt: this.lastDecisionAt,
       pendingIntentCount: this.intents.length,

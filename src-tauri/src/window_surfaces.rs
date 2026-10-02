@@ -21,6 +21,7 @@ pub struct WindowSurface {
     process_name: String,
     app_kind: String,
     dock_policy: String,
+    is_foreground: bool,
 }
 
 #[cfg(target_os = "windows")]
@@ -42,7 +43,7 @@ mod windows_impl {
             PROCESS_QUERY_LIMITED_INFORMATION,
         },
         UI::WindowsAndMessaging::{
-            EnumWindows, GetClassNameW, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
+            EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId,
             IsIconic, IsWindowVisible, GWL_EXSTYLE, GWL_STYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
             WS_EX_TRANSPARENT, WS_POPUP,
         },
@@ -242,6 +243,7 @@ mod windows_impl {
             process_name,
             app_kind,
             dock_policy,
+            is_foreground: hwnd == GetForegroundWindow(),
         });
         1
     }
@@ -304,7 +306,7 @@ mod windows_impl {
             {
                 return Err("无法枚举桌面窗口。".into());
             }
-            context.surfaces.sort_by_key(|surface| (surface.y, surface.x));
+            // EnumWindows preserves front-to-back order for exposed-edge checks.
             Ok(context.surfaces)
         }
     }
