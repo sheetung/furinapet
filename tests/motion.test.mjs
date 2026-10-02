@@ -10,6 +10,16 @@ async function load(source) {
 }
 const { sampleMotion, frameRows, locomotionReaction, isTravelMotion } = await load('../src/core/sprite-motion.ts');
 
+test('dragged pose loops until release instead of completing on idle', () => {
+  for (const time of [0, 300, 1200, 30000]) {
+    const frame = sampleMotion('dragged', time);
+    assert.equal(frame.row, 4);
+    assert.ok([1, 2].includes(frame.column));
+    assert.ok(frame.nextMs > 0);
+  }
+  assert.equal(isTravelMotion('dragged'), false);
+});
+
 test('vertical travel stays animated beyond one jump and does not restart every tick', () => {
   for (const [dy, expected] of [[-100, 'airborne'], [100, 'falling']]) {
     const reaction = locomotionReaction(0, dy, false);
@@ -43,7 +53,7 @@ const { AttentionTracker, isDragDisplacement } = await load('../src/core/attenti
 const { replacementFrame, replacementStyle } = await load('../src/core/motion-art.ts');
 
 test('replacement crops stay within their atlases and use finite anchored styles', () => {
-  for (const [row, count] of [[0, 6], [3, 4], [4, 5], [8, 6]]) {
+  for (const [row, count] of [[0, 6], [3, 4], [4, 5], [8, 6], [11, 6], [12, 6], [13, 6], [14, 6]]) {
     for (let column = 0; column < count; column++) {
       const frame = replacementFrame('furina', 'built-in', row, column);
       assert.ok(frame);
@@ -76,7 +86,7 @@ test('jump frames share a scale and baseline to preserve airborne displacement',
 });
 
 test('wave and jump play once and return to neutral instead of looping', () => {
-  for (const name of ['waving', 'jumping']) {
+  for (const name of ['waving', 'jumping', 'greeting', 'sitting', 'stretch-yawn', 'tea']) {
     const total = frameRows[name].durations.reduce((sum, ms) => sum + ms, 0);
     assert.equal(sampleMotion(name, total - 1).row, frameRows[name].row);
     assert.deepEqual(sampleMotion(name, total), { row: 0, column: 0, nextMs: null });
@@ -84,7 +94,7 @@ test('wave and jump play once and return to neutral instead of looping', () => {
   }
 });
 test('motion sampling never touches empty v2 cells, including delayed timer catch-up', () => {
-  const counts = [6, 8, 8, 4, 5, 8, 6, 6, 6];
+  const counts = [6, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8, 6, 6, 6, 6, 6, 6];
   for (const name of Object.keys(frameRows)) {
     for (let time = 0; time < 20000; time += 31) {
       const cell = sampleMotion(name, time);

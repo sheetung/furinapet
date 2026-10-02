@@ -12,7 +12,7 @@ import {
 import { desktop } from "./api";
 import { characterRegistry, getCharacter, loadCharacterRegistry, type CharacterDefinition } from "./characters/registry";
 import { computeLookDirection, lookCell, mapLookDirection, type LookCell } from "./core/look-direction";
-import { sampleMotion, locomotionReaction, isTravelMotion, type MotionReaction } from './core/sprite-motion';
+import { sampleMotion, locomotionReaction, isTravelMotion, resolveMotion, type MotionReaction } from './core/sprite-motion';
 import { AttentionTracker, isDragDisplacement } from './core/attention';
 import { replacementFrame, replacementStyle } from './core/motion-art';
 import { motionAssets } from './characters/motion-assets';
@@ -182,8 +182,7 @@ export function PetView() {
     const applyReaction = (payload:RoutineStep) => {
       setLook(null);
       const character = getCharacter(settingsRef.current?.selectedCharacterId ?? 'furina', charactersRef.current);
-      const supportsGestures = character.id === 'furina' && character.source === 'built-in';
-      changeReaction(supportsGestures && payload.motion ? payload.motion : payload.reaction, true);
+      changeReaction(resolveMotion(payload, character.id, character.source), true);
       setMessage(payload.message ?? "");
       setBubbleEpoch((value) => value + 1);
     };
@@ -212,6 +211,8 @@ export function PetView() {
   }, []);
 
   useEffect(()=>{
+    motionRef.current.fallToken++;
+    motionRef.current.falling = false;
     actionPlayback.stop();
     brainRef.current?.interrupt();
     actionPlayback.block('hidden', !settings?.petVisible);
@@ -624,7 +625,7 @@ export function PetView() {
 
   async function settleWithGravity() {
     const currentSettings = settingsRef.current;
-    if (!currentSettings?.gravityEnabled) return;
+    if (!currentSettings?.gravityEnabled || !currentSettings.petVisible) return;
 
     const motion = motionRef.current;
     const token = ++motion.fallToken;
@@ -655,6 +656,9 @@ export function PetView() {
       }
 
       const groundY = workArea.y + workArea.height - size.height;
+      const stale = () => motionRef.current.fallToken !== token || motionRef.current.dragging
+        || !settingsRef.current?.petVisible;
+      if (stale()) return;
       if (position.y >= groundY - 1) {
         await petWindow.setPosition(new PhysicalPosition(position.x, groundY));
         return;
@@ -666,6 +670,7 @@ export function PetView() {
 
       while (y < groundY && motionRef.current.fallToken === token && !motionRef.current.dragging) {
         await delay(16);
+        if (stale()) return;
         const now = performance.now();
         const seconds = Math.min(0.05, (now - previous) / 1000);
         previous = now;
@@ -687,7 +692,7 @@ export function PetView() {
   }
 
   async function beginDrag(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 || motionRef.current.dragging) return;
+    if (event.button !== 0 || motionRef.current.dragging || !settingsRef.current?.petVisible) return;
     actionPlayback.block('drag', true);
     const gestureEpoch = actionPlayback.epoch;
     let moved = false;
@@ -698,7 +703,7 @@ export function PetView() {
     motionRef.current.dragging = true;
     setMessage("");
     setLook(null);
-    changeReaction("idle");
+    changeReaction("dragged", true);
     try {
       await resizeForBubble(false, settingsRef.current?.scale ?? 1);
       const start = await getCurrentWindow().outerPosition();
@@ -710,6 +715,7 @@ export function PetView() {
       console.warn('[pet] drag did not complete', error);
     } finally {
       motionRef.current.dragging = false;
+      changeReaction('idle');
       try { if (moved) await settleWithGravity(); }
       finally { actionPlayback.block('drag', false); }
     }
@@ -739,14 +745,16 @@ export function PetView() {
 
   return (
     <div
-      className="pet-stage"
+      className={`pet-stage ${settings.petVisible ? 'pet-visible' : 'pet-hiding'}`}
       style={stageStyle}
       onPointerDown={(event) => void beginDrag(event)}
       onContextMenu={(event) => { event.preventDefault(); void desktop.showControlCenter(); }}
     >
       {message && <div className="pet-bubble">{message}</div>}
+      <div className={`pet-body ${reaction === 'dragged' ? 'pet-dragged' : ''}`}>
       <div className="sprite" style={style} role="img" aria-label={`${activeCharacter.name}：${reaction}`}>
         {replacement && <div className="sprite-art" style={replacementStyle(replacement, motionAssets[replacement.asset])} />}
+      </div>
       </div>
     </div>
   );

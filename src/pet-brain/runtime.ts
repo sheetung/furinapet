@@ -62,8 +62,7 @@ async function executeReactionPlan(plan: PetActionPlan, priority: number) {
         if (action.type === "wander" || action.type === "dock") return;
         const directive = reactionForSemanticAction(action, agentState);
         if (!directive || signal.aborted || session.signal.aborted) return;
-        session.show(directive);
-        await session.wait(directive.durationMs);
+        await session.perform(directive);
       }, { force: true });
     } finally {
       session.signal.removeEventListener('abort', interrupt);

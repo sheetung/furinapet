@@ -1,9 +1,13 @@
-import type { Reaction } from '../types';
-import type { GestureMotion } from './sprite-motion';
+import { normalizeStep, type ActionStep } from './action-step';
 
 export const ROUTINE_EVENT = 'pet-action-routine';
-export interface RoutineStep { reaction: Reaction; durationMs: number; message?: string; motion?: GestureMotion }
-export const routines = [
+export type RoutineStep = ActionStep;
+export interface ActionRoutine { id: string; label: string; icon: string; description: string; steps: RoutineStep[] }
+
+/** A gesture always gets its complete frame sequence; extra time remains a neutral hold. */
+export const completeStep = normalizeStep;
+
+const definitions: ActionRoutine[] = [
   {id:'welcome',label:'欢迎回来',icon:'👋',description:'先注意到你，再挥手问好',steps:[
     {reaction:'review',durationMs:850},
     {reaction:'waving',durationMs:1700,message:'欢迎回来，今天过得怎么样？'},
@@ -47,4 +51,24 @@ export const routines = [
     {reaction:'waving',durationMs:1180},
     {reaction:'idle',motion:'double-blink',durationMs:1530},
   ]},
-] satisfies {id:string;label:string;icon:string;description:string;steps:RoutineStep[]}[];
+  {id:'greeting',label:'低头致意',icon:'🎩',description:'抬手、低头致意，再收手回正',steps:[
+    {reaction:'waving',motion:'greeting',durationMs:2270},
+  ]},
+  {id:'sitting',label:'坐下晃腿',icon:'🪑',description:'坐下交替晃腿，闭眼休息后起身',steps:[
+    {reaction:'waiting',motion:'sitting',durationMs:4610},
+  ]},
+  {id:'stretch-yawn',label:'伸懒腰打哈欠',icon:'🥱',description:'双臂伸展，再掩嘴打哈欠',steps:[
+    {reaction:'idle',motion:'stretch-yawn',durationMs:3600},
+  ]},
+  {id:'tea',label:'品茶时光',icon:'🫖',description:'举杯、闭眼轻饮、放回杯碟；茶具出入过渡待精修',steps:[
+    {reaction:'waiting',motion:'tea',durationMs:4150},
+  ]},
+  {id:'cake',label:'享用蛋糕',icon:'🍰',description:'举叉、尝一口、满足地放下叉子',steps:[
+    {reaction:'waiting',motion:'cake',durationMs:0},
+  ]},
+  {id:'proud',label:'叉腰得意',icon:'✨',description:'双手叉腰，闭眼得意，再偷偷看你',steps:[
+    {reaction:'review',motion:'proud',durationMs:0},
+  ]},
+];
+
+export const routines = definitions.map(routine => ({ ...routine, steps: routine.steps.map(completeStep) }));

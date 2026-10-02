@@ -1,14 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import ts from 'typescript';
-
-// Pure modules only: compile with the project's existing TypeScript dependency.
-async function load(source) {
-  const text = await readFile(new URL(source, import.meta.url), 'utf8');
-  const { outputText } = ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
-  return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
-}
+import { load } from './load-ts.mjs';
 const { ActionPlayback, ACTION_PRIORITY: priority } = await load('../src/core/action-playback.ts');
 const { supportsCharacter } = await load('../src/characters/compatibility.ts');
 const { routines } = await load('../src/core/action-routines.ts');
@@ -24,7 +16,7 @@ function fixture() {
     const timer = [...pending][0];
     assert.ok(timer, 'expected scheduled step');
     timer.callback();
-    await Promise.resolve(); await Promise.resolve();
+    for (let i = 0; i < 8; i++) await Promise.resolve();
   };
   return { playback, pending, seen, tick };
 }
@@ -79,7 +71,7 @@ test('executor cancellation receives abort and late callbacks cannot update view
   assert.equal(aborted, true); assert.ok(!seen.some(step => step.reaction === 'failed'));
 });
 test('all routines complete and return to idle through the shared controller', async () => {
-  assert.equal(routines.length, 9);
+  assert.equal(routines.length, 15);
   for (const routine of routines) {
     const { playback, tick, seen } = fixture();
     const task = playback.play(routine.steps, priority.user);
