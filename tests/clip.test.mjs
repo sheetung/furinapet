@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { load } from './load-ts.mjs';
 const { sampleClip, clipPhase, clipDuration } = await load('../src/animation/clip.ts');
-const { furinaClips } = await load('../src/characters/furina-clips.ts');
+const { furinaClips } = await load('../characters/furina/clips.ts');
 
 test('generic clips hold their authored last column and asset without named-action special cases', () => {
   const clip = { row: 2, clipId: 'custom', columns: [4, 1], durations: [100, 200], once: true, finish: 'hold' };

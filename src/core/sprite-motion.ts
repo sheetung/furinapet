@@ -1,4 +1,4 @@
-import { furinaClips } from '../characters/furina-clips';
+import { furinaClips } from '../../characters/furina/clips';
 import { clipDuration, clipPhase, sampleClip } from '../animation/clip';
 import type { Reaction } from '../types';
 
@@ -14,7 +14,7 @@ export function isTravelMotion(reaction: MotionReaction) {
   return ['run-left', 'run-right', 'airborne', 'falling'].includes(reaction);
 }
 export type { AnimationClip as FrameRow } from '../animation/clip';
-export { furinaClips as frameRows } from '../characters/furina-clips';
+export { furinaClips as frameRows } from '../../characters/furina/clips';
 
 export function motionDuration(reaction: MotionReaction) {
   return clipDuration(furinaClips[reaction]);

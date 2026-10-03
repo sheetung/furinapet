@@ -44,7 +44,7 @@ test('new gestures finish or loop as specified without empty frames', () => {
 });
 const { AttentionTracker, isDragDisplacement } = await load('../src/core/attention.ts');
 const { replacementStyle } = await load('../src/core/motion-art.ts');
-const { replacementFrame } = await load('../src/characters/furina-art.ts');
+const { replacementFrame } = await load('../characters/furina/art.ts');
 
 test('replacement crops stay within their atlases and use finite anchored styles', () => {
   for (const [row, count, clipId] of [[0, 6], [3, 4], [4, 5], [8, 6],

@@ -1,5 +1,5 @@
-import type { AnimationClip } from '../animation/clip';
-import type { MotionReaction } from '../core/sprite-motion';
+import type { AnimationClip } from '../../src/animation/clip';
+import type { MotionReaction } from '../../src/core/sprite-motion';
 
 /** Only populated v2 cells. One-shot gestures finish on a neutral pose. */
 export const furinaClips: Record<MotionReaction, AnimationClip> = {

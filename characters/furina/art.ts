@@ -1,4 +1,4 @@
-import type { MotionArtFrame } from '../core/motion-art';
+import type { MotionArtFrame } from '../../src/core/motion-art';
 
 /** Source crops preserve pixels; rendering aligns feet at (96, 200). */
 export function replacementFrame(characterId: string, source: string | undefined, row: number, column: number, clipId?: string): MotionArtFrame | null {

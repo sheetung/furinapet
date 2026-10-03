@@ -10,9 +10,9 @@ import tea from '../../characters/furina/animations/drafts/tea-v1.png';
 
 import cake from '../../characters/furina/animations/drafts/cake-v1.png';
 import proud from '../../characters/furina/animations/drafts/proud-v1.png';
-import { replacementFrame } from './furina-art';
+import { replacementFrame } from '../../characters/furina/art';
 import type { MotionArtFrame } from '../core/motion-art';
-import { furinaClips } from './furina-clips';
+import { furinaClips } from '../../characters/furina/clips';
 import type { AnimationClip } from '../animation/clip';
 import type { MotionReaction } from '../core/sprite-motion';
 

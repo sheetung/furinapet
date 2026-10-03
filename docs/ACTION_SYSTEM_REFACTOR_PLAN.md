@@ -6,6 +6,7 @@
 
 ## 当前状态（以本节为准）
 
+- 资源目录整理：芙宁娜素材、图标、Codex包和本地制作资料统一到 `characters/furina/`；角色帧定义与锚点现位于 `characters/furina/clips.ts` 和 `characters/furina/art.ts`。下方实施记录中的旧路径为历史位置，当前目录说明见 `characters/furina/README.md`。
 - P0：动画基线已在main的ad47ca9建立；当前重构工作区尚未建立新提交，不包含缓存/实验模型。
 - P1/P2：目录、角色解析后时长、请求/结果、统一会话仲裁和执行器已接入。
 - P3：角色clip、裁切和加载降级已分离；坐姿锚点/蛋糕/得意裁切视觉验收未完成，补帧仍暂缓。

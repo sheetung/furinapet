@@ -1,7 +1,7 @@
 # 芙宁娜桌宠
 
 <p align="center">
-  <img src="public/assets/furina-app-icon.png" width="128" alt="芙宁娜桌宠头像" />
+  <img src="characters/furina/icons/app.png" width="128" alt="芙宁娜桌宠头像" />
 </p>
 
 面向 Windows 独立维护的轻量芙宁娜桌宠。默认角色和产品品牌始终是芙宁娜，同时提供轻量的编译期角色注册能力。项目专注透明桌面动画、互动、漫游和基础设置，不包含通用插件市场、Agent 集成、局域网控制或语音框架。
@@ -71,8 +71,8 @@ src/core/                    方向与动画协议
 src/extensions/             编译期扩展注册表
 src-tauri/src/               Windows 原生能力与轻量内核
 characters/                  自包含角色清单与素材
-public/assets/               芙宁娜桌宠品牌资源
-pets/furina--lingxiaotian/   Codex v2 桌宠标准包
+characters/furina/icons/      芙宁娜桌宠品牌与打包图标
+characters/furina/codex/   Codex v2 桌宠标准包
 ```
 
 角色形象相关权利归原权利人所有。本项目中的代码遵循仓库许可证；芙宁娜素材仅用于非商业桌宠展示，请遵守相应权利方要求。

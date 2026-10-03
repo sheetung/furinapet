@@ -52,10 +52,10 @@ jobs:
       - name: Validate character registry and Furina v2 resources
         shell: pwsh
         run: |
-          $pet = Get-Content pets/furina--lingxiaotian/pet.json -Raw | ConvertFrom-Json
+          $pet = Get-Content characters/furina/codex/pet.json -Raw | ConvertFrom-Json
           if ($pet.id -ne "furina--lingxiaotian") { throw "Unexpected Furina pet id." }
           if ($pet.spriteVersionNumber -ne 2) { throw "Furina must remain a v2 pet." }
-          $canonical = "pets/furina--lingxiaotian/$($pet.spriteSheetPath)"
+          $canonical = "characters/furina/codex/$($pet.spritesheetPath)"
           $registered = "characters/furina/spritesheet.webp"
           if (-not (Test-Path $canonical) -or -not (Test-Path $registered)) { throw "Furina spritesheet is missing." }
           if ((Get-FileHash $canonical).Hash -ne (Get-FileHash $registered).Hash) { throw "Registered Furina spritesheet differs from the v2 pet package." }

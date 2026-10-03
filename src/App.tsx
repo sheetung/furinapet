@@ -1,3 +1,4 @@
+import furinaAppIcon from '../characters/furina/icons/app.png';
 import { useEffect, useRef, useState } from "react";
 import { ROUTINE_EVENT, getCharacterActions } from './actions/catalog';
 import { PetBehaviorSettings } from './pet-brain/PetBehaviorSettings';
@@ -257,7 +258,7 @@ export function App() {
     <div className="app-shell">
       <header className="titlebar" data-tauri-drag-region>
         <div className="titlebar-brand" data-tauri-drag-region>
-          <img className="brand-avatar" src="/assets/furina-app-icon.png" alt="" />
+          <img className="brand-avatar" src={furinaAppIcon} alt="" />
           <span>芙宁娜桌宠</span>
           <small>轻量版</small>
         </div>
@@ -386,7 +387,7 @@ export function App() {
         <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="update-title">
           <div className="update-dialog">
             <header>
-              <div><img src="/assets/furina-app-icon.png" alt="" /><strong id="update-title">发现新版本 {update.latestVersion}</strong></div>
+              <div><img src={furinaAppIcon} alt="" /><strong id="update-title">发现新版本 {update.latestVersion}</strong></div>
               <button aria-label="关闭" disabled={updateInstalling} onClick={() => setUpdateOpen(false)}>×</button>
             </header>
             <div className="update-body">
@@ -424,7 +425,7 @@ export function App() {
         <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="character-manager-title">
           <div className="character-dialog">
             <header>
-              <div><img src="/assets/furina-app-icon.png" alt="" /><strong id="character-manager-title">添加桌面角色</strong></div>
+              <div><img src={furinaAppIcon} alt="" /><strong id="character-manager-title">添加桌面角色</strong></div>
               <button aria-label="关闭" onClick={() => setCharacterManagerOpen(false)}>×</button>
             </header>
             <div className="character-dialog-body">

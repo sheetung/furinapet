@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "furinapet",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "identifier": "dev.furinapet.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -37,11 +37,11 @@
     "shortDescription": "轻量芙宁娜 Windows 桌宠",
     "longDescription": "基于 Tauri 与 WebView2 的轻量芙宁娜桌宠，支持动画、视线跟随、自动漫步、托盘和开机启动。",
     "copyright": "Copyright © 2026 Furina Desktop Pet contributors",
-    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
+    "icon": ["../characters/furina/icons/icon.png", "../characters/furina/icons/icon.ico", "../characters/furina/icons/icon.icns"],
     "windows": {
       "nsis": {
         "displayLanguageSelector": false,
-        "installerIcon": "icons/icon.ico",
+        "installerIcon": "../characters/furina/icons/icon.ico",
         "installMode": "currentUser"
       }
     }
