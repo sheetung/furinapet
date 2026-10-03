@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import { load } from './load-ts.mjs';
 const { sampleClip, clipPhase, clipDuration } = await load('../src/animation/clip.ts');
 const { furinaClips } = await load('../characters/furina/clips.ts');
+const { replacementFrame } = await load('../characters/furina/art.ts');
+const { replacementStyle } = await load('../src/core/motion-art.ts');
+
+test('window seat loops without standing and pins hips inside the sprite stage', () => {
+  const clip = furinaClips['dock-sitting'];
+  assert.equal(sampleClip(clip, clipDuration(clip) * 3).clipId, 'dock-sitting');
+  for (let column = 0; column < 6; column++) {
+    const frame = replacementFrame('furina', 'built-in', 0, column, 'dock-sitting');
+    const style = replacementStyle(frame, 'seat.png');
+    assert.equal(style.top + frame.anchorY * frame.scale, 158);
+    assert.ok(style.top >= 0 && style.top + style.height <= 208);
+  }
+});
 
 test('generic clips hold their authored last column and asset without named-action special cases', () => {
   const clip = { row: 2, clipId: 'custom', columns: [4, 1], durations: [100, 200], once: true, finish: 'hold' };

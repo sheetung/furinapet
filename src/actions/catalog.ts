@@ -89,6 +89,7 @@ const baseMotions: Record<Exclude<MotionReaction, GestureMotion>, Omit<MotionEnt
   airborne: { label: '持续上移', icon: '⬆️' },
   falling: { label: '持续下落', icon: '⬇️' },
   dragged: { label: '被拖拽', icon: '🖐️' },
+  'dock-sitting': { label: '窗口坐姿', icon: '🪟' },
 };
 
 /** Both manual controls and clip preview read names from this catalog. */

@@ -9,12 +9,13 @@ export interface MotionArtFrame {
   anchorX: number;
   anchorY: number;
   scale: number;
+  targetY?: number;
 }
 
 export function replacementStyle(frame: MotionArtFrame, url: string) {
   return {
     left: 96 - frame.anchorX * frame.scale,
-    top: 200 - frame.anchorY * frame.scale,
+    top: (frame.targetY ?? 200) - frame.anchorY * frame.scale,
     width: frame.width * frame.scale,
     height: frame.height * frame.scale,
     backgroundImage: `url("${url}")`,

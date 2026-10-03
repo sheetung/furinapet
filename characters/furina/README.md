@@ -7,7 +7,7 @@
 | character.json | 桌面角色清单与行为参数 |
 | avatar.png / thumbnail.png | 角色头像与缩略图 |
 | spritesheet.webp | 桌宠基础v2图集 |
-| animations/ | 已接入动作图片；drafts中的六组素材仍被运行时引用 |
+| animations/ | 已接入动作图片；地面坐姿使用sitting-stool-v2.png，窗口坐姿使用dock-sitting-v1.png；drafts中的其余五组素材仍被运行时引用 |
 | art.ts / clips.ts | 裁切锚点、帧序列、时长和停顿定义 |
 | icons/ | 应用界面图标及Windows/macOS打包图标 |
 | codex/ | 可独立导入的Codex v2宠物包、验证记录及图集副本 |

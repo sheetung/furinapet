@@ -4,10 +4,18 @@ import type { MotionArtFrame } from '../../src/core/motion-art';
 export function replacementFrame(characterId: string, source: string | undefined, row: number, column: number, clipId?: string): MotionArtFrame | null {
   if (characterId !== 'furina' || source !== 'built-in') return null;
   if (!Number.isInteger(column)) return null;
+  if (clipId === 'dock-sitting' && column >= 0 && column < 6) {
+    const x = (column % 3) * 512, y = column < 3 ? 0 : 512;
+    return { asset: 'dock-sitting', atlasWidth: 1536, atlasHeight: 1024,
+      x, y, width: 512, height: column < 3 ? 508 : 492,
+      anchorX: [300, 778, 1256, 282, 766, 1252][column] - x,
+      anchorY: [384, 378, 384, 876, 878, 878][column] - y,
+      scale: 0.38, targetY: 158 };
+  }
   if (column >= 0 && column < 6 && clipId !== undefined) {
     const specs = [
       { asset: 'greeting', x: [154, 608, 1082, 156, 606, 1088], feet: [508, 510, 509, 1004, 1008, 1010] },
-      { asset: 'sitting', x: [152, 604, 1088, 144, 608, 1092], feet: [509, 506, 521, 1012, 1008, 1004] },
+      { asset: 'sitting', x: [152, 604, 1088, 144, 608, 1092], feet: [509, 509, 515, 1009, 1006, 1006] },
       { asset: 'stretch', x: [154, 602, 1088, 156, 604, 1080], feet: [506, 507, 506, 1017, 1017, 1017] },
       { asset: 'tea', x: [152, 598, 1080, 150, 600, 1080], feet: [508, 508, 508, 1020, 1020, 1020] },
       { asset: 'cake', x: [150, 610, 1078, 146, 610, 1080], feet: [506, 506, 506, 1018, 1017, 1017] },

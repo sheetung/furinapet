@@ -35,6 +35,7 @@ export interface WanderRuntime {
   schedule(callback: () => void, delay: number): () => void;
   observeCursor(observation: CursorObservation): void;
   needsRest(): boolean;
+  dockSitting?(): boolean;
   plan(input: WanderDecisionInput): PetGoalId;
   changeReaction(reaction: MotionReaction, restart?: boolean): void;
   setLook(look: LookCell | null): void;
@@ -88,6 +89,7 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
     let lastAutonomousActionAt = runtime.wallNow();
 
     const resetWander = (nextAt = runtime.wallNow() + 1500) => {
+      if (runtime.reaction() === 'dock-sitting') changeReaction('idle');
       dockMemory.setDock(null);
       wander.mode = "idle";
       wander.target = null;
@@ -160,11 +162,14 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
         const userReactionActive = actionPlayback.active;
         const isLocomotionState = !userReactionActive && (runtime.reaction() === "idle"
           || isTravelMotion(runtime.reaction())
-          || (wander.mode === "docked" && (runtime.reaction() === "waiting" || runtime.reaction() === "review")));
+          || (wander.mode === "docked" && ['waiting', 'review', 'dock-sitting'].includes(runtime.reaction())));
         let position = await port.position();
         const size = await port.size();
         // Sprite feet sit eight logical pixels above the bottom of the stage.
-        size.feetInset = 8 * currentSettings.scale * runtime.pixelRatio();
+        const seated = runtime.dockSitting?.() ?? false;
+        const seatOffset = seated ? 42 * currentSettings.scale * runtime.pixelRatio() : 0;
+        size.feetInset = 8 * currentSettings.scale * runtime.pixelRatio()
+          + (wander.mode === 'docked' ? seatOffset : 0);
         if (actionPlayback.active) {
           resetWander();
           return;
@@ -174,6 +179,19 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
         const workArea = await getWorkArea(position, size);
         if (stale()) return;
         const bounds = makeBounds(workArea, size);
+        // Restore the standing baseline only while this controller still owns motion.
+        // Drag/actions invalidate the lease and must never receive a delayed correction.
+        const leaveDock = async (nextAt: number) => {
+          if (wander.mode === 'docked' && runtime.reaction() === 'dock-sitting') {
+            const standing = { x: position.x, y: Math.max(workArea.y, position.y - seatOffset) };
+            await port.move(standing, () => !stale());
+            if (stale()) return false;
+            position = standing;
+          }
+          resetWander(nextAt);
+          changeReaction('idle');
+          return true;
+        };
 
         if (currentSettings.autonomousBehavior && isLocomotionState) {
           if ((!currentSettings.autonomousMovement && wander.mode === 'walking')
@@ -187,8 +205,7 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
           }
           if (wander.mode === "docked") {
             if (!currentSettings.windowDocking || wallClock >= wander.dockUntil) {
-              resetWander(wallClock + pauseDuration(profile));
-              changeReaction("idle");
+              if (!await leaveDock(wallClock + pauseDuration(profile))) return;
               if (currentSettings.gravityEnabled) {
                 void runtime.settle();
                 return;
@@ -198,8 +215,7 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
               const point = await refreshDockTarget(await port.surfaces(), size, workArea);
               if (stale()) return;
               if (!point || Math.hypot(point.x - position.x, point.y - position.y) > 24 * runtime.pixelRatio()) {
-                resetWander(wallClock + pauseDuration(profile));
-                changeReaction("idle");
+                if (!await leaveDock(wallClock + pauseDuration(profile))) return;
                 if (currentSettings.gravityEnabled) {
                   void runtime.settle();
                   return;
@@ -208,6 +224,7 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
                 await port.move(point, () => !stale());
                 if (stale()) return;
                 position = { x: point.x, y: point.y };
+                wander.stalledTicks = 0;
               }
             }
           }
@@ -337,8 +354,21 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
             const dy = groundedWander ? 0 : wander.target.y - position.y;
             const distance = groundedWander ? Math.abs(dx) : Math.hypot(dx, dy);
             if (distance < 3) {
-              const finalY = groundedWander ? bounds.groundY : wander.target.y;
-              await port.move({ x: wander.target.x, y: finalY }, () => !stale());
+              let destination = { x: wander.target.x, y: groundedWander ? bounds.groundY : wander.target.y };
+              if (wander.mode === 'approaching') {
+                // Validate the actual seated footprint before entering it (screen bottom,
+                // occlusion and a closed/moved window can all invalidate the arrival).
+                const seatSize = { ...size, feetInset: (size.feetInset ?? 0) + seatOffset };
+                const point = await refreshDockTarget(await port.surfaces(), seatSize, workArea);
+                if (stale()) return;
+                if (!point || Math.hypot(point.x - destination.x, point.y - seatOffset - destination.y) > 24 * runtime.pixelRatio()) {
+                  resetWander(wallClock + pauseDuration(profile));
+                  changeReaction('idle');
+                  return;
+                }
+                destination = point;
+              }
+              await port.move(destination, () => !stale());
               if (stale()) return;
               if (wander.mode === "approaching") {
                 wander.mode = "docked";
@@ -348,7 +378,8 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
                 wander.dockRefreshAt = 0;
                 wander.lastPosition = null;
                 wander.stalledTicks = 0;
-                changeReaction("waiting", true);
+                setLook(null);
+                changeReaction(seated ? 'dock-sitting' : 'waiting', true);
               } else {
                 resetWander(wallClock + pauseDuration(profile));
                 changeReaction("idle");
@@ -387,7 +418,9 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
           if (!userReactionActive) {
             const shouldFall = wander.mode === "docked" && currentSettings.gravityEnabled;
             const wasDocked = wander.mode === "docked";
-            resetWander();
+            if (wasDocked) {
+              if (!await leaveDock(wallClock + 1500)) return;
+            } else resetWander();
             if (wasDocked || isTravelMotion(runtime.reaction())) {
               changeReaction("idle");
             }
@@ -401,7 +434,7 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
 
       } catch {
         if (stale()) return;
-        if (wander.mode === "walking" || wander.mode === "approaching") {
+        if (wander.mode === "walking" || wander.mode === "approaching" || wander.mode === 'docked') {
           wander.stalledTicks += 1;
           if (wander.stalledTicks >= MAX_STALLED_TICKS) {
             resetWander(runtime.wallNow() + 450);

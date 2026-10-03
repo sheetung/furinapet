@@ -39,7 +39,7 @@ export function activityForMotion(motion: string, visible: boolean): Activity {
   if (['run-left', 'run-right', 'airborne', 'running'].includes(motion)) return 'walk';
   if (['jumping', 'greeting', 'proud', 'waving'].includes(motion)) return 'play';
   if (motion === 'doze') return 'sleep';
-  if (['sitting', 'waiting', 'stretch-yawn'].includes(motion)) return 'rest';
+  if (['sitting', 'dock-sitting', 'waiting', 'stretch-yawn'].includes(motion)) return 'rest';
   if (motion === 'tea' || motion === 'cake') return motion;
   return 'idle';
 }

@@ -12,6 +12,7 @@ export const furinaClips: Record<MotionReaction, AnimationClip> = {
   airborne: { row: 4, columns: [1, 2, 1, 2], durations: [180, 220, 180, 220] },
   falling: { row: 4, columns: [2, 1], durations: [220, 180] },
   dragged: { row: 4, columns: [1, 2, 1, 2], durations: [280, 320, 280, 320] },
+  'dock-sitting': { row: 0, clipId: 'dock-sitting', columns: [0, 1, 2, 3, 2, 1, 0, 4, 0, 5, 0], durations: [1800, 180, 180, 180, 180, 180, 2200, 350, 500, 350, 1400], holds: [0, 6, 10] },
   'double-blink': { row: 0, columns: [0, 2, 3, 2, 3, 0], durations: [300, 100, 180, 100, 450, 400], once: true },
   curious: { row: 8, columns: [0, 1, 2, 4, 2, 5], durations: [250, 300, 800, 450, 500, 400], once: true },
   doze: { row: 0, holds: [1, 2], columns: [0, 2, 2, 3], durations: [700, 2200, 2200, 700] },

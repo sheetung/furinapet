@@ -51,10 +51,70 @@ test('user placement blocks movement even if a planner returns a movement goal',
   }
 });
 
+test('Furina docks with her hip on the edge, follows it, and releases on disable', async () => {
+  const f = fixture('dock'); f.runtime.dockSitting = () => true;
+  const stop = startWanderController(f.port, f.runtime); await flush();
+  for (let i = 0; i < 938 && f.runtime.reaction() !== 'dock-sitting'; i++) await f.tick();
+  assert.equal(f.runtime.reaction(), 'dock-sitting');
+  assert.equal(f.writes.at(-1).y + 158, 300);
+  await f.tick(200);
+  assert.equal(f.runtime.reaction(), 'dock-sitting', 'seat offset must not look like a jumping window');
+  assert.equal(f.writes.at(-1).y + 158, 300);
+  f.runtime.settings().windowDocking = false;
+  await f.tick(100);
+  assert.equal(f.runtime.reaction(), 'idle');
+  assert.equal(f.writes.at(-1).y + 200, 300, 'leaving restores the standing baseline'); stop();
+});
+
+test('seat anchor respects scale, DPI and bubble-expanded native height', async () => {
+  const f = fixture('dock'); f.runtime.dockSitting = () => true;
+  f.runtime.settings().scale = 0.75;
+  f.runtime.pixelRatio = () => 1.5;
+  const factor = 0.75 * 1.5, height = 208 * factor + 40;
+  f.port.size = async () => ({ width: 192 * factor, height });
+  const stop = startWanderController(f.port, f.runtime); await flush();
+  for (let i = 0; i < 938 && f.runtime.reaction() !== 'dock-sitting'; i++) await f.tick();
+  assert.equal(f.runtime.reaction(), 'dock-sitting');
+  assert.ok(Math.abs(f.writes.at(-1).y + height - 50 * factor - 300) <= 0.5);
+  stop();
+});
+
+test('seated loop releases after repeated window-query failures', async () => {
+  const f = fixture('dock'); f.runtime.dockSitting = () => true;
+  const stop = startWanderController(f.port, f.runtime); await flush();
+  for (let i = 0; i < 938 && f.runtime.reaction() !== 'dock-sitting'; i++) await f.tick();
+  assert.equal(f.runtime.reaction(), 'dock-sitting');
+  f.port.surfaces = async () => { throw new Error('native window query failed'); };
+  for (let i = 0; i < 4; i++) await f.tick(100);
+  assert.equal(f.runtime.reaction(), 'idle'); stop();
+});
+
+test('dragging away never receives a delayed standing-position correction', async () => {
+  const f = fixture('dock'); f.runtime.dockSitting = () => true;
+  const stop = startWanderController(f.port, f.runtime); await flush();
+  for (let i = 0; i < 938 && f.runtime.reaction() !== 'dock-sitting'; i++) await f.tick();
+  assert.equal(f.runtime.reaction(), 'dock-sitting');
+  f.runtime.motion = () => ({ dragging: true, falling: false });
+  f.runtime.changeReaction('dragged');
+  const count = f.writes.length;
+  await f.tick(100);
+  assert.equal(f.runtime.reaction(), 'dragged');
+  assert.equal(f.writes.length, count); stop();
+});
+
 test('cursor beside a proposed edge prevents docking', async () => {
   const f = fixture('dock'); f.port.cursor = async () => ({ x: 500, y: 200 });
   const stop = startWanderController(f.port, f.runtime); await flush(); await f.tick(6000);
   assert.equal(f.writes.length, 0); stop();
+});
+
+test('layout interruption clears the seated pose without leaving an orphaned loop', async () => {
+  const f = fixture('dock'); f.runtime.dockSitting = () => true;
+  const stop = startWanderController(f.port, f.runtime); await flush();
+  for (let i = 0; i < 938 && f.runtime.reaction() !== 'dock-sitting'; i++) await f.tick();
+  assert.equal(f.runtime.reaction(), 'dock-sitting');
+  f.runtime.layoutBusy = () => true;
+  await f.tick(); assert.equal(f.runtime.reaction(), 'idle'); stop();
 });
 
 test('failed docking never falls back to unrelated wandering', async () => {

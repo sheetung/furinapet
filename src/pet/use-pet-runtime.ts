@@ -189,6 +189,7 @@ export function usePetRuntime() {
 
   useEffect(() => startWanderController(createWanderPort(), {
     dockMemory: dockMemory.current,
+    dockSitting: () => !!getCharacterArt(getCharacter(settingsRef.current?.selectedCharacterId ?? 'furina', charactersRef.current)),
     authority: motionAuthority,
     settings: () => settingsRef.current,
     profile: () => getCharacter(settingsRef.current?.selectedCharacterId ?? 'furina', charactersRef.current).wanderProfile!,

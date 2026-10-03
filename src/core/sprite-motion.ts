@@ -3,7 +3,7 @@ import { clipDuration, clipPhase, sampleClip } from '../animation/clip';
 import type { Reaction } from '../types';
 
 export type GestureMotion = 'double-blink' | 'curious' | 'doze' | 'greeting' | 'sitting' | 'stretch-yawn' | 'tea' | 'cake' | 'proud';
-export type MotionReaction = Reaction | GestureMotion | 'run-left' | 'run-right' | 'airborne' | 'falling' | 'dragged';
+export type MotionReaction = Reaction | GestureMotion | 'run-left' | 'run-right' | 'airborne' | 'falling' | 'dragged' | 'dock-sitting';
 
 export function locomotionReaction(dx: number, dy: number, grounded: boolean): MotionReaction {
   if (!grounded && Math.abs(dy) > Math.abs(dx) * 1.25) return dy < 0 ? 'airborne' : 'falling';
