@@ -1,8 +1,9 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { actionPlayback, ACTION_PRIORITY } from '../actions/coordinator';
-import { PET_SENSE_EVENT } from "../plugins/dom-bridge";
+import { PET_SENSE_EVENT } from "../pet/dom-bridge";
 import { GestureSelector } from './adapters/gesture-selector';
 import { getPetBrain } from "./index";
+import { performNeedRecovery } from './recovery';
 import type {
   BrainAgentState,
   BrainAgentStateEvent,
@@ -55,27 +56,27 @@ export async function executeReactionPlan(plan: PetActionPlan, priority: number)
   if (!permitsExecution(priority)) return;
   const brain = getPetBrain();
   const agentState = brain.blackboard.getAgentState();
+  const recovery = plan.actions.find(action => action.type === 'rest' && action.recovery);
   publishPetBrainSnapshot();
   const result = await actionPlayback.execute(priority, async session => {
-    const interrupt = () => brain.interrupt();
-    session.signal.addEventListener('abort', interrupt, { once: true });
-    try {
-      await brain.execute(plan, async (action, signal) => {
-        publishPetBrainSnapshot();
-        if (action.type === "wait") {
-          await session.wait(action.durationMs);
-          return;
-        }
-        if (action.type === "wander" || action.type === "dock") return;
-        if (signal.aborted || session.signal.aborted) return;
-        const directive = gestureSelector.select(action, agentState, brain.blackboard.getEnergy(), Date.now(), brain.blackboard.getNeeds());
-        if (!directive || signal.aborted || session.signal.aborted) return;
+    await brain.execute(plan, async (action, signal) => {
+      publishPetBrainSnapshot();
+      if (action.type === "wait") {
+        await session.wait(action.durationMs);
+        return;
+      }
+      if (action.type === "wander" || action.type === "dock" || signal.aborted) return;
+      if (action.type === 'rest' && action.recovery) {
+        await performNeedRecovery(session, action.recovery, () => brain.blackboard.getNeeds());
+        return;
+      }
+      const directive = gestureSelector.select(action, agentState, brain.blackboard.getEnergy(), Date.now(), brain.blackboard.getNeeds());
+      if (directive && !signal.aborted) {
         await session.perform(directive);
-      }, { force: true });
-    } finally {
-      session.signal.removeEventListener('abort', interrupt);
-    }
-  });
+        if (!signal.aborted) gestureSelector.recordPerformed(directive, Date.now());
+      }
+    }, session.signal);
+  }, recovery?.type === 'rest' ? `recovery:${recovery.recovery}` : 'semantic');
   if (result.status === 'failed') console.warn('[pet-brain] action failed', result.error);
   publishPetBrainSnapshot();
 }
@@ -86,11 +87,6 @@ function handlePetSense(detail: PetSenseEventDetail) {
     brain.observeUserClick(detail.at);
   } else {
     brain.observeUserInteraction(detail.at);
-  }
-
-  if (detail.handledByPlugin) {
-    publishPetBrainSnapshot();
-    return;
   }
 
   if (detail.name === "pet:clicked" || detail.name === "pet:doubleClicked") {

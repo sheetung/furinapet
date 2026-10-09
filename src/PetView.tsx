@@ -24,7 +24,8 @@ export function PetView() {
     : null;
   const column = displayedLook ? displayedLook.column : spriteCell.column;
   const row = displayedLook ? displayedLook.row : spriteCell.row;
-  const candidate = characterArt?.frame(row, column, displayedLook ? undefined : spriteCell.clipId);
+  const candidate = characterArt?.frame(row, column, displayedLook ? undefined : spriteCell.clipId,
+    displayedLook ? 'gaze' : reaction);
   const replacementUrl = candidate ? characterArt?.assets[candidate.asset] : undefined;
   const replacement = candidate && replacementUrl && loadedAssets.has(replacementUrl) ? candidate : null;
   const atlas = loadedAssets.has(activeCharacter.spriteSheetUrl) ? activeCharacter.spriteSheetUrl : fallbackAtlas;

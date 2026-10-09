@@ -11,13 +11,13 @@
   "rows": 11,
   "wanderProfile": {
     "movementStyle": "grounded",
-    "activity": 0.72,
-    "curiosity": 0.8,
-    "preferredSpeed": 1.0,
+    "activity": 0.3,
+    "curiosity": 0.45,
+    "preferredSpeed": 0.75,
     "windowDockChance": 0.34,
-    "shortMoveChance": 0.62,
-    "pauseMinMs": 900,
-    "pauseMaxMs": 2600
+    "shortMoveChance": 0.85,
+    "pauseMinMs": 20000,
+    "pauseMaxMs": 30000
   },
   "reactionMessages": {
     "waving": "贵安，今天也请多关照啦。",

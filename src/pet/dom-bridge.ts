@@ -6,11 +6,10 @@ const TAP_MOVE_THRESHOLD = 8;
 const DOUBLE_TAP_WINDOW_MS = 360;
 export const PET_SENSE_EVENT = "furinapet:pet-sense";
 
-function emitSense(name: PetSenseName, handledByPlugin: boolean) {
+function emitSense(name: PetSenseName) {
   const detail: PetSenseEventDetail = {
     name,
     at: Date.now(),
-    handledByPlugin,
   };
   window.dispatchEvent(new CustomEvent<PetSenseEventDetail>(PET_SENSE_EVENT, { detail }));
 }
@@ -20,8 +19,7 @@ function emitSense(name: PetSenseName, handledByPlugin: boolean) {
  *
  * Native dragging can consume WebView pointerup/click events on Windows, so
  * physical tap classification lives here. The bridge reports every classified
- * sense to Pet Brain after plugin arbitration. Plugins may still consume the
- * event, while unhandled senses are free for the autonomous core to respond to.
+ * sense directly to Pet Brain.
  */
 export function installPetDomBridge(): () => void {
   let disposed = false;
@@ -30,15 +28,8 @@ export function installPetDomBridge(): () => void {
   let lastTapAt = 0;
   let lastDoubleDispatchAt = 0;
 
-  const dispatch = async (name: "pet:clicked" | "pet:doubleClicked") => {
-    try {
-      const handled = await desktop.publishPetEvent(name);
-      if (disposed) return;
-      emitSense(name, handled);
-    } catch (error) {
-      console.error(`[plugin-host] ${name} dispatch failed`, error);
-      emitSense(name, false);
-    }
+  const dispatch = (name: "pet:clicked" | "pet:doubleClicked") => {
+    if (!disposed) emitSense(name);
   };
 
   const dispatchDoubleTap = () => {
@@ -91,7 +82,7 @@ export function installPetDomBridge(): () => void {
       try {
         await desktop.waitForDragRelease();
       } catch (error) {
-        console.error("[plugin-host] wait for pet release failed", error);
+        console.error("[pet-sense] wait for pet release failed", error);
         return;
       }
 

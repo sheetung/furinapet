@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>芙宁娜安静动作 · 已接入预览</title>
+<style>
+body{background:#202b40;color:#edf2fa;font:16px system-ui;margin:32px;line-height:1.6}h1{font-size:24px}main{display:flex;flex-wrap:wrap;gap:24px}article{background:#303d55;padding:20px;border-radius:12px;width:220px}.stage{position:relative;width:192px;height:208px;overflow:hidden;background:repeating-conic-gradient(#aab1bd 0% 25%,#d1d5dd 0% 50%) 0/20px 20px}.sprite{position:absolute;background-repeat:no-repeat}button{padding:8px 16px;margin:12px 8px 16px 0}p{max-width:900px}.note{color:#ffdb9c}small{display:block}
+</style>
+<h1>芙宁娜安静动作 · 已接入</h1>
+<p>与桌宠共用标准帧图、时间线和帧采样。呼吸用于普通待机，点头用于温和点击回应；品茶先拿起、持续饮用，再放下。此处为方便对照而重复演示，不代表桌宠会连续触发动作。</p>
+<button id="play">暂停</button><button id="background">切换背景</button>
+<main id="cards"></main>
+<p>所有动作使用192×208单帧、768×832独立透明图。首尾复用现有中立/持杯像素，动画内使用统一比例；饮用图沿用原素材，拿起/放下不计算喝水收益。新的中间帧仍有少量绘制细节差异。</p>
+<script type="module">
+import { furinaClips } from '/characters/furina/clips.ts';
+import { furinaArt } from '/src/characters/motion-assets.ts';
+import { sampleClip, clipDuration } from '/src/animation/clip.ts';
+import { routines } from '/src/actions/catalog.ts';
+const tea=routines.find(item=>item.id==='tea').steps;
+const labels={breathing:'呼吸待机',nod:'轻轻点头',tea:'品茶完整过渡'};
+let playing=true,dark=false,elapsed=0,last=performance.now();
+const sprites=[];
+for(const [name,label] of Object.entries(labels)){
+ const card=document.createElement('article');const title=document.createElement('h2');title.textContent=label;
+ const stage=document.createElement('div');stage.className='stage';
+ const sprite=document.createElement('div');sprite.className='sprite';stage.append(sprite);
+ const status=document.createElement('small');card.append(title,stage,status);document.querySelector('#cards').append(card);sprites.push({sprite,status,name});
+}
+function render(){for(const {sprite,status,name}of sprites){
+ let motion=name,time=elapsed;
+ if(name==='tea'){
+   time=elapsed%(tea.reduce((sum,step)=>sum+step.durationMs,0)+1200);
+   motion='idle';
+   for(const step of tea){if(time<step.durationMs){motion=step.motion;break;}time-=step.durationMs;}
+ }else if(name==='nod')time=elapsed%(clipDuration(furinaClips.nod)+2200);
+ const clip=furinaClips[motion],cell=sampleClip(clip,time),f=furinaArt.frame(cell.row,cell.column,cell.clipId,motion);
+ Object.assign(sprite.style,{width:f.width+'px',height:f.height+'px',left:'0px',top:'0px',backgroundImage:`url(${furinaArt.assets[f.asset]})`,backgroundSize:'768px 832px',backgroundPosition:-f.x+'px '+-f.y+'px'});
+ status.textContent=`${f.asset} · 第${cell.column+1}帧`;
+}}
+document.querySelector('#play').onclick=()=>{playing=!playing;document.querySelector('#play').textContent=playing?'暂停':'播放';};
+document.querySelector('#background').onclick=()=>{dark=!dark;document.querySelectorAll('.stage').forEach(s=>s.style.background=dark?'#202b40':'');};
+render();function tick(now){if(playing)elapsed+=now-last;last=now;render();requestAnimationFrame(tick);}requestAnimationFrame(tick);
+</script>
+</html>

@@ -48,7 +48,7 @@ export function bindPetEvents({ settingsRef, charactersRef, brainRef, interactio
         else bubbles.show(event.payload);
       }),
       scopedListen<unknown>(ROUTINE_EVENT, (event) => {
-        if(event.payload==='stop'){actionPlayback.stop();brainRef.current?.interrupt();return;}
+        if(event.payload==='stop'){actionPlayback.stop();return;}
         if(!settingsRef.current?.petVisible)return;
         const character = getCharacter(settingsRef.current.selectedCharacterId, charactersRef.current);
         const routine = getCharacterActions(character).routines.find(item => item.id === event.payload);
@@ -59,7 +59,8 @@ export function bindPetEvents({ settingsRef, charactersRef, brainRef, interactio
       }),
       scopedListen<AppSettings>("settings-changed", (event) => { settingsChanged = true; setSettings(event.payload); }),
       scopedListen<ReactionEvent>("pet-reaction", (event) => {
-        if (!permitsExecution(settingsRef.current, event.payload.manual ? ACTION_PRIORITY.user : ACTION_PRIORITY.background)) return;
+        if (!permitsExecution(settingsRef.current, event.payload.manual ? ACTION_PRIORITY.user : ACTION_PRIORITY.background,
+          actionPlayback.snapshot().actionId)) return;
         if (event.payload.manual && actionPlayback.canStart(ACTION_PRIORITY.user)) {
           brainRef.current?.observeUserInteraction(Date.now());
         }

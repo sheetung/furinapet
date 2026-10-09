@@ -7,7 +7,6 @@ mod codex_integration;
 mod commands;
 mod mcp_server;
 mod pet;
-mod plugin_host;
 mod settings;
 mod tray;
 mod updater;
@@ -33,7 +32,6 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let initial_settings = settings::load(&app_handle);
             app.manage(settings::AppState::new(initial_settings.clone()));
-            app.manage(plugin_host::PluginHostState::load(&app_handle));
             app.manage(agent_host::AgentHostState::default());
             app.manage(ai::AiServiceState::load(&app_handle));
             if let Err(error) = agent_host::start(&app_handle) {
@@ -91,16 +89,6 @@ pub fn run() {
             claude_integration::install_claude_integration,
             claude_integration::uninstall_claude_integration,
             claude_integration::test_agent_integration,
-            plugin_host::list_plugins,
-            plugin_host::fetch_plugin_catalog,
-            plugin_host::install_plugin,
-            plugin_host::uninstall_plugin,
-            plugin_host::set_plugin_enabled,
-            plugin_host::get_plugin_config,
-            plugin_host::set_plugin_config,
-            plugin_host::list_runtime_plugins,
-            plugin_host::plugin_sdk_call,
-            plugin_host::publish_pet_event,
             updater::check_for_updates,
             updater::download_and_install_update,
         ])

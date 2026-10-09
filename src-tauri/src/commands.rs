@@ -211,7 +211,7 @@ fn emit_reaction(app: &AppHandle, reaction: String, message: Option<String>, man
         duration_ms: 2600,
     };
 
-    // Background Agent / plugin / MCP reactions may update the pet state, but they
+    // Background Agent / MCP reactions may update the pet state, but they
     // must not override an explicit user hide. UI quick reactions call show_pet
     // first when the user intentionally wants to reveal the pet.
     let user_wants_visible = app

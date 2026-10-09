@@ -106,7 +106,9 @@ const MIN_WANDER_DISPLACEMENT = 56;
 
 export function nextDecisionDelay(profile: WanderProfile, random = Math.random): number {
   const activityFactor = 1.2 - profile.activity * 0.45;
-  return Math.round((7000 + random() * 9000) * activityFactor);
+  const roll = random();
+  return Math.round(Math.max((7000 + roll * 9000) * activityFactor,
+    profile.pauseMinMs + roll * (profile.pauseMaxMs - profile.pauseMinMs)));
 }
 
 export function pauseDuration(profile: WanderProfile, random = Math.random): number {

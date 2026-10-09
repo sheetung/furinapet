@@ -23,7 +23,7 @@ pub fn submit_pet_brain_intent(
     ttl_ms: Option<u64>,
     id: Option<String>,
 ) -> Result<(), String> {
-    if !matches!(source.as_str(), "system" | "user" | "agent" | "plugin" | "ai") {
+    if !matches!(source.as_str(), "system" | "user" | "agent" | "ai") {
         return Err("unsupported brain intent source".into());
     }
     if !matches!(
@@ -35,7 +35,7 @@ pub fn submit_pet_brain_intent(
 
     let source_cap = match source.as_str() {
         "user" | "system" => 1.0,
-        "agent" | "plugin" => 0.95,
+        "agent" => 0.95,
         "ai" => 0.82,
         _ => 0.8,
     };

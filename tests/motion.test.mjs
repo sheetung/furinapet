@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { load } from './load-ts.mjs';
 const { sampleMotion, frameRows, locomotionReaction, isTravelMotion } = await load('../src/core/sprite-motion.ts');
 
@@ -47,7 +48,7 @@ const { replacementStyle } = await load('../src/core/motion-art.ts');
 const { replacementFrame } = await load('../characters/furina/art.ts');
 
 test('replacement crops stay within their atlases and use finite anchored styles', () => {
-  for (const [row, count, clipId] of [[0, 6], [3, 4], [4, 5], [8, 6],
+  for (const [row, count, clipId] of [[0, 6], [1, 8], [2, 8], [3, 4], [4, 5], [5, 8], [6, 6], [7, 6], [8, 6], [9, 8], [10, 8],
     ...['greeting', 'sitting', 'stretch', 'tea', 'cake', 'proud'].map(id => [0, 6, id])]) {
     for (let column = 0; column < count; column++) {
       const frame = replacementFrame('furina', 'built-in', row, column, clipId);
@@ -67,7 +68,7 @@ test('art overrides never affect imported characters or unpopulated cells', () =
   for (const [id, source] of [['other', 'built-in'], ['furina', 'local'], ['furina', undefined]]) {
     assert.equal(replacementFrame(id, source, 0, 0), null);
   }
-  for (const row of [1, 2, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16]) assert.equal(replacementFrame('furina', 'built-in', row, 0), null);
+  for (const row of [11, 12, 13, 14, 15, 16]) assert.equal(replacementFrame('furina', 'built-in', row, 0), null);
   for (const column of [-1, 0.5, NaN]) assert.equal(replacementFrame('furina', 'built-in', 0, column), null);
 });
 
@@ -76,19 +77,21 @@ test('extension sampling carries explicit assets and completes on a public neutr
     const cell = sampleMotion(name, 0);
     assert.ok(cell.row <= 10);
     const frame = replacementFrame('furina', 'built-in', cell.row, cell.column, cell.clipId);
-    assert.equal(frame.asset, name === 'stretch-yawn' ? 'stretch' : name);
+    assert.equal(frame.asset, name);
     assert.equal(replacementFrame('other', 'local', cell.row, cell.column, cell.clipId), null);
     assert.deepEqual(sampleMotion(name, 100000), { row: 0, column: 0, nextMs: null });
   }
 });
 
-test('jump frames share a scale and baseline to preserve airborne displacement', () => {
+test('jump frames share a scale and baseline to preserve airborne displacement', async () => {
   const frames = Array.from({ length: 5 }, (_, column) => replacementFrame('furina', 'built-in', 4, column));
   assert.equal(new Set(frames.map(frame => frame.scale)).size, 1);
   assert.equal(new Set(frames.map(frame => frame.anchorY)).size, 1);
   const airborneFoot = 464;
   const standingFoot = 1006 - 512;
-  assert.ok((standingFoot - airborneFoot) * frames[0].scale > 10);
+  const recipe = JSON.parse(await readFile(new URL('../characters/furina/animations/source-frames.json', import.meta.url), 'utf8'));
+  const source = recipe.sources.jumping[0];
+  assert.ok((standingFoot - airborneFoot) * source.scale > 10);
 });
 
 test('wave and jump play once and return to neutral instead of looping', () => {

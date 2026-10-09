@@ -1,13 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { AgentNavigation } from "./agents/AgentNavigation";
 import { App } from "./App";
 import { PetView } from "./PetView";
 import { bootstrapAiSuggestionRuntime } from "./pet-brain/ai-runtime";
 import { bootstrapPetBrainRuntime } from "./pet-brain/runtime";
-import { installPetDomBridge } from "./plugins/dom-bridge";
-import { PluginNavigation } from "./plugins/PluginNavigation";
-import { bootstrapPluginRuntime } from "./plugins/runtime";
+import { installPetDomBridge } from "./pet/dom-bridge";
 import "./styles.css";
 
 const params = new URLSearchParams(window.location.search);
@@ -17,8 +14,6 @@ if (isPetWindow) {
   installPetDomBridge();
   bootstrapPetBrainRuntime();
   bootstrapAiSuggestionRuntime();
-} else {
-  bootstrapPluginRuntime();
 }
 
 createRoot(document.getElementById("root")!).render(
@@ -26,11 +21,7 @@ createRoot(document.getElementById("root")!).render(
     {isPetWindow ? (
       <PetView />
     ) : (
-      <>
-        <App />
-        <PluginNavigation />
-        <AgentNavigation />
-      </>
+      <App />
     )}
   </StrictMode>,
 );

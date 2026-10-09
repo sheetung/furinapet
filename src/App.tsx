@@ -1,3 +1,4 @@
+import { AgentPage } from "./agents/AgentPage";
 import furinaAppIcon from '../characters/furina/icons/app.png';
 import { useEffect, useRef, useState } from "react";
 import { ROUTINE_EVENT, getCharacterActions } from './actions/catalog';
@@ -18,7 +19,7 @@ import {
 } from "./characters/registry";
 import type { AppSettings, DashboardSnapshot, Reaction, SettingsPatch } from "./types";
 
-type Page = "home" | "pet" | "settings";
+type Page = "home" | "pet" | "agents" | "settings";
 type DownloadProgress = { downloaded: number; total: number; percent: number };
 type CharacterManagerView = "sources" | "online";
 
@@ -41,7 +42,6 @@ const defaultSettings: AppSettings = {
 
 export function App() {
   const [page, setPage] = useState<Page>("home");
-  const [extensionPageActive, setExtensionPageActive] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [dashboard, setDashboard] = useState<DashboardSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,26 +85,6 @@ export function App() {
     if (!("__TAURI_INTERNALS__" in window)) return;
     const cleanup = listen<DownloadProgress>("update-download-progress", (event) => setDownloadProgress(event.payload));
     return () => { void cleanup.then((unlisten) => unlisten()); };
-  }, []);
-
-  useEffect(() => {
-    const nav = document.querySelector<HTMLElement>(".sidebar nav");
-    if (!nav) return;
-
-    const handleNavigation = (event: Event) => {
-      const button = event.target instanceof Element
-        ? event.target.closest<HTMLButtonElement>("button")
-        : null;
-      if (!button || !nav.contains(button)) return;
-      setExtensionPageActive(
-        button.classList.contains("plugin-nav-button")
-          || button.classList.contains("agent-nav-button")
-          || button.classList.contains("brain-nav-button"),
-      );
-    };
-
-    nav.addEventListener("click", handleNavigation);
-    return () => nav.removeEventListener("click", handleNavigation);
   }, []);
 
   const statusText = settings.petVisible ? "正在陪伴" : "暂时隐藏";
@@ -273,9 +253,10 @@ export function App() {
         <div className="sidebar-name">{activeCharacter.name}</div>
         <div className={`status-pill ${settings.petVisible ? "online" : ""}`}><span />{statusText}</div>
         <nav>
-          <NavButton active={!extensionPageActive && page === "home"} icon="⌂" label="主页" onClick={() => setPage("home")} />
-          <NavButton active={!extensionPageActive && page === "pet"} icon="♢" label="宠物" onClick={() => setPage("pet")} />
-          <NavButton active={!extensionPageActive && page === "settings"} icon="⚙" label="设置" onClick={() => setPage("settings")} />
+          <NavButton active={page === "home"} icon="⌂" label="主页" onClick={() => setPage("home")} />
+          <NavButton active={page === "pet"} icon="♢" label="宠物" onClick={() => setPage("pet")} />
+                    <NavButton active={page === "agents"} icon="⌘" label="智能体" onClick={() => setPage("agents")} />
+          <NavButton active={page === "settings"} icon="⚙" label="设置" onClick={() => setPage("settings")} />
         </nav>
         <div className="sidebar-foot">Tauri · WebView2<br />v{version}</div>
       </aside>
@@ -288,7 +269,7 @@ export function App() {
               <div>
                 <span className="hero-kicker">当前状态</span>
                 <h2>{settings.petVisible ? `${activeCharacter.name}正在舞台上` : `${activeCharacter.name}暂时隐藏了`}</h2>
-                <p>视线、动画和自主行为均在本地运行，不需要插件市场或后台服务。</p>
+                <p>视线、动画和自主行为均在本地运行，不需要后台服务。</p>
                 <div className="button-row">
                   <button className="primary" onClick={() => void togglePet()}>{settings.petVisible ? "暂时隐藏" : `显示${activeCharacter.name}`}</button>
                   <button className="secondary" disabled={characterUpdateChecking} onClick={() => void checkCharacterUpdate()}>{characterUpdateChecking ? "检查中…" : "角色更新"}</button>
@@ -367,7 +348,7 @@ export function App() {
 
         {page === "settings" && (
           <section className="page">
-            <PageHeader eyebrow="Preferences" title="设置" description="没有插件权限、账户或远程服务，只有必要的桌面选项。" />
+            <PageHeader eyebrow="Preferences" title="设置" description="调整桌面显示、开机启动与更新选项。" />
             <div className="settings-list">
               <SettingRow title="始终置顶" description={`让${activeCharacter.name}保持在普通窗口上方。`}><Switch checked={settings.alwaysOnTop} disabled={busy} onChange={(value) => void updateSettings({ alwaysOnTop: value })} /></SettingRow>
               <SettingRow title="开机自动启动" description="登录 Windows 后在托盘启动，不弹出终端。"><Switch checked={settings.launchAtLogin} disabled={busy} onChange={(value) => void updateSettings({ launchAtLogin: value })} /></SettingRow>
@@ -381,6 +362,7 @@ export function App() {
             </div>
           </section>
         )}
+        <AgentPage active={page === "agents"} />
       </main>
       {toast && <div className="toast">{toast}</div>}
       {updateOpen && update?.state === "available" && (

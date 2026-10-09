@@ -10,6 +10,21 @@ export interface ActionRoutine { id: string; label: string; icon: string; descri
 export const completeStep = normalizeStep;
 
 const definitions: ActionRoutine[] = [
+  {id:'breathing',label:'呼吸待机',icon:'💙',description:'轻微呼吸，脚底保持原位',steps:[
+    {reaction:'idle',motion:'breathing',durationMs:4600,activity:'idle'},
+  ]},
+  {id:'nod',label:'轻轻点头',icon:'🙂',description:'温和点头，然后回到中立姿态',steps:[
+    {reaction:'review',motion:'nod',durationMs:0,activity:'observe'},
+  ]},
+  {id:'tea-enter',label:'拿起茶杯',icon:'🫖',description:'从空手过渡到持杯；不计饮水收益',steps:[
+    {reaction:'waiting',motion:'tea-enter',durationMs:0,activity:'idle'},
+  ]},
+  {id:'tea-sip',label:'安静品茶',icon:'☕',description:'持杯轻饮，饮用段循环播放',steps:[
+    {reaction:'waiting',motion:'tea-sip',durationMs:4150,activity:'tea'},
+  ]},
+  {id:'tea-exit',label:'放下茶杯',icon:'🫖',description:'沿拿起时的路径放回，收手回中立',steps:[
+    {reaction:'waiting',motion:'tea-exit',durationMs:0,activity:'idle'},
+  ]},
   {id:'welcome',label:'欢迎回来',icon:'👋',description:'先注意到你，再挥手问好',steps:[
     {reaction:'review',durationMs:850},
     {reaction:'waving',durationMs:1700,message:'欢迎回来，今天过得怎么样？'},
@@ -62,8 +77,10 @@ const definitions: ActionRoutine[] = [
   {id:'stretch-yawn',label:'伸懒腰打哈欠',icon:'🥱',description:'双臂伸展，再掩嘴打哈欠',steps:[
     {reaction:'idle',motion:'stretch-yawn',durationMs:0},
   ]},
-  {id:'tea',label:'品茶时光',icon:'🫖',description:'举杯、闭眼轻饮、放回杯碟；茶具出入过渡待精修',steps:[
-    {reaction:'waiting',motion:'tea',durationMs:0},
+  {id:'tea',label:'品茶时光',icon:'🫖',description:'拿起茶杯、安静轻饮，再放下茶杯',steps:[
+    {reaction:'waiting',motion:'tea-enter',durationMs:0,activity:'idle'},
+    {reaction:'waiting',motion:'tea-sip',durationMs:4150,activity:'tea'},
+    {reaction:'waiting',motion:'tea-exit',durationMs:0,activity:'idle'},
   ]},
   {id:'cake',label:'享用蛋糕',icon:'🍰',description:'举叉、尝一口、满足地放下叉子',steps:[
     {reaction:'waiting',motion:'cake',durationMs:0},
@@ -95,7 +112,7 @@ const baseMotions: Record<Exclude<MotionReaction, GestureMotion>, Omit<MotionEnt
 /** Both manual controls and clip preview read names from this catalog. */
 export const motionCatalog: MotionEntry[] = (Object.keys(frameRows) as MotionReaction[]).map(id => {
   if (Object.hasOwn(baseMotions, id)) return { id, ...baseMotions[id as keyof typeof baseMotions] };
-  const routine = definitions.find(item => item.id === id && item.steps.some(step => step.motion === id));
+  const routine = definitions.find(item => item.id === id);
   if (!routine) throw new Error(`Missing motion catalog entry: ${id}`);
   return { id, label: routine.label, icon: routine.icon };
 });

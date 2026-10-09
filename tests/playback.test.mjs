@@ -74,7 +74,7 @@ test('executor cancellation receives abort and late callbacks cannot update view
   assert.equal(aborted, true); assert.ok(!seen.some(step => step.reaction === 'failed'));
 });
 test('all routines complete and return to idle through the shared controller', async () => {
-  assert.equal(routines.length, 15);
+  assert.equal(routines.length, 20);
   for (const routine of routines) {
     const { playback, tick, seen } = fixture();
     const task = play(playback, routine.steps, priority.user);

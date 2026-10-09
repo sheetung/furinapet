@@ -4,6 +4,11 @@ import type { MotionReaction } from '../../src/core/sprite-motion';
 /** Only populated v2 cells. One-shot gestures finish on a neutral pose. */
 export const furinaClips: Record<MotionReaction, AnimationClip> = {
   idle: { row: 0, holds: [0, 3], durations: [1700, 120, 100, 1600, 130, 110] },
+  breathing: { row: 0, clipId: 'breathing', columns: [0, 1, 2, 3, 4, 5], durations: [900, 700, 700, 700, 700, 900] },
+  nod: { row: 0, clipId: 'nod', durations: [180, 160, 200, 250, 180, 230], once: true },
+  'tea-enter': { row: 0, clipId: 'tea-enter', durations: [150, 130, 130, 130, 130, 180], once: true, finish: 'hold' },
+  'tea-sip': { row: 0, clipId: 'tea-sip', holds: [3], durations: [500, 450, 550, 1500, 500, 650] },
+  'tea-exit': { row: 0, clipId: 'tea-exit', durations: [150, 130, 130, 130, 130, 180], once: true },
   'run-right': { row: 1, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
   'run-left': { row: 2, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
   waving: { row: 3, columns: [0, 1, 2, 1, 2, 3, 0], durations: [180, 150, 170, 150, 170, 180, 180], once: true },

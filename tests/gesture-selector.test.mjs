@@ -23,8 +23,10 @@ test('click response, short rest and agent error keep established semantics', ()
 });
 test('resting and celebrating variants remain separate; cake is not unsolicited', () => {
   const selector = new GestureSelector();
-  assert.equal(selector.select({ type: 'celebrate', intensity: 'normal' }, 'success', .8, 0).motion, 'proud');
-  assert.equal(selector.select({ type: 'celebrate', intensity: 'normal' }, 'success', .8, 0).motion, 'greeting');
+  const proud = selector.select({ type: 'celebrate', intensity: 'normal' }, 'success', .8, 0);
+  assert.equal(proud.motion, 'proud'); selector.recordPerformed(proud, 0);
+  const greeting = selector.select({ type: 'celebrate', intensity: 'normal' }, 'success', .8, 0);
+  assert.equal(greeting.motion, 'greeting'); selector.recordPerformed(greeting, 0);
   assert.equal(selector.select({ type: 'celebrate', intensity: 'normal' }, 'success', .8, 0).motion, undefined);
 });
 test('resolve fallback before duration: imported character does not wait for absent tea clip', () => {

@@ -163,6 +163,11 @@ export class PetBlackboard {
     return count;
   }
 
+  recentGoalCount(goal: PetGoalId, now: number, windowMs = 120000) {
+    return this.history.filter(item => item.goal === goal)
+      .reduce((count, item) => count + clamp01(1 - Math.max(0, now - item.at) / windowMs), 0);
+  }
+
   msSinceGoal(goal: PetGoalId, now: number) {
     const entry = this.history.find((item) => item.goal === goal);
     return entry ? Math.max(0, now - entry.at) : Number.POSITIVE_INFINITY;

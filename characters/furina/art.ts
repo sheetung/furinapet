@@ -1,55 +1,37 @@
 import type { MotionArtFrame } from '../../src/core/motion-art';
+import type { MotionReaction } from '../../src/core/sprite-motion';
+import { furinaClips } from './clips';
+import { standardSheetFrameCounts } from './standard-sheets';
 
-/** Source crops preserve pixels; rendering aligns feet at (96, 200). */
-export function replacementFrame(characterId: string, source: string | undefined, row: number, column: number, clipId?: string): MotionArtFrame | null {
-  if (characterId !== 'furina' || source !== 'built-in') return null;
-  if (!Number.isInteger(column)) return null;
-  if (clipId === 'dock-sitting' && column >= 0 && column < 6) {
-    const x = (column % 3) * 512, y = column < 3 ? 0 : 512;
-    return { asset: 'dock-sitting', atlasWidth: 1536, atlasHeight: 1024,
-      x, y, width: 512, height: column < 3 ? 508 : 492,
-      anchorX: [300, 778, 1256, 282, 766, 1252][column] - x,
-      anchorY: [384, 378, 384, 876, 878, 878][column] - y,
-      scale: 0.38, targetY: 158 };
+type SheetId = keyof typeof standardSheetFrameCounts;
+const rowSheets: Partial<Record<number, SheetId>> = {
+  0: 'idle', 1: 'run-right', 2: 'run-left', 3: 'waving', 4: 'jumping',
+  5: 'failed', 6: 'waiting', 7: 'running', 8: 'review',
+};
+
+/** All built-in art is baked into 192x208 cells on a 4x4 sheet. */
+export function replacementFrame(characterId: string, source: string | undefined,
+  row: number, column: number, clipId?: string, motion?: MotionReaction | 'gaze'): MotionArtFrame | null {
+  if (characterId !== 'furina' || source !== 'built-in' || !Number.isInteger(column) || column < 0) return null;
+  let sheet: string | undefined;
+  let index = column;
+  if ((row === 9 || row === 10) && clipId === undefined) {
+    if (column >= 8) return null;
+    sheet = 'gaze';
+    index += (row - 9) * 8;
+  } else {
+    sheet = clipId === 'stretch' ? 'stretch-yawn' : clipId ?? rowSheets[row];
+    if (motion && motion !== 'gaze') {
+      const clip = furinaClips[motion];
+      // Neutral completion frames belong to idle, even after an extension clip.
+      if (clip.row === row && clip.clipId === clipId) sheet = motion;
+    }
   }
-  if (column >= 0 && column < 6 && clipId !== undefined) {
-    const specs = [
-      { asset: 'greeting', x: [154, 608, 1082, 156, 606, 1088], feet: [508, 510, 509, 1004, 1008, 1010] },
-      { asset: 'sitting', x: [152, 604, 1088, 144, 608, 1092], feet: [509, 509, 515, 1009, 1006, 1006] },
-      { asset: 'stretch', x: [154, 602, 1088, 156, 604, 1080], feet: [506, 507, 506, 1017, 1017, 1017] },
-      { asset: 'tea', x: [152, 598, 1080, 150, 600, 1080], feet: [508, 508, 508, 1020, 1020, 1020] },
-      { asset: 'cake', x: [150, 610, 1078, 146, 610, 1080], feet: [506, 506, 506, 1018, 1017, 1017] },
-      { asset: 'proud', x: [148, 596, 1076, 148, 598, 1076], feet: [509, 508, 508, 1021, 1021, 1021] },
-    ] as const;
-    const spec = specs.find(item => item.asset === clipId);
-    if (!spec) return null;
-    // Sitting crosses the nominal 512px boundary; split in the actual transparent gap.
-    const split = clipId === 'sitting' ? 526 : clipId === 'cake' ? 508 : 512;
-    const y = column < 3 ? 0 : split;
-    return { asset: spec.asset, atlasWidth: 1536, atlasHeight: 1024,
-      x: spec.x[column], y, width: 312, height: column < 3 ? split : 1024 - split,
-      anchorX: 156, anchorY: spec.feet[column] - y, scale: 190 / 502 };
-  }
-  if (row === 0 && column >= 0 && column < 6) {
-    return { asset: 'idle', atlasWidth: 1536, atlasHeight: 1024,
-      x: [160, 608, 1090, 160, 612, 1090][column], y: column < 3 ? 0 : 512, width: 288, height: 512,
-      anchorX: 144, anchorY: 504, scale: 190 / 498 };
-  }
-  if (row === 3 && column >= 0 && column < 4) {
-    return { asset: 'waving', atlasWidth: 2161, atlasHeight: 728,
-      x: [74, 614, 1152, 1688][column], y: 8, width: 396, height: 712,
-      anchorX: 198, anchorY: 708, scale: 190 / 700 };
-  }
-  if (row === 4 && column >= 0 && column < 5) {
-    // Keep a shared baseline and scale: do not normalize away the airborne height.
-    return { asset: 'jumping', atlasWidth: 1536, atlasHeight: 1024,
-      x: [132, 604, 1106, 138, 602][column], y: column < 3 ? 0 : 512, width: 330, height: 512,
-      anchorX: 165, anchorY: 504, scale: 190 / 498 };
-  }
-  if (row === 8 && column >= 0 && column < 6) {
-    return { asset: 'review', atlasWidth: 1536, atlasHeight: 1024,
-      x: [160, 608, 1088, 160, 614, 1088][column], y: column < 3 ? 0 : 512, width: 288, height: 512,
-      anchorX: 144, anchorY: 506, scale: 190 / 498 };
-  }
-  return null;
+  if (!sheet || !Object.hasOwn(standardSheetFrameCounts, sheet)) return null;
+  const id = sheet as SheetId;
+  if (index >= standardSheetFrameCounts[id]) return null;
+  const baseline = id === 'dock-sitting' ? 158 : 200;
+  return { asset: id, atlasWidth: 768, atlasHeight: 832,
+    x: (index % 4) * 192, y: Math.floor(index / 4) * 208, width: 192, height: 208,
+    anchorX: 96, anchorY: baseline, targetY: baseline, scale: 1 };
 }

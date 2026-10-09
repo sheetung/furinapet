@@ -7,8 +7,9 @@ import { actionPlayback, ACTION_PRIORITY } from '../actions/coordinator';
 import { listen } from "@tauri-apps/api/event";
 import { characterRegistry, getCharacter, loadCharacterRegistry, type CharacterDefinition } from "../characters/registry";
 import type { LookCell } from "../core/look-direction";
-import { frameRows, motionPhase, type MotionReaction } from '../core/sprite-motion';
-import { activityForMotion } from '../pet-brain/needs';
+import { frameRows, type MotionReaction } from '../core/sprite-motion';
+import type { Activity } from '../pet-brain/needs';
+import { currentPetActivity } from './activity';
 import { getCharacterArt } from '../characters/motion-assets';
 import { animationClock } from '../animation/clock';
 import { playClip } from '../animation/player';
@@ -37,6 +38,7 @@ export function usePetRuntime() {
   const [bubblePlacement, setBubblePlacement] = useState<'above' | 'inside'>('above');
   useEffect(() => bubbles.subscribe(() => setBubble(bubbles.snapshot())), []);
   const reactionRef = useRef<MotionReaction>(reaction);
+  const locomotionActivity = useRef<Activity>('idle');
   const animationStartedAt = useRef(animationClock.now());
   const settingsRef = useRef(settings);
   const charactersRef = useRef(characters);
@@ -70,7 +72,6 @@ export function usePetRuntime() {
     dragCompleted: moved => dockMemory.current.finishDrag(moved, Date.now()),
     clearLook: () => setLook(null),
     observeInteraction: () => {
-      brainRef.current!.interrupt();
       brainRef.current!.observeUserInteraction(Date.now());
     },
     report: error => console.warn('[pet] interaction failed', error),
@@ -81,7 +82,6 @@ export function usePetRuntime() {
     cancelMotion: () => {
       interaction.cancel();
       actionPlayback.stop();
-      brainRef.current!.interrupt();
       layout.cancel();
       setLook(null);
       changeReaction('idle');
@@ -104,24 +104,30 @@ export function usePetRuntime() {
 
 
   useEffect(() => { reactionRef.current = reaction; }, [reaction]);
-  useEffect(() => bindExecutionPolicy(priority => permitsExecution(settingsRef.current, priority)), []);
+  useEffect(() => bindExecutionPolicy(priority => permitsExecution(settingsRef.current, priority,
+    actionPlayback.snapshot().actionId)), []);
   useEffect(() => { charactersRef.current = characters; }, [characters]);
 
   useEffect(() => {
     let cancel = () => {};
-    const tick = () => {
+    const observe = () => {
       const current = settingsRef.current;
       if (current) {
         const character = getCharacter(current.selectedCharacterId, charactersRef.current);
-        const motion = motionPhase(reactionRef.current, animationClock.now() - animationStartedAt.current) === 'complete'
-          ? 'idle' : reactionRef.current;
+        const motion = interaction.snapshot();
         brainRef.current!.blackboard.observeActivity(`${character.source}:${character.id}`,
-          activityForMotion(motion, current.petVisible && character.id === 'furina' && character.source === 'built-in'), Date.now());
+          currentPetActivity({ visible: current.petVisible && character.id === 'furina' && character.source === 'built-in',
+            dragging: motion.dragging, falling: motion.falling,
+            execution: actionPlayback.snapshot().activity, locomotion: locomotionActivity.current }), Date.now());
       }
+    };
+    const tick = () => {
+      observe();
       cancel = animationClock.schedule(tick, 250);
     };
+    const unsubscribe = actionPlayback.subscribeActivity(observe);
     tick();
-    return () => cancel();
+    return () => { cancel(); unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -143,6 +149,7 @@ export function usePetRuntime() {
   }, [settings?.selectedCharacterId]);
 
   function changeReaction(next: MotionReaction, restart = false, startedAt = animationClock.now()) {
+    locomotionActivity.current = 'idle';
     if (reactionRef.current !== next || restart) animationStartedAt.current = startedAt;
     if (reactionRef.current !== next) {
       reactionRef.current = next;
@@ -163,14 +170,12 @@ export function usePetRuntime() {
       interaction.cancel();
       layout.cancel();
       actionPlayback.stop();
-      brainRef.current?.interrupt();
       actionPlayback.block('hidden', !next.petVisible);
       bubbles.setVisible(next.petVisible);
       setLook(null);
       changeReaction('idle');
     } else if (!next.autonomousBehavior && actionPlayback.snapshot().priority === ACTION_PRIORITY.background) {
       actionPlayback.stop();
-      brainRef.current?.interrupt();
     }
     setSettings(next);
   }
@@ -178,7 +183,8 @@ export function usePetRuntime() {
   useLayoutEffect(() => {
     if (look) return;
     const character = getCharacter(settings?.selectedCharacterId ?? 'furina', charactersRef.current);
-    const clip = getCharacterArt(character)?.clips[reaction] ?? frameRows[reaction];
+    const art = getCharacterArt(character);
+    const clip = art?.clips[reaction === 'idle' ? 'breathing' : reaction] ?? frameRows[reaction];
     return playClip(clip, animationStartedAt.current, setSpriteCell);
   }, [reaction, animationEpoch, look?.index, settings?.selectedCharacterId]);
 
@@ -214,7 +220,11 @@ export function usePetRuntime() {
       publishPetBrainSnapshot();
       return goal;
     },
-    changeReaction,
+    changeReaction: (next, restart) => {
+      changeReaction(next, restart);
+      locomotionActivity.current = ['run-left', 'run-right', 'airborne'].includes(next) ? 'walk'
+        : ['dock-sitting', 'waiting'].includes(next) ? 'rest' : 'idle';
+    },
     setLook: next => setLook(previous => previous?.index === next?.index ? previous : next),
     settle: settleWithGravity,
   }), []);

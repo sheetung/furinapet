@@ -35,9 +35,11 @@ test('thirst and hunger require their own actions and only elapsed consumption r
   needs.observe('tea', 1600000);
   assert.equal(needs.snapshot().thirst, before.thirst);
   for (let sec = 1601; sec <= 1604; sec++) needs.observe('tea', sec * 1000);
+  assert.equal(needs.snapshot().reason, 'thirsty', 'drinking continues to the satisfaction threshold');
+  needs.observe('tea', 1605000);
   assert.equal(needs.snapshot().reason, 'hungry');
-  needs.observe('cake', 1604000);
-  for (let sec = 1605; sec <= 1609; sec++) needs.observe('cake', sec * 1000);
+  needs.observe('cake', 1605000);
+  for (let sec = 1606; sec <= 1610; sec++) needs.observe('cake', sec * 1000);
   assert.equal(needs.snapshot().reason, null);
 });
 

@@ -1,5 +1,5 @@
 import { PetBlackboard } from "./Blackboard";
-import { PetActionExecutor, type PetActionHandler, type RunPlanOptions } from "./Executor";
+import { PetActionExecutor, type PetActionHandler } from "./Executor";
 import { PetUtilityPlanner } from "./Planner";
 import type {
   BrainAgentState,
@@ -13,7 +13,7 @@ import type {
 
 export * from "./types";
 export { PetBlackboard } from "./Blackboard";
-export { PetActionExecutor, waitForAction } from "./Executor";
+export { PetActionExecutor } from "./Executor";
 export { PetUtilityPlanner } from "./Planner";
 
 export interface PetBrainOptions {
@@ -107,13 +107,10 @@ export class PetBrain {
     return plan;
   }
 
-  execute(plan: PetActionPlan, handler: PetActionHandler, options?: RunPlanOptions) {
-    return this.executor.run(plan, handler, options);
+  execute(plan: PetActionPlan, handler: PetActionHandler, signal: AbortSignal) {
+    return this.executor.run(plan, handler, signal);
   }
 
-  interrupt() {
-    this.executor.interrupt();
-  }
 
   snapshot(now = Date.now()): PetBrainSnapshot {
     return {

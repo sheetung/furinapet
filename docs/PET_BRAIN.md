@@ -1,13 +1,13 @@
 # FurinaPet Pet Brain
 
-Pet Brain is the built-in autonomous behavior core. It owns high-level behavior arbitration so user input, Agent state, plugins and future AI do not each become a separate controller.
+Pet Brain is the built-in autonomous behavior core. It owns high-level behavior arbitration so user input, Agent state and AI do not each become a separate controller.
 
 ## Boundaries
 
 ```text
 User senses ─────┐
 Agent lifecycle ─┤
-Plugin intents ──┼──> Blackboard -> Utility Planner -> Action Plan -> Executor -> PetView / reaction API
+                 ├──> Blackboard -> Utility Planner -> Action Plan -> Executor -> PetView / reaction API
 AI suggestions ──┤
 System state ─────┘
 ```
@@ -19,7 +19,6 @@ Pet Brain decides **what the character should do**. Existing motion/rendering co
 - `wander-controller` owns geometry and movement target helpers.
 - Pet Brain owns goals, context, memory, priorities and action sequences.
 - Agent Bridge publishes lifecycle facts; it no longer chooses lifecycle animations.
-- Plugins should prefer behavior intents over direct reactions when they want autonomous behavior.
 - AI may only suggest semantic goals. It cannot select sprite rows, raw coordinates or animation frames.
 
 ## Core modules
@@ -53,10 +52,10 @@ The goal set is intentionally smaller than the animation set. A goal can produce
 Input source priority is bounded before it reaches the planner:
 
 - System/user intent: up to `1.00`
-- Agent/plugin intent: up to `0.95`
+- Agent intent: up to `0.95`
 - AI suggestion: up to `0.82`
 
-The executor also applies an interrupt margin, so a weak new plan does not constantly replace an already-running stronger plan.
+ActionCoordinator owns interruption: user 100, Agent 20 and background 10; the semantic executor only tracks plan progress.
 
 Dragging and explicit/manual reaction commands remain immediate controls. MCP `furinapet_react` and `furinapet_say` are explicit user/agent actions and are intentionally distinct from lifecycle state planning.
 
@@ -73,19 +72,6 @@ Agent Bridge sends `pet-brain-agent-state` with categorical state:
 `idle | thinking | editing | testing | waiting | success | error`
 
 The Rust host records sessions and lifecycle state but Pet Brain chooses the visual response. Agent heartbeat only preserves connectivity and does not keep a work action alive.
-
-## Plugin integration
-
-Plugin SDK v1 gains:
-
-```js
-ctx.pet.intent("respond-user", {
-  priority: 0.8,
-  ttlMs: 2000,
-});
-```
-
-The permission is `pet:behavior`. Existing `pet:reaction` remains for backward compatibility and explicit effects. New autonomous plugins should use `pet:behavior` whenever possible.
 
 ## AI integration contract
 
@@ -144,7 +130,7 @@ The pet window publishes `furinapet:brain-snapshot` after autonomous decisions. 
 1. Core Blackboard / Planner / Executor — implemented.
 2. Wander high-level decision — implemented; movement physics stays unchanged.
 3. Priority-aware action execution — implemented for semantic reaction plans.
-4. User click senses — routed through Brain when not consumed by a legacy plugin; official click plugin migration is prepared separately.
+4. User click senses — routed directly through Brain; no plugin arbitration.
 5. Agent lifecycle — routed into Brain; explicit MCP react/say remain direct.
 6. Brain snapshot contract — implemented; richer Control Center visualization remains follow-up work.
 7. AI intent adapter — implemented.

@@ -42,6 +42,8 @@ export interface WanderRuntime {
   settle(): Promise<void>;
 }
 const MOTION_INTERVAL_MS = 32;
+const IDLE_INTERVAL_MS = 250;
+const HIDDEN_INTERVAL_MS = 1000;
 const GROUNDED_Y_TOLERANCE = 2;
 const MIN_EFFECTIVE_MOTION_PX = 1;
 const MAX_STALLED_TICKS = 4;
@@ -134,17 +136,43 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
         : null;
     };
 
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const settings = runtime.settings();
+      const blocked = runtime.layoutBusy() || runtime.motion().dragging || runtime.motion().falling || actionPlayback.active;
+      const delay = !settings?.petVisible ? HIDDEN_INTERVAL_MS
+        : blocked || !settings.autonomousBehavior ? IDLE_INTERVAL_MS
+        : wander.mode === 'idle' ? Math.max(MOTION_INTERVAL_MS, Math.min(IDLE_INTERVAL_MS, wander.nextAt - runtime.wallNow()))
+        : MOTION_INTERVAL_MS;
+      cancelTick = runtime.schedule(() => void tick(), delay);
+    };
+
     const tick = async () => {
       const currentSettings = runtime.settings();
       if (cancelled) return;
       if (!currentSettings) {
-        cancelTick = runtime.schedule(() => void tick(), MOTION_INTERVAL_MS);
+        lastTick = runtime.now();
+        scheduleNext();
         return;
       }
       const now = runtime.now();
       const wallClock = runtime.wallNow();
-      const elapsed = Math.min(64, now - lastTick);
+      const elapsed = wander.mode === 'idle' ? MOTION_INTERVAL_MS : Math.min(64, now - lastTick);
       lastTick = now;
+      // No native geometry reads while paused or waiting for a decision. Gravity
+      // retries and cursor sensing have independent controllers.
+      if (!currentSettings.petVisible || runtime.layoutBusy() || runtime.motion().dragging
+        || runtime.motion().falling || actionPlayback.active) {
+        // An animation must not shorten the decision deadline already chosen.
+        resetWander(Math.max(wander.nextAt, wallClock + 1500));
+        scheduleNext();
+        return;
+      }
+      if (wander.mode === 'idle' && (!currentSettings.autonomousBehavior || wallClock < wander.nextAt)) {
+        if (!currentSettings.autonomousBehavior) resetWander();
+        scheduleNext();
+        return;
+      }
       const playbackEpoch = actionPlayback.epoch;
       const layoutEpoch = runtime.layoutEpoch();
       const lease = runtime.authority.acquire('wander');
@@ -163,8 +191,10 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
         const isLocomotionState = !userReactionActive && (runtime.reaction() === "idle"
           || isTravelMotion(runtime.reaction())
           || (wander.mode === "docked" && ['waiting', 'review', 'dock-sitting'].includes(runtime.reaction())));
-        let position = await port.position();
-        const size = await port.size();
+        const geometry = await Promise.all([port.position(), port.size()]);
+        if (stale()) return;
+        let position = geometry[0];
+        const size = geometry[1];
         // Sprite feet sit eight logical pixels above the bottom of the stage.
         const seated = runtime.dockSitting?.() ?? false;
         const seatOffset = seated ? 42 * currentSettings.scale * runtime.pixelRatio() : 0;
@@ -443,7 +473,7 @@ export function startWanderController(port: WanderPort, runtime: WanderRuntime) 
         }
       } finally {
         lease?.release();
-        if (!cancelled) cancelTick = runtime.schedule(() => void tick(), MOTION_INTERVAL_MS);
+        scheduleNext();
       }
     };
 

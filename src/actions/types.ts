@@ -1,5 +1,6 @@
 import type { Reaction } from '../types';
 import type { GestureMotion } from '../core/sprite-motion';
+import type { Activity } from '../pet-brain/needs';
 
 export const ACTION_PRIORITY = { background: 10, agent: 20, user: 100 } as const;
 export type ActionSource = keyof typeof ACTION_PRIORITY;
@@ -17,6 +18,8 @@ export interface ActionStep {
   durationMs: number;
   message?: string;
   motion?: GestureMotion;
+  /** Internal activity used for elapsed-time needs accounting. */
+  activity?: Activity;
   /** Internal monotonic start time, assigned by the coordinator. */
   startedAt?: number;
 }

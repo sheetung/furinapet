@@ -18,7 +18,7 @@ export class PetUtilityPlanner {
     const energy = blackboard.getEnergy();
     const needs = blackboard.getNeeds();
     const cursorAttention = blackboard.cursorAttention(now);
-    const repeatPenalty = (goal: PetGoalId, amount: number) => Math.min(0.45, blackboard.goalRepeatCount(goal) * amount);
+    const repeatPenalty = (goal: PetGoalId, amount: number) => Math.min(0.45, blackboard.recentGoalCount(goal, now) * amount);
     const cooldownPenalty = (goal: PetGoalId, cooldownMs: number, amount: number) => {
       const elapsed = blackboard.msSinceGoal(goal, now);
       return elapsed >= cooldownMs ? 0 : amount * (1 - elapsed / cooldownMs);
@@ -34,7 +34,7 @@ export class PetUtilityPlanner {
       scores.push({ goal, score: clamp01(score), reason });
     };
 
-    add("idle", 0.26 + (1 - context.activity) * 0.12 + (context.userReactionActive ? 0.32 : 0)
+    add("idle", 0.32 + (1 - context.activity) * 0.12 + (context.userReactionActive ? 0.32 : 0)
       + cursorAttention * 0.5, cursorAttention > 0 ? "nearby cursor movement" : "baseline calm state");
 
     const respondScore = recentUserInteraction * (0.62 + Math.min(3, clickStreak) * 0.11)
@@ -57,7 +57,7 @@ export class PetUtilityPlanner {
     const celebrateScore = context.agentState === "success"
       ? 0.9 - cooldownPenalty("celebrate", 12000, 0.5)
       : clickStreak >= 3 ? 0.64 - cooldownPenalty("celebrate", 8000, 0.4) : 0;
-    add("celebrate", celebrateScore, context.agentState === "success" ? "agent completed work" : "high user engagement");
+    add("celebrate", celebrateScore - repeatPenalty('celebrate', 0.12), context.agentState === "success" ? "agent completed work" : "high user engagement");
 
     const restScore = (1 - energy) * 0.7
       + (context.idleForMs > 45000 ? 0.12 : 0)
@@ -123,7 +123,12 @@ export class PetUtilityPlanner {
     const top = scores[0] ?? { goal: "idle" as const, score: 1, reason: "fallback" };
     if (top.score >= 0.92 || scores.length === 1) return top;
 
-    const eligible = scores.filter((item) => item.score >= Math.max(0.18, top.score - 0.16));
+    // Calm is a valid choice. Do not turn an idle decision into a random gesture,
+    // and require a meaningful advantage before leaving it for another goal.
+    const idle = scores.find(item => item.goal === 'idle');
+    if (idle && top.score - idle.score <= 0.08) return idle;
+    const eligible = scores.filter((item) => item.goal !== 'idle'
+      && item.score >= Math.max(0.18, top.score - 0.06));
     if (eligible.length <= 1) return top;
 
     const weights = eligible.map((item) => Math.max(0.01, item.score ** 2));
@@ -152,8 +157,11 @@ export class PetUtilityPlanner {
         return [{ type: "observe", durationMs: 2200 + Math.round(this.random() * 1800) }, { type: "wait", durationMs: 500 }];
       case "celebrate":
         return [{ type: "celebrate", intensity: blackboard.getMood() === "happy" ? "excited" : "normal" }];
-      case "rest":
-        return [{ type: "rest", durationMs: 3000 + Math.round(this.random() * 3500) }];
+      case "rest": {
+        const recovery = blackboard.getNeeds().reason;
+        return [{ type: "rest", durationMs: 3000 + Math.round(this.random() * 3500),
+          ...(recovery ? { recovery } : {}) }];
+      }
       case "idle":
       default:
         return [{ type: "idle", durationMs: 1200 + Math.round(this.random() * 2200) }];

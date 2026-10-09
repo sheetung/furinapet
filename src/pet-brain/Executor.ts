@@ -10,78 +10,36 @@ export interface ExecutorSnapshot {
   actionIndex: number;
 }
 
-export interface RunPlanOptions {
-  force?: boolean;
-  interruptMargin?: number;
-}
-
+/** Records semantic progress; the action coordinator owns cancellation and arbitration. */
 export class PetActionExecutor {
-  private controller: AbortController | null = null;
-  private plan: PetActionPlan | null = null;
-  private actionIndex = -1;
-  private generation = 0;
+  private current: { plan: PetActionPlan; actionIndex: number } | null = null;
 
-  async run(plan: PetActionPlan, handler: PetActionHandler, options: RunPlanOptions = {}) {
-    const interruptMargin = Math.max(0, Math.min(0.5, options.interruptMargin ?? 0.08));
-    if (
-      this.plan
-      && !options.force
-      && plan.score + interruptMargin < this.plan.score
-    ) {
-      return false;
-    }
-
-    this.interrupt();
-    const generation = ++this.generation;
-    const controller = new AbortController();
-    this.controller = controller;
-    this.plan = plan;
-
+  async run(plan: PetActionPlan, handler: PetActionHandler, signal: AbortSignal) {
+    if (signal.aborted) return;
+    const progress = { plan, actionIndex: -1 };
+    this.current = progress;
+    const clear = () => { if (this.current === progress) this.current = null; };
+    signal.addEventListener('abort', clear, { once: true });
     try {
-      for (let index = 0; index < plan.actions.length; index += 1) {
-        if (controller.signal.aborted || generation !== this.generation) break;
-        this.actionIndex = index;
-        await handler(plan.actions[index], controller.signal);
+      for (let index = 0; index < plan.actions.length; index++) {
+        if (signal.aborted || this.current !== progress) break;
+        progress.actionIndex = index;
+        await handler(plan.actions[index], signal);
       }
     } finally {
-      if (generation === this.generation) {
-        this.controller = null;
-        this.plan = null;
-        this.actionIndex = -1;
-      }
+      signal.removeEventListener('abort', clear);
+      clear();
     }
-    return true;
-  }
-
-  interrupt() {
-    this.generation += 1;
-    this.controller?.abort();
-    this.controller = null;
-    this.plan = null;
-    this.actionIndex = -1;
   }
 
   snapshot(): ExecutorSnapshot {
+    const progress = this.current;
     return {
-      running: this.plan !== null,
-      planId: this.plan?.id ?? null,
-      goal: this.plan?.goal ?? null,
-      score: this.plan?.score ?? 0,
-      actionIndex: this.actionIndex,
+      running: progress !== null,
+      planId: progress?.plan.id ?? null,
+      goal: progress?.plan.goal ?? null,
+      score: progress?.plan.score ?? 0,
+      actionIndex: progress?.actionIndex ?? -1,
     };
   }
-}
-
-export function waitForAction(milliseconds: number, signal: AbortSignal) {
-  return new Promise<void>((resolve) => {
-    if (signal.aborted || milliseconds <= 0) {
-      resolve();
-      return;
-    }
-    const timer = window.setTimeout(resolve, milliseconds);
-    signal.addEventListener("abort", () => {
-      window.clearTimeout(timer);
-      resolve();
-    }, { once: true });
-  });
 }

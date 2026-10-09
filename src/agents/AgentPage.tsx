@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   desktop,
   type AgentConnectionSnapshot,
@@ -53,100 +52,30 @@ function clientInitial(session: AgentConnectionSnapshot) {
   return session.clientName.trim().charAt(0).toUpperCase() || "A";
 }
 
-export function AgentNavigation() {
-  const [active, setActive] = useState(false);
-  const [host, setHost] = useState<HTMLDivElement | null>(null);
+export function AgentPage({ active }: { active: boolean }) {
   const [agent, setAgent] = useState<AgentStatusSnapshot | null>(null);
   const [claude, setClaude] = useState<ClaudeIntegrationStatus | null>(null);
   const [codex, setCodex] = useState<CodexIntegrationStatus | null>(null);
   const [mcp, setMcp] = useState<McpServerConfigPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
-  const navButtonRef = useRef<HTMLButtonElement | null>(null);
-
+  const mounted = useRef(false);
   useEffect(() => {
-    let disposed = false;
-    let observer: MutationObserver | null = null;
-    let mountedNav: HTMLElement | null = null;
-    let delegatedListener: ((event: Event) => void) | null = null;
-
-    const mountNavigation = () => {
-      if (disposed || navButtonRef.current) return;
-      const nav = document.querySelector<HTMLElement>(".sidebar nav");
-      const settingsButton = Array.from(nav?.querySelectorAll<HTMLButtonElement>("button") ?? [])
-        .find((button) => button.textContent?.includes("设置"));
-      if (!nav || !settingsButton) return;
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "agent-nav-button";
-      button.innerHTML = "<span>⌘</span>智能体";
-      button.addEventListener("click", () => {
-        const home = Array.from(nav.querySelectorAll<HTMLButtonElement>("button"))
-          .find((item) => item !== button && item.textContent?.includes("主页"));
-        home?.click();
-        Array.from(nav.querySelectorAll<HTMLButtonElement>("button")).forEach((item) => {
-          if (item !== button) item.classList.remove("active");
-        });
-        setActive(true);
-      });
-      nav.insertBefore(button, settingsButton);
-      navButtonRef.current = button;
-      mountedNav = nav;
-      delegatedListener = (event: Event) => {
-        const target = event.target instanceof Element ? event.target.closest("button") : null;
-        if (target && target !== button) setActive(false);
-      };
-      nav.addEventListener("click", delegatedListener);
-    };
-
-    mountNavigation();
-    observer = new MutationObserver(mountNavigation);
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    return () => {
-      disposed = true;
-      observer?.disconnect();
-      if (mountedNav && delegatedListener) mountedNav.removeEventListener("click", delegatedListener);
-      navButtonRef.current?.remove();
-      navButtonRef.current = null;
-      document.querySelector(".app-shell")?.classList.remove("agent-page-active");
-    };
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
 
   useEffect(() => {
-    navButtonRef.current?.classList.toggle("active", active);
-    document.querySelector(".app-shell")?.classList.toggle("agent-page-active", active);
     if (!active) return;
-
-    void refreshAll();
+    let disposed = false;
+    const valid = () => !disposed && mounted.current;
+    void refreshAll(valid);
     const timer = window.setInterval(() => {
-      void desktop.getAgentStatus().then(setAgent).catch(() => undefined);
+      void desktop.getAgentStatus().then(value => {
+        if (valid()) setAgent(value);
+      }).catch(() => undefined);
     }, 1600);
-    return () => window.clearInterval(timer);
-  }, [active]);
-
-  useEffect(() => {
-    const content = document.querySelector<HTMLElement>("main.content");
-    if (!active || !content) {
-      setHost(null);
-      return;
-    }
-    const existingChildren = Array.from(content.children) as HTMLElement[];
-    const previousDisplays = existingChildren.map((element) => element.style.display);
-    existingChildren.forEach((element) => { element.style.display = "none"; });
-
-    const pageHost = document.createElement("div");
-    pageHost.style.display = "contents";
-    content.appendChild(pageHost);
-    setHost(pageHost);
-
-    return () => {
-      pageHost.remove();
-      existingChildren.forEach((element, index) => {
-        element.style.display = previousDisplays[index];
-      });
-    };
+    return () => { disposed = true; window.clearInterval(timer); };
   }, [active]);
 
   function showToast(message: string) {
@@ -154,21 +83,25 @@ export function AgentNavigation() {
     window.setTimeout(() => setToast(""), 2200);
   }
 
-  async function refreshAll() {
-    void desktop.getCodexIntegrationStatus().then(setCodex).catch(() => setCodex({
-      mcpStatus: 'error', managed: false, message: '无法读取 Codex 配置，请检查配置格式或权限后刷新。',
-    }));
+  async function refreshAll(valid = () => mounted.current) {
+    void desktop.getCodexIntegrationStatus().then(value => {
+      if (valid()) setCodex(value);
+    }).catch(() => {
+      if (valid()) setCodex({ mcpStatus: 'error', managed: false,
+        message: '无法读取 Codex 配置，请检查配置格式或权限后刷新。' });
+    });
     try {
       const [nextAgent, nextClaude, nextMcp] = await Promise.all([
         desktop.getAgentStatus(),
         desktop.getClaudeIntegrationStatus(),
         desktop.getMcpServerConfig(),
       ]);
+      if (!valid()) return;
       setAgent(nextAgent);
       setClaude(nextClaude);
       setMcp(nextMcp);
     } catch (error) {
-      showToast(`智能体状态加载失败：${String(error)}`);
+      if (valid()) showToast(`智能体状态加载失败：${String(error)}`);
     }
   }
 
@@ -227,7 +160,7 @@ export function AgentNavigation() {
     }
   }
 
-  if (!active || !host) return null;
+  if (!active) return null;
 
   const meta = stateMeta[agent?.state ?? "idle"];
   const claudeInstalled = claude?.overallStatus === "installed";
@@ -237,7 +170,7 @@ export function AgentNavigation() {
     ? `${currentClient}${agent?.clientVersion ? ` ${agent.clientVersion}` : ""}${agent?.project ? ` · ${agent.project}` : ""}`
     : "当前没有已连接的智能体会话。";
 
-  return createPortal(
+  return (
     <section className="page agent-page">
       <style>{`
         .agent-page { padding-bottom: 36px; }
@@ -412,7 +345,6 @@ export function AgentNavigation() {
       <div className="agent-privacy">连接页只记录客户端名称/版本、接入方式、项目简称和生命周期状态。不会读取 MCP 客户端账号，也不会把 prompt、代码、工具输出、终端日志或完整文件路径展示给桌宠；clientInfo 仅用于显示，不作为可信身份认证。</div>
 
       {toast && <div className="toast">{toast}</div>}
-    </section>,
-    host,
+    </section>
   );
 }

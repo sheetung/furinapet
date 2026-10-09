@@ -18,14 +18,13 @@ export type BrainAgentState =
   | "success"
   | "error";
 
-export type BrainIntentSource = "system" | "user" | "agent" | "plugin" | "ai";
+export type BrainIntentSource = "system" | "user" | "agent" | "ai";
 
 export type PetSenseName = "pet:clicked" | "pet:doubleClicked" | "pet:dragStart" | "pet:dragEnd";
 
 export interface PetSenseEventDetail {
   name: PetSenseName;
   at: number;
-  handledByPlugin: boolean;
 }
 
 export interface BrainAgentStateEvent {
@@ -75,7 +74,7 @@ export type PetSemanticAction =
   | { type: "observe"; durationMs: number }
   | { type: "respond"; intensity: "soft" | "normal" | "excited" }
   | { type: "celebrate"; intensity: "normal" | "excited" }
-  | { type: "rest"; durationMs: number }
+  | { type: "rest"; durationMs: number; recovery?: Exclude<import('./needs').NeedReason, null> }
   | { type: "wait"; durationMs: number };
 
 export interface GoalScore {

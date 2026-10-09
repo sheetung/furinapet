@@ -429,7 +429,6 @@ function reasonLabel(reason: string) {
     .replace("system intent", "系统 Intent")
     .replace("user intent", "用户 Intent")
     .replace("agent intent", "Agent Intent")
-    .replace("plugin intent", "插件 Intent")
     .replace("ai intent", "AI 建议 Intent");
 }
 

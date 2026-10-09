@@ -4,6 +4,8 @@ import { CursorObserver } from './cursor-observer';
 import { GazeInterest } from './gaze-interest';
 import type { WanderPort, WanderRuntime } from './wander';
 
+const GAZE_INTERVAL_MS = 48;
+
 /** Gaze has its own sampler; a slow docking query cannot freeze cursor tracking. */
 export function startGazeController(port: Pick<WanderPort, 'position' | 'size' | 'cursor'>,
   runtime: Pick<WanderRuntime, 'settings' | 'reaction' | 'playback' | 'layoutEpoch' | 'layoutBusy'
@@ -15,6 +17,7 @@ export function startGazeController(port: Pick<WanderPort, 'position' | 'size' |
   const clear = () => { attention.reset(runtime.now()); observer.reset(); interest.reset(); runtime.setLook(null); };
   const tick = async () => {
     if (stopped) return;
+    const startedAt = runtime.now();
     const settings = runtime.settings();
     const epoch = runtime.playback.epoch, layout = runtime.layoutEpoch();
     const blocked = () => runtime.layoutBusy() || runtime.motion().dragging || runtime.motion().falling;
@@ -43,7 +46,10 @@ export function startGazeController(port: Pick<WanderPort, 'position' | 'size' |
     } catch {
       if (!stopped) clear();
     } finally {
-      if (!stopped) cancel = runtime.schedule(() => void tick(), 48);
+      // Native reads consume part of the sampling interval; never stack another
+      // full interval on top of that latency or overlap pending reads.
+      if (!stopped) cancel = runtime.schedule(() => void tick(),
+        Math.max(0, GAZE_INTERVAL_MS - (runtime.now() - startedAt)));
     }
   };
   void tick();

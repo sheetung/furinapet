@@ -3,6 +3,7 @@ import { ACTION_PRIORITY, type ActionRequest, type ActionResult } from './types'
 import { createExecutor, executeSteps } from './executor';
 import { animationClock } from '../animation/clock';
 import type { PlaybackSession, StopReason, ExecutionPhase, Schedule } from './types';
+import type { Activity } from '../pet-brain/needs';
 export { ACTION_PRIORITY } from './types';
 export type { PlaybackSession, StopReason } from './types';
 interface Owner {
@@ -14,6 +15,7 @@ interface Owner {
   deadline: number | null;
   result: ActionResult | null;
   actionId: string;
+  activity: Activity;
 }
 
 type ExecutionState = { kind: 'idle' } | { kind: 'blocked' } | { kind: 'performing'; owner: Owner };
@@ -29,6 +31,12 @@ export class ActionCoordinator {
   private revision = 0;
   private lastReason: StopReason | null = null;
   private listeners = new Set<(step: ActionStep) => void>();
+  private activityListeners = new Set<() => void>();
+  subscribeActivity(listener: () => void) {
+    this.activityListeners.add(listener);
+    return () => { this.activityListeners.delete(listener); };
+  }
+  private publishActivity() { for (const listener of this.activityListeners) listener(); }
   private resolver: (step: ActionStep) => ActionStep = normalizeStep;
   setResolver(resolve: (step: ActionStep) => ActionStep) {
     this.resolver = resolve;
@@ -46,6 +54,7 @@ export class ActionCoordinator {
     return { state: this.state.kind, actionId: owner?.actionId ?? null,
       active: !!owner, sessionId: owner?.id ?? null, priority: owner?.priority ?? null,
       phase: owner?.phase ?? (this.blocks.size ? 'blocked' : 'idle'),
+      activity: owner?.activity ?? null,
       step: owner?.step ? { ...owner.step } : null,
       remainingMs: owner?.deadline == null ? null : Math.max(0, owner.deadline - this.now()),
       blocks: [...this.blocks], lastReason: this.lastReason };
@@ -70,6 +79,7 @@ export class ActionCoordinator {
     this.current = null;
     this.revision++;
     this.lastReason = reason;
+    this.publishActivity();
     owner.controller.abort();
     // An abort listener may have started a replacement session.
     if (neutral && !this.current) this.publish({ reaction: 'idle', durationMs: 0 });
@@ -95,13 +105,18 @@ export class ActionCoordinator {
     if (this.current) this.release(this.current, 'replaced', false);
     if (this.current || this.blocks.size) return { status: 'rejected', reason: this.blocks.size ? 'blocked' : 'lower-priority' };
     const owner: Owner = { id: ++this.revision, controller: new AbortController(), priority,
-      phase: 'starting', step: null, deadline: null, result: null, actionId };
+      phase: 'starting', step: null, deadline: null, result: null, actionId, activity: 'idle' };
     this.current = owner;
     const session = createExecutor({
       signal: owner.controller.signal,
       owns: () => this.owns(owner),
       schedule: this.schedule,
       resolve: step => this.resolver(step),
+      activity: activity => {
+        if (!this.owns(owner)) return;
+        owner.activity = activity;
+        this.publishActivity();
+      },
       display: step => {
         if (!this.owns(owner)) return;
         owner.step = step;

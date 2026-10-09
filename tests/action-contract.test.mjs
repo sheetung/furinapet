@@ -36,7 +36,7 @@ test('shared catalog covers every clip and retains public manual controls', () =
 });
 
 test('authored Furina routines are available only to the built-in Furina character', () => {
-  assert.equal(getCharacterActions({ id: 'furina', source: 'built-in' }).routines.length, 15);
+  assert.equal(getCharacterActions({ id: 'furina', source: 'built-in' }).routines.length, 20);
   for (const character of [{ id: 'other', source: 'built-in' }, { id: 'furina', source: 'local' }]) {
     const actions = getCharacterActions(character);
     assert.equal(actions.routines.length, 0);

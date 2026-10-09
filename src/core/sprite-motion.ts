@@ -2,7 +2,7 @@ import { furinaClips } from '../../characters/furina/clips';
 import { clipDuration, clipPhase, sampleClip } from '../animation/clip';
 import type { Reaction } from '../types';
 
-export type GestureMotion = 'double-blink' | 'curious' | 'doze' | 'greeting' | 'sitting' | 'stretch-yawn' | 'tea' | 'cake' | 'proud';
+export type GestureMotion = 'double-blink' | 'curious' | 'doze' | 'greeting' | 'sitting' | 'stretch-yawn' | 'tea' | 'cake' | 'proud' | 'breathing' | 'nod' | 'tea-enter' | 'tea-sip' | 'tea-exit';
 export type MotionReaction = Reaction | GestureMotion | 'run-left' | 'run-right' | 'airborne' | 'falling' | 'dragged' | 'dock-sitting';
 
 export function locomotionReaction(dx: number, dy: number, grounded: boolean): MotionReaction {

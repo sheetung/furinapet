@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>控制中心导航验证</title></head>
+<body>
+  <div id="root"></div>
+  <aside style="position:fixed;bottom:8px;left:8px;z-index:10000;padding:12px;background:#172238;color:white">
+    <button id="verify">运行导航验证（模拟 Tauri）</button>
+    <output id="result" style="display:block;white-space:pre-wrap"></output>
+  </aside>
+  <script>
+    // Local fixtures only: no native commands, credentials or remote installs.
+    const calls = new Map(), callbacks = new Map(); let callbackId = 0;
+    let deferAgent = null;
+    const settings = { selectedCharacterId:'furina', petVisible:true, alwaysOnTop:true,
+      launchAtLogin:false, scale:1, lookAtCursor:true, autonomousMovement:false,
+      autonomousBehavior:true, wanderWeight:.65, dockWeight:.45, wanderSpeed:1,
+      gravityEnabled:true, windowDocking:false };
+    const agent = { appRunning:true, protocolVersion:1, state:'idle', reaction:'idle',
+      sessionCount:0, connectedCount:0, workingCount:0, sessions:[] };
+    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener(){} };
+    window.__TAURI_INTERNALS__ = {
+      metadata:{ currentWindow:{label:'main'}, currentWebview:{label:'main'} },
+      transformCallback(fn) { callbacks.set(++callbackId,fn); return callbackId; },
+      unregisterCallback(id) { callbacks.delete(id); },
+      async invoke(command,args) {
+        calls.set(command,(calls.get(command)||0)+1);
+        switch(command) {
+          case 'plugin:event|listen': return ++callbackId;
+          case 'get_settings': return settings;
+          case 'get_dashboard': return { appName:'FurinaPet',version:'1.2.3',engine:'Tauri',featureCount:3,settings };
+          case 'check_for_updates': return {state:'up-to-date',message:'验证环境',notes:[]};
+          case 'get_agent_status':
+            if (deferAgent) { const pending=deferAgent; deferAgent=null; return pending; }
+            return agent;
+          case 'get_claude_integration_status': return {claudeAvailable:false,hooksStatus:'not_installed',mcpStatus:'not_installed',overallStatus:'not_installed',message:'验证环境'};
+          case 'get_codex_integration_status': return {mcpStatus:'not_installed',managed:false,message:'验证环境'};
+          case 'get_mcp_server_config': return {command:'fixture',args:[],json:'{}',claudeCommand:'fixture'};
+          case 'get_ai_settings': return {enabled:false,configured:false,baseUrl:'',model:'',cooldownSeconds:45,timeoutSeconds:12,hasApiKey:false,provider:'openai-compatible'};
+          default: return null;
+        }
+      }
+    };
+    const wait = ms => new Promise(resolve=>setTimeout(resolve,ms));
+    const check = (ok,message) => { if(!ok) throw Error(message); document.querySelector('#result').textContent += '✓ '+message+'\n'; };
+    const nav = text => [...document.querySelectorAll('.sidebar nav button')].find(button=>button.textContent.includes(text));
+    const go = async text => {
+      nav(text).click(); await wait(30);
+      check(document.querySelectorAll('.sidebar nav button.active').length===1 && nav(text).classList.contains('active'),text+'唯一高亮');
+      check(document.querySelectorAll('main.content > section.page').length===1,text+'唯一页面');
+    };
+    document.querySelector('#verify').onclick = async event => {
+      event.target.disabled=true; document.querySelector('#result').textContent='';
+      try {
+        for (const page of ['主页','宠物','智能体','设置','宠物','主页']) await go(page);
+        check(document.querySelectorAll('.sidebar nav button').length===4 && !nav('插件'),'四个导航入口且没有插件页面');
+        check(!calls.has('list_runtime_plugins') && !calls.has('fetch_plugin_catalog'),'未启动插件运行时或目录查询');
+        await go('智能体'); const started=calls.get('get_agent_status'); await wait(1700);
+        check(calls.get('get_agent_status')>started,'智能体激活时轮询');
+        await go('设置'); const stopped=calls.get('get_agent_status');
+        await wait(1700);
+        check(calls.get('get_agent_status')===stopped,'离开智能体页停止轮询');
+        let resolveAgent; deferAgent=new Promise(resolve=>{resolveAgent=resolve;});
+        await go('智能体'); await go('主页'); await go('智能体');
+        resolveAgent({...agent,clientName:'迟到响应'}); await wait(30);
+        check(!document.querySelector('main.content').textContent.includes('迟到响应'),'迟到轮询响应不覆盖后续页面');
+        await go('主页'); document.querySelector('#result').textContent += '全部通过';
+      } catch(error) { document.querySelector('#result').textContent+='失败：'+error.message; }
+      finally { event.target.disabled=false; }
+    };
+  </script>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
